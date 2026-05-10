@@ -1,0 +1,14 @@
+.git
+node_modules
+**/node_modules
+.next
+**/.next
+.turbo
+**/.turbo
+_legacy
+docs
+.env
+.env.local
+.env.*.local
+infra/tls
+*.md

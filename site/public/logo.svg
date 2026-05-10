@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 140" width="540" height="140">
+
+  <!-- ── ICON MARK (tuned for dark UI backgrounds) ───── -->
+  <polygon points="70,10 112,34 112,82 70,106 28,82 28,34"
+    fill="none" stroke="#3B82F6" stroke-width="2.5"/>
+  <polygon points="70,28 93,41 93,67 70,80 47,67 47,41"
+    fill="none" stroke="#BFCFE8" stroke-width="1.2"/>
+
+  <line x1="70" y1="58" x2="70" y2="14"  stroke="#3B82F6" stroke-width="1.4" stroke-opacity="0.55"/>
+  <line x1="70" y1="58" x2="108" y2="37" stroke="#3B82F6" stroke-width="1.4" stroke-opacity="0.55"/>
+  <line x1="70" y1="58" x2="108" y2="79" stroke="#3B82F6" stroke-width="1.4" stroke-opacity="0.55"/>
+  <line x1="70" y1="58" x2="70" y2="102" stroke="#3B82F6" stroke-width="1.4" stroke-opacity="0.55"/>
+  <line x1="70" y1="58" x2="32" y2="79"  stroke="#3B82F6" stroke-width="1.4" stroke-opacity="0.55"/>
+  <line x1="70" y1="58" x2="32" y2="37"  stroke="#3B82F6" stroke-width="1.4" stroke-opacity="0.55"/>
+
+  <circle cx="70"  cy="10"  r="4.5" fill="#3B82F6"/>
+  <circle cx="112" cy="34"  r="4.5" fill="#3B82F6"/>
+  <circle cx="112" cy="82"  r="4.5" fill="#3B82F6"/>
+  <circle cx="70"  cy="106" r="4.5" fill="#3B82F6"/>
+  <circle cx="28"  cy="82"  r="4.5" fill="#3B82F6"/>
+  <circle cx="28"  cy="34"  r="4.5" fill="#3B82F6"/>
+
+  <circle cx="70"  cy="28"  r="3" fill="#BFCFE8"/>
+  <circle cx="93"  cy="41"  r="3" fill="#BFCFE8"/>
+  <circle cx="93"  cy="67"  r="3" fill="#BFCFE8"/>
+  <circle cx="70"  cy="80"  r="3" fill="#BFCFE8"/>
+  <circle cx="47"  cy="67"  r="3" fill="#BFCFE8"/>
+  <circle cx="47"  cy="41"  r="3" fill="#BFCFE8"/>
+
+  <circle cx="70" cy="58" r="9" fill="#152238" stroke="#60A5FA" stroke-width="1.1"/>
+  <circle cx="70" cy="58" r="4.5" fill="#3B82F6"/>
+
+  <path d="M108,22 A26,26 0 1,1 108,48"
+    fill="none" stroke="#3B82F6" stroke-width="2"
+    stroke-dasharray="4 3" stroke-linecap="round"/>
+  <polygon points="108,22 101,29 114,31" fill="#3B82F6"/>
+
+  <!-- ── WORDMARK (ice + brand blue; readable on navy) ── -->
+  <text x="138" y="84"
+    font-family="'Inter','SF Pro Display','Calibri',sans-serif"
+    font-weight="700" font-size="68"
+    letter-spacing="-2">
+    <tspan fill="#E8EEF8">nexis</tspan><tspan fill="#3B82F6">.sh</tspan>
+  </text>
+
+  <line x1="138" y1="96" x2="530" y2="96" stroke="#BFCFE8" stroke-width="0.8" stroke-opacity="0.85"/>
+
+  <text x="139" y="114"
+    font-family="'Inter','Calibri',sans-serif"
+    font-weight="400" font-size="13" fill="#93B4D8"
+    letter-spacing="1.8">AUTONOMOUS ENGINEERING PLATFORM</text>
+
+</svg>
