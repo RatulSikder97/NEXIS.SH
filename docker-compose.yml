@@ -161,6 +161,69 @@ services:
       - tempo
     networks: [nexis]
 
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      DATABASE_URL: postgres://nexis:nexis_dev_password@postgres:5432/nexis?sslmode=disable
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [nexis]
+
+  control-plane:
+    build:
+      context: services/control-plane
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8080"
+      APP_ENV: dev
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL_SYNTHESIS: ${OPENAI_MODEL_SYNTHESIS:-gpt-4o}
+      OPENAI_MODEL_CHEAP: ${OPENAI_MODEL_CHEAP:-gpt-4o-mini}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL_GENERAL: ${OLLAMA_MODEL_GENERAL:-llama3.1:8b}
+      DATABASE_URL: postgres://nexis:nexis_dev_password@postgres:5432/nexis?sslmode=disable
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [nexis]
+
+  validator:
+    build:
+      context: services/validator
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8081"
+    ports:
+      - "8081:8081"
+    networks: [nexis]
+
+  gitops:
+    build:
+      context: services/gitops
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8082"
+    ports:
+      - "8082:8082"
+    networks: [nexis]
+
 networks:
   nexis:
     driver: bridge
