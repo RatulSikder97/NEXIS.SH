@@ -17,6 +17,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@nexis/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@radix-ui/react-dialog':
         specifier: ^1.1.2
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -96,6 +99,15 @@ importers:
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.18)(lightningcss@1.32.0)
+
+  packages/db:
+    dependencies:
+      drizzle-orm:
+        specifier: ^0.36.4
+        version: 0.36.4(@types/react@19.2.14)(postgres@3.4.9)(react@19.2.4)
+      postgres:
+        specifier: ^3.4.5
+        version: 3.4.9
 
   packages/ui: {}
 
