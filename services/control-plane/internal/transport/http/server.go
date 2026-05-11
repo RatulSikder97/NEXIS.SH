@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/llm"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/handler"
 )
@@ -21,9 +22,12 @@ func New(cfg config.Config, logger *slog.Logger) http.Handler {
 	r.Use(chiMiddleware.Timeout(60 * time.Second))
 
 	r.Get("/healthz", handler.Healthz("control-plane"))
-	// /v1/_diag/llm wired in TC10
 
-	_ = cfg
-	_ = logger
+	if provider, err := llm.NewFromConfig(cfg); err == nil {
+		r.Get("/v1/_diag/llm", handler.LLMDiag(provider))
+	} else {
+		logger.Warn("llm provider not configured", "err", err)
+	}
+
 	return r
 }

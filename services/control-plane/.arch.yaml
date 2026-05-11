@@ -40,7 +40,7 @@ deps:
   adapter:
     mayDependOn: [domain, platform]
   transport:
-    mayDependOn: [usecase, domain, platform, transport]
+    mayDependOn: [usecase, domain, platform, transport, adapter]
   workflow:
     mayDependOn: [usecase, domain, adapter, platform]
   platform:
