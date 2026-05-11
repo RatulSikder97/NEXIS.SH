@@ -7,33 +7,27 @@ import { StatCard } from "@/components/ui/StatCard";
 export default function Metrics() {
   return (
     <section
-      className="w-full border-y border-border bg-surface py-[120px]"
+      id="metrics"
+      className="w-full border-y border-[var(--color-border)] bg-[var(--color-muted)] py-[120px] scroll-mt-[88px]"
       aria-label="Metrics"
     >
-      <div className="mx-auto max-w-[1100px] px-6">
+      <div className="mx-auto max-w-[1200px] px-6">
         <SectionLabel>{content.metrics.label}</SectionLabel>
-        <h2 className="mt-4 text-[28px] font-medium leading-[1.15] text-accent md:text-[32px]">
+        <h2 className="mt-4 text-[28px] font-medium leading-[1.15] tracking-tight text-[var(--color-foreground)] md:text-[32px]">
           {content.metrics.headline}
         </h2>
       </div>
-      <div className="mx-auto mt-12 flex max-w-[1100px] flex-col px-6 md:mt-14 md:flex-row">
+      <div className="mx-auto mt-12 grid max-w-[1200px] grid-cols-1 px-6 md:mt-14 md:grid-cols-3">
         {content.metrics.stats.map((stat, idx) => (
           <div
             key={stat.label}
             className={[
-              "flex-1",
-              "py-6",
-              idx === 0 ? "" : "border-l border-border",
-              "md:py-0",
+              "py-6 md:py-0",
+              idx === 0 ? "" : "md:border-l md:border-[var(--color-border)]",
             ].join(" ")}
           >
             <div className="relative px-6">
-              <div
-                className={[
-                  "absolute left-6 top-0 h-[1px] w-[120px]",
-                  idx === 1 ? "bg-secondary/70" : "bg-primary/70",
-                ].join(" ")}
-              />
+              <div className="absolute left-6 top-0 h-[1px] w-[120px] bg-[var(--color-primary)]/70" />
               <div className="pt-6">
                 <StatCard {...stat} />
               </div>
@@ -44,4 +38,3 @@ export default function Metrics() {
     </section>
   );
 }
-

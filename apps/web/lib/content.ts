@@ -2,19 +2,23 @@ export const content = {
   navbar: {
     links: [
       { label: "Features", href: "#features" },
-      { label: "How It Works", href: "#how-it-works" },
+      { label: "How it works", href: "#how-it-works" },
       { label: "Agents", href: "#agents" },
+      { label: "Pricing", href: "#pricing" },
+      { label: "Docs", href: "#docs" },
     ],
-    cta: "Request Early Access",
+    cta: "Get started",
   },
   hero: {
-    preHeading: "AUTONOMOUS ENGINEERING PLATFORM",
-    heading: "Your pipeline breaks. Nexis fixes it.",
+    preHeading: "AUTONOMOUS ENGINEERING, SUPERVISED BY YOU.",
+    heading:
+      "Nine AI agents. One engineering team that ships fixes while you sleep.",
     subheading:
-      "Nexis watches CI/CD and production pipelines, spots failures fast, traces root cause across services and schemas, synthesizes a verified patch in an isolated shadow pipeline, and queues it for your approval—so MTTR drops from hours to minutes.",
-    ctaPrimary: "Request Early Access",
+      "Detect → diagnose → patch → validate → approve → deploy. Closed-loop fault recovery for CI/CD and production pipelines, with the engineer always in the loop on what matters.",
+    ctaPrimary: "Get started",
     ctaSecondary: "See how it works →",
-    socialProof: "Built for engineering teams tired of 3am incidents.",
+    socialProof:
+      "For SRE and platform teams who are done with 3am pages.",
     terminalTitle: "nexis.sh",
     terminalLines: [
       "[00:02:14] sentinel › anomaly detected — pipeline: etl_orders",
@@ -24,7 +28,7 @@ export const content = {
       "[00:02:21] synthesiser › patch_001 ready — cast coercion + downstream migration",
       "[00:02:22] validator › deploying to shadow pipeline...",
       "[00:02:29] validator › 2,847 property tests passed. 0 failures.",
-      "[00:02:30] nexis › patch approved for review ✓",
+      "[00:02:30] nexis › patch awaiting approval ✓",
     ],
   },
   problem: {
@@ -96,67 +100,144 @@ export const content = {
     ],
   },
   agents: {
-    label: "THE SYSTEM",
-    headline: "Execution, validation, and self-healing—end to end.",
+    label: "THE FLEET",
+    headline: "Nine specialised agents. One closed loop.",
     intro:
-      "Nexis runs a dedicated closed-loop pipeline across discovery, synthesis, validation, and deployment. You get a verified patch with a plain-English explanation—then you approve.",
-    layers: [
+      "Each agent owns one job in the pipeline. Hand-offs are typed, retried, and audit-logged.",
+    list: [
       {
-        layer: "Layer 1 — Execution",
-        description:
-          "Turns live failures into contract-constrained candidate fixes.",
-        bullets: [
-          "Detect anomalies in minutes",
-          "Diagnose root cause via dependency traversal",
-          "Synthesize candidate patches under system contracts",
-          "Stage deployment after approval",
-        ],
+        id: "sentinel",
+        role: "Detection",
+        owns: "Anomaly detection from Sentry/OTel",
+        notOwns: "Graph traversal",
       },
       {
-        layer: "Layer 2 — Self-Healing",
-        description:
-          "Protects correctness when schemas drift or interfaces change.",
-        bullets: [
-          "Repair schema drift automatically",
-          "Enforce API/contract boundaries",
-          "Validate in a Docker-isolated shadow pipeline",
-          "Maintain a full audit trail for every decision",
-        ],
+        id: "pathfinder",
+        role: "Diagnosis",
+        owns: "Causal RCA via Neo4j + DoWhy",
+        notOwns: "Patch synthesis",
+      },
+      {
+        id: "synthesiser",
+        role: "Patch generation",
+        owns: "LLM patch synthesis + retrieval",
+        notOwns: "Validation",
+      },
+      {
+        id: "architect",
+        role: "Plan",
+        owns: "Solution plan against contracts",
+        notOwns: "Code emission",
+      },
+      {
+        id: "backend",
+        role: "Codegen",
+        owns: "Backend patch synthesis",
+        notOwns: "DB migrations",
+      },
+      {
+        id: "qa",
+        role: "Test gen",
+        owns: "Unit + property test generation",
+        notOwns: "Sandbox execution",
+      },
+      {
+        id: "devops",
+        role: "Pipeline",
+        owns: "ArgoCD / GH Actions YAML changes",
+        notOwns: "App code",
+      },
+      {
+        id: "data engineer",
+        role: "Migrations",
+        owns: "Schema migrations + data backfill",
+        notOwns: "API layer",
+      },
+      {
+        id: "approval gate",
+        role: "Routing",
+        owns: "Severity routing + audit log",
+        notOwns: "Patch decisions",
       },
     ],
   },
   metrics: {
-    label: "IMPACT",
-    headline: "Pipeline recovery you can measure",
+    label: "OUTCOMES",
+    headline: "Pipeline recovery you can measure.",
     stats: [
-      { prefix: "< ", number: 90, suffix: "s", label: "Time to fault detection" },
+      {
+        prefix: "MTTR ↓ ",
+        number: 60,
+        suffix: "%",
+        label: "vs. manual response baseline",
+      },
       {
         prefix: "≥ ",
         number: 80,
         suffix: "%",
-        label: "Patch correctness rate",
+        label: "patch correctness rate",
       },
       {
-        prefix: "",
-        number: 60,
-        suffix: "%+",
-        label: "MTTR reduction vs. manual baseline",
+        prefix: "< ",
+        number: 90,
+        suffix: "s",
+        label: "to fault detection",
       },
     ],
   },
   cta: {
-    headline: "Stop debugging. Start shipping.",
-    sub: "Nexis runs autonomous incident response for your pipelines and services end to end. You stay in control with a single approval before anything reaches production.",
-    button: "Request Early Access",
+    headline: "Give your team back its weekends.",
+    sub: "NEXIS runs an autonomous incident-response loop with the engineer in the loop on what matters. Approve once. Sleep through the rest.",
+    button: "Request access",
   },
   footer: {
-    tagline: "Your pipeline breaks. Nexis fixes it.",
-    links: [
-      { label: "Features", href: "#features" },
-      { label: "How It Works", href: "#how-it-works" },
-      { label: "Agents", href: "#agents" },
+    tagline:
+      "Closed-loop fault recovery for CI/CD and production pipelines.",
+    columns: [
+      {
+        title: "Product",
+        links: [
+          { label: "Features", href: "#features" },
+          { label: "How it works", href: "#how-it-works" },
+          { label: "Agents", href: "#agents" },
+          { label: "Pricing", href: "#pricing" },
+        ],
+      },
+      {
+        title: "Resources",
+        links: [
+          { label: "Docs", href: "#docs" },
+          { label: "Changelog", href: "#changelog" },
+          { label: "Status", href: "#status" },
+        ],
+      },
+      {
+        title: "Company",
+        links: [
+          { label: "About", href: "#about" },
+          { label: "Careers", href: "#careers" },
+          { label: "Contact", href: "#contact" },
+        ],
+      },
+      {
+        title: "Legal",
+        links: [
+          { label: "Privacy", href: "#privacy" },
+          { label: "Terms", href: "#terms" },
+          { label: "Security", href: "#security" },
+        ],
+      },
+      {
+        title: "Connect",
+        links: [
+          { label: "GitHub", href: "https://github.com" },
+          { label: "X", href: "https://x.com" },
+          { label: "LinkedIn", href: "https://linkedin.com" },
+        ],
+      },
     ],
+    status: "All systems operational",
+    compliance: "SOC 2 in progress",
     copyright: "All rights reserved.",
   },
 };
-

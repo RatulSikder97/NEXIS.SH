@@ -71,69 +71,36 @@ export default function Problem() {
   return (
     <section
       id="problem"
-      className="w-full border-y border-border bg-surface/40 py-[120px] scroll-mt-[88px]"
+      className="w-full border-y border-[var(--color-border)] bg-[var(--color-muted)] py-[120px] scroll-mt-[88px]"
       aria-label="Problem"
     >
-      <div className="mx-auto max-w-[1100px] px-6">
+      <div className="mx-auto max-w-[1200px] px-6">
         <div>
           <SectionLabel>{content.problem.label}</SectionLabel>
-          <h2 className="mt-6 text-[32px] font-medium leading-[1.15] text-accent md:text-[40px]">
+          <h2 className="mt-6 text-[32px] font-medium leading-[1.15] tracking-tight text-[var(--color-foreground)] md:text-[40px]">
             {content.problem.headline}
           </h2>
-          <p className="mt-4 max-w-[700px] text-[16px] leading-[1.7] text-text-secondary">
+          <p className="mt-4 max-w-[760px] text-[16px] leading-[1.7] text-[var(--color-muted-foreground)]">
             {content.problem.intro}
           </p>
         </div>
 
         <StaggerGroup className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
           {content.problem.points.map((point, idx) => {
-            const tone =
-              idx === 0
-                ? {
-                    ring: "border-primary/70",
-                    top: "bg-primary/80",
-                    icon: "text-primary",
-                    chip: "text-primary border-primary/40 bg-primary-soft",
-                  }
-                : idx === 1
-                  ? {
-                      ring: "border-secondary/70",
-                      top: "bg-secondary/80",
-                      icon: "text-secondary",
-                      chip: "text-secondary border-secondary/40 bg-secondary-soft",
-                    }
-                  : {
-                      ring: "border-border-hover",
-                      top: "bg-text-secondary/60",
-                      icon: "text-accent",
-                      chip: "text-text-secondary border-border-hover bg-surface",
-                    };
-
             const card = (
               <div
                 className={[
-                  "group relative min-h-[240px] rounded-[12px] border border-border bg-surface p-6",
-                  "transition-transform duration-150 ease-out hover:-translate-y-[2px]",
-                  tone.ring,
+                  "group relative min-h-[240px] rounded-[12px] border border-[var(--color-border)] bg-[var(--color-card)] p-6",
+                  "transition-shadow duration-150 ease-out hover:shadow-md hover:-translate-y-[2px]",
                 ].join(" ")}
               >
-                <div
-                  className={[
-                    "absolute inset-x-0 top-0 h-[1px] transition-opacity duration-150",
-                    tone.top,
-                  ].join(" ")}
-                />
+                <div className="absolute inset-x-0 top-0 h-[1px] bg-[var(--color-primary)]/80" />
 
                 <div className="flex items-center justify-between">
-                  <span
-                    className={[
-                      "inline-flex items-center rounded-[999px] border px-2 py-1 font-mono text-[11px]",
-                      tone.chip,
-                    ].join(" ")}
-                  >
+                  <span className="inline-flex items-center rounded-[999px] border border-[var(--color-border)] bg-[var(--color-muted)] px-2 py-1 font-mono text-[11px] text-[var(--color-muted-foreground)]">
                     0{idx + 1}
                   </span>
-                  <div className={tone.icon}>
+                  <div className="text-[var(--color-primary)]">
                     <Icon
                       kind={
                         idx === 0
@@ -147,10 +114,10 @@ export default function Problem() {
                 </div>
 
                 <div className="mt-6">
-                  <h3 className="text-[18px] font-medium tracking-[-0.01em] text-accent">
+                  <h3 className="text-[18px] font-medium tracking-[-0.01em] text-[var(--color-foreground)]">
                     {point.title}
                   </h3>
-                  <p className="mt-3 text-[15px] leading-[1.75] text-text-secondary">
+                  <p className="mt-3 text-[15px] leading-[1.75] text-[var(--color-muted-foreground)]">
                     {point.description}
                   </p>
                 </div>
@@ -179,4 +146,3 @@ export default function Problem() {
     </section>
   );
 }
-

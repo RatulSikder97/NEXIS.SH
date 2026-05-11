@@ -10,18 +10,17 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:opacity-90",
-        // Legacy alias kept for Stage 6 → Stage 7 transition; existing sections still pass variant="primary".
-        primary: "bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:opacity-90",
-        ghost: "hover:bg-[var(--color-muted)] text-[var(--color-foreground)]",
-        outline: "border border-[var(--color-border)] hover:bg-[var(--color-muted)] text-[var(--color-foreground)]",
+        default:
+          "bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:opacity-90",
+        ghost:
+          "hover:bg-[var(--color-muted)] text-[var(--color-foreground)]",
+        outline:
+          "border border-[var(--color-border)] hover:bg-[var(--color-muted)] text-[var(--color-foreground)]",
         link: "text-[var(--color-primary)] underline-offset-4 hover:underline",
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-9 rounded-md px-3",
-        // Legacy alias for navbar links — Stage 7 will replace with `sm`.
-        nav: "h-8 rounded-md px-3 text-xs",
         lg: "h-11 rounded-md px-6 text-base",
         icon: "h-10 w-10",
       },
@@ -30,39 +29,22 @@ const buttonVariants = cva(
   }
 );
 
-type LegacyAnchorProps = {
-  /**
-   * Legacy convenience prop kept for Stage 6 → Stage 7 transition. When set, the button renders an
-   * `<a>` element instead of a `<button>`, preserving the old call sites in Hero/CTA/Navbar.
-   */
-  href?: string;
-};
-
 export interface ButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "color">,
-    VariantProps<typeof buttonVariants>,
-    LegacyAnchorProps {
+    VariantProps<typeof buttonVariants> {
   asChild?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, href, ...props }, ref) => {
-    const classes = cn(buttonVariants({ variant, size, className }));
-    if (asChild) {
-      return <Slot ref={ref} className={classes} {...props} />;
-    }
-    if (href) {
-      const { type: _type, ...anchorProps } = props as React.ButtonHTMLAttributes<HTMLButtonElement>;
-      void _type;
-      return (
-        <a
-          href={href}
-          className={classes}
-          {...(anchorProps as unknown as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
-        />
-      );
-    }
-    return <button ref={ref} className={classes} {...props} />;
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button";
+    return (
+      <Comp
+        ref={ref}
+        className={cn(buttonVariants({ variant, size, className }))}
+        {...props}
+      />
+    );
   }
 );
 Button.displayName = "Button";

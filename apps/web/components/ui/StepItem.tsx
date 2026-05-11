@@ -17,24 +17,30 @@ export function StepItem({
     <div
       className={[
         "relative min-h-[140px] rounded-[12px] p-6 transition-colors duration-150 ease-out",
-        active ? "border border-border-hover" : "border border-transparent",
+        active
+          ? "border border-[var(--color-border)]"
+          : "border border-transparent",
         className,
-      ].join(" ")}
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <div className="flex items-start gap-4">
         <div
           className={[
             "font-mono text-[12px] transition-colors duration-150 ease-out",
-            active ? "text-primary" : "text-text-muted",
+            active
+              ? "text-[var(--color-primary)]"
+              : "text-[var(--color-muted-foreground)]",
           ].join(" ")}
         >
           {number}
         </div>
         <div>
-          <h3 className="text-[18px] font-medium tracking-[-0.01em] text-accent">
+          <h3 className="text-[18px] font-medium tracking-[-0.01em] text-[var(--color-foreground)]">
             {title}
           </h3>
-          <p className="mt-2 max-w-[760px] text-[15px] leading-[1.75] text-text-secondary">
+          <p className="mt-2 max-w-[760px] text-[15px] leading-[1.75] text-[var(--color-muted-foreground)]">
             {description}
           </p>
         </div>
@@ -43,10 +49,9 @@ export function StepItem({
       <div
         className={[
           "absolute inset-x-0 top-0 h-[1px]",
-          active ? "bg-primary/70" : "bg-primary/20",
+          active ? "bg-[var(--color-primary)]/70" : "bg-[var(--color-primary)]/20",
         ].join(" ")}
       />
     </div>
   );
 }
-

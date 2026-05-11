@@ -13,10 +13,13 @@ export default function Hero() {
   return (
     <section
       id="features"
-      className="relative w-full min-h-[100vh] flex items-center py-[120px] scroll-mt-[88px] hero-grid"
+      className="relative w-full min-h-[100vh] flex items-center py-[120px] scroll-mt-[88px] bg-[var(--color-background)]"
     >
-      <div className="hero-ambient" aria-hidden />
-      <div className="relative z-10 mx-auto flex max-w-[1100px] flex-col gap-16 px-6 md:flex-row md:items-start md:justify-between md:gap-20">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_color-mix(in_srgb,var(--color-primary)_8%,transparent)_0%,_transparent_55%)]"
+      />
+      <div className="relative z-10 mx-auto flex max-w-[1200px] flex-col gap-16 px-6 md:flex-row md:items-start md:justify-between md:gap-20">
         <div className="flex-1">
           <div className="min-h-[calc(100vh-240px)] flex flex-col justify-center">
             <StaggerGroup preset="hero" mode="immediate">
@@ -25,38 +28,30 @@ export default function Hero() {
               </FadeUp>
 
               <FadeUp useWhileInView={false} className="mt-4">
-                <h1 className="text-[40px] leading-[1.1] font-medium text-text-primary md:text-[72px]">
-                  <span className="text-primary">Your pipeline</span>{" "}
-                  <span className="text-text-secondary">breaks.</span>
-                  <span className="text-accent-alt"> Nexis</span>
-                  <span className="text-text-secondary"> fixes it.</span>
+                <h1 className="text-[40px] leading-[1.1] font-medium tracking-tight text-[var(--color-foreground)] md:text-[64px]">
+                  {content.hero.heading}
                 </h1>
               </FadeUp>
 
               <FadeUp useWhileInView={false} className="mt-5">
-                <p className="text-[18px] leading-[1.7] text-text-secondary max-w-[520px]">
+                <p className="text-[18px] leading-[1.7] text-[var(--color-muted-foreground)] max-w-[560px]">
                   {content.hero.subheading}
                 </p>
               </FadeUp>
 
               <FadeUp useWhileInView={false} className="mt-8">
                 <div className="flex flex-wrap justify-start gap-3">
-                  <Button href="#early-access" variant="primary" size="lg">
-                    {content.hero.ctaPrimary}
+                  <Button size="lg" asChild>
+                    <a href="#waitlist">{content.hero.ctaPrimary}</a>
                   </Button>
-                  <Button
-                    href="#how-it-works"
-                    variant="ghost"
-                    size="lg"
-                    className="border-primary/40 hover:text-primary"
-                  >
-                    {content.hero.ctaSecondary}
+                  <Button variant="outline" size="lg" asChild>
+                    <a href="#how-it-works">{content.hero.ctaSecondary}</a>
                   </Button>
                 </div>
               </FadeUp>
 
               <FadeUp useWhileInView={false} className="mt-4">
-                <div className="text-[13px] text-text-muted">
+                <div className="text-[13px] text-[var(--color-muted-foreground)]">
                   {content.hero.socialProof}
                 </div>
               </FadeUp>
@@ -65,11 +60,13 @@ export default function Hero() {
         </div>
 
         <div className="hidden w-[440px] space-y-4 md:block">
-          <TerminalBlink title={content.hero.terminalTitle} lines={content.hero.terminalLines} />
+          <TerminalBlink
+            title={content.hero.terminalTitle}
+            lines={content.hero.terminalLines}
+          />
           <SystemVector />
         </div>
       </div>
     </section>
   );
 }
-

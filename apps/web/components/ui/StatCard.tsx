@@ -18,12 +18,7 @@ export type StatCardProps = {
   label: string;
 };
 
-export function StatCard({
-  prefix,
-  number,
-  suffix,
-  label,
-}: StatCardProps) {
+export function StatCard({ prefix, number, suffix, label }: StatCardProps) {
   const ref = useRef<HTMLDivElement | null>(null);
   const inView = useInView(ref, { once: true, margin: "-100px" });
   const reduced = usePrefersReducedMotion();
@@ -41,7 +36,7 @@ export function StatCard({
     if (reduced) return;
     if (!inView) return;
     const controls = animate(base, number, {
-      duration: 0.3,
+      duration: 1.2,
       ease: "easeOut",
     });
     return () => controls.stop();
@@ -51,13 +46,14 @@ export function StatCard({
 
   return (
     <div ref={ref}>
-      <div className="font-mono text-[56px] font-medium text-accent">
+      <div className="font-mono text-[56px] font-medium tracking-tight text-[var(--color-foreground)]">
         {prefix}
         {display}
         {suffix}
       </div>
-      <p className="mt-2 text-[13px] text-text-secondary">{label}</p>
+      <p className="mt-2 text-[13px] text-[var(--color-muted-foreground)]">
+        {label}
+      </p>
     </div>
   );
 }
-
