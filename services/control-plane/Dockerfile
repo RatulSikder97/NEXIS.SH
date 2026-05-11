@@ -1,27 +1,14 @@
+# syntax=docker/dockerfile:1.7
 FROM golang:1.22-alpine AS builder
-
-ARG SERVICE
 WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 
-COPY backend/go.mod backend/go.sum ./
-COPY backend/internal ./internal
-COPY backend/cmd ./cmd
-
-RUN CGO_ENABLED=0 GOOS=linux go build \
-    -trimpath \
-    -ldflags="-s -w" \
-    -o /out/service ./cmd/${SERVICE}
-
-FROM alpine:3.20 AS runtime
-
-RUN addgroup -S nexis && adduser -S nexis -G nexis && \
-    mkdir -p /data && chown -R nexis:nexis /data && \
-    apk add --no-cache ca-certificates wget
-
+FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
-COPY --from=builder /out/service /app/service
-
-USER nexis
+COPY --from=builder /out/server /app/server
+USER nonroot:nonroot
 EXPOSE 8080
-
-ENTRYPOINT ["/app/service"]
+ENTRYPOINT ["/app/server"]

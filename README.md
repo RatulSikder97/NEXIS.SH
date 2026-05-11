@@ -21,7 +21,7 @@ Once healthy:
 |---|---|
 | http://localhost:3000 | Landing + console |
 | http://localhost:8080 | Control plane API |
-| http://localhost:3001 | Grafana (anonymous Admin) |
+| http://localhost:3030 | Grafana (anonymous Admin) |
 | http://localhost:8025 | MailHog |
 | http://localhost:9001 | MinIO console (nexis / nexis_dev_password) |
 | http://localhost:8233 | Temporal UI |

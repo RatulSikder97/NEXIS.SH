@@ -1,0 +1,47 @@
+version: 3
+workdir: .
+
+allow:
+  depOnAnyVendor: true
+
+commonComponents:
+  - main
+  - tests
+
+components:
+  main:
+    in: cmd/**
+  tests:
+    in: tests/**
+  domain:
+    in: internal/domain
+  usecase:
+    in: internal/usecase/**
+  adapter:
+    in: internal/adapter/**
+  transport:
+    in:
+      - internal/transport
+      - internal/transport/**
+  platform:
+    in: internal/platform/**
+  workflow:
+    in: internal/workflow/**
+
+deps:
+  main:
+    mayDependOn: [domain, usecase, adapter, transport, platform, workflow]
+  tests:
+    mayDependOn: [domain, usecase, adapter, transport, platform, workflow]
+  domain:
+    anyVendorDeps: true
+  usecase:
+    mayDependOn: [domain]
+  adapter:
+    mayDependOn: [domain, platform]
+  transport:
+    mayDependOn: [usecase, domain, platform, transport]
+  workflow:
+    mayDependOn: [usecase, domain, adapter, platform]
+  platform:
+    anyVendorDeps: true
