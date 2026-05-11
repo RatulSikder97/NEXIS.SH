@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @nexis/web typecheck
+      - run: pnpm --filter @nexis/web lint
+      - run: pnpm --filter @nexis/web test
+      - run: pnpm --filter @nexis/web build
+        env:
+          DATABASE_URL: postgres://nexis:nexis_dev_password@localhost:5432/nexis
+
+  go-services:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [control-plane, validator, gitops]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: services/${{ matrix.service }}/go.sum
+      - working-directory: services/${{ matrix.service }}
+        run: |
+          go mod download
+          go vet ./...
+          go test -race -timeout 120s ./...
+          go build ./...
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [web, go-services]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build all images
+        run: |
+          docker build -t nexis/web:ci             -f apps/web/Dockerfile .
+          docker build -t nexis/control-plane:ci   services/control-plane
+          docker build -t nexis/validator:ci       services/validator
+          docker build -t nexis/gitops:ci          services/gitops
