@@ -474,7 +474,7 @@ Persisted via `next-themes`, default `light`, system-respecting opt-in.
 
 ## 5. Phased Delivery (from `planner`)
 
-### Phase 1 — Foundations & Landing (Weeks 1–3) — **LOCAL DOCKER**
+### Phase 1 — Foundations & Landing (Weeks 1–3) — **LOCAL DOCKER** — Completed 2026-05-11
 
 **Scope**
 - Monorepo scaffold (`apps/web`, `apps/api`, `services/{control-plane,validator,gitops}`, `packages/ui`, `packages/db`, `infra/`).
