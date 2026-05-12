@@ -1,0 +1,167 @@
+// Phase 3 Stage 6 — Console Home (Task 6.2).
+//
+// Server component. Fetches /v1/me and /v1/audit?limit=10 in parallel from
+// the control-plane using the request's nexis_session cookie. If the
+// cookie is missing, redirect to /sign-in (proxy.ts already enforces this
+// for /console/* — we double-check here so the server fetch never runs
+// without a session). On a 401/500 from /v1/me we also bounce to /sign-in.
+// A failure on the audit fetch degrades gracefully to an empty feed.
+
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
+import { KPICard } from "@/components/console/KPICard";
+import type { MeResp } from "@/lib/auth";
+
+// Container-network URL for the control-plane (API_URL_INTERNAL) takes
+// precedence over the browser-facing NEXT_PUBLIC_API_URL. In pure-localhost
+// dev they collapse to the same value.
+const API =
+  process.env.API_URL_INTERNAL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "http://localhost:8080";
+
+// AuditRow mirrors the Go struct in services/control-plane that the
+// /v1/audit handler exposes verbatim as JSON. Field names are the Go
+// struct names; Metadata is opaque JSON.
+type AuditRow = {
+  ID: string;
+  OrgID: string;
+  Actor: string;
+  Action: string;
+  Target: string;
+  Metadata: Record<string, unknown> | null;
+  CreatedAt: string;
+};
+
+type AuditResp = {
+  rows: AuditRow[];
+  total: number;
+};
+
+function greetingForHour(hour: number): string {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+export default async function ConsoleHomePage() {
+  const c = await cookies();
+  const session = c.get("nexis_session");
+  if (!session) redirect("/sign-in");
+
+  const cookieHeader = `nexis_session=${session.value}`;
+
+  const [meRes, auditRes] = await Promise.all([
+    fetch(`${API}/v1/me`, {
+      headers: { cookie: cookieHeader },
+      cache: "no-store",
+    }),
+    fetch(`${API}/v1/audit?limit=10`, {
+      headers: { cookie: cookieHeader },
+      cache: "no-store",
+    }),
+  ]);
+
+  if (!meRes.ok) redirect("/sign-in");
+  const me = (await meRes.json()) as MeResp;
+
+  let audit: AuditResp = { rows: [], total: 0 };
+  if (auditRes.ok) {
+    audit = (await auditRes.json()) as AuditResp;
+  }
+
+  const firstName = me.user.email.split("@")[0];
+  const greeting = greetingForHour(new Date().getHours());
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <p className="text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
+          Home
+        </p>
+        <h1 className="mt-1 text-3xl font-semibold text-[var(--color-foreground)]">
+          {greeting}, {firstName}
+        </h1>
+        <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
+          {me.org.name} · <span className="font-mono">{me.org.slug}</span> ·{" "}
+          <span className="uppercase">{me.role}</span>
+        </p>
+      </div>
+
+      <section aria-labelledby="kpis-heading">
+        <h2 id="kpis-heading" className="sr-only">
+          Key metrics
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KPICard label="Open Incidents" value="—" />
+          <KPICard label="Pending Approvals" value="—" />
+          <KPICard label="Agents Online" value="—" />
+          <KPICard label="MTTR (7d)" value="—" />
+        </div>
+      </section>
+
+      <section aria-labelledby="activity-heading" className="space-y-3">
+        <div className="flex items-baseline justify-between">
+          <h2
+            id="activity-heading"
+            className="text-lg font-semibold text-[var(--color-foreground)]"
+          >
+            Recent activity
+          </h2>
+          <span className="text-xs text-[var(--color-muted-foreground)]">
+            {audit.total.toLocaleString()} total events
+          </span>
+        </div>
+        <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
+          {audit.rows.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-[var(--color-muted-foreground)]">
+              No activity yet. As your team uses NEXIS, audit events will appear here.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-[var(--color-muted)]/50 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
+                <tr>
+                  <th className="px-4 py-2 font-medium">When</th>
+                  <th className="px-4 py-2 font-medium">Actor</th>
+                  <th className="px-4 py-2 font-medium">Action</th>
+                  <th className="px-4 py-2 font-medium">Target</th>
+                </tr>
+              </thead>
+              <tbody>
+                {audit.rows.map((row) => (
+                  <tr
+                    key={row.ID}
+                    className="border-t border-[var(--color-border)] text-[var(--color-foreground)]"
+                  >
+                    <td className="whitespace-nowrap px-4 py-2 text-[var(--color-muted-foreground)]">
+                      {formatTime(row.CreatedAt)}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs">{row.Actor}</td>
+                    <td className="px-4 py-2">{row.Action}</td>
+                    <td className="px-4 py-2 font-mono text-xs text-[var(--color-muted-foreground)]">
+                      {row.Target}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
