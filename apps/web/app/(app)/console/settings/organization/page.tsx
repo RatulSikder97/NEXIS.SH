@@ -1,9 +1,8 @@
-// Phase 3 Stage 8 — Settings/Profile.
+// Phase 3 Stage 8 — Settings/Organization.
 //
-// Read-only profile surface: email + user id. The control-plane does not yet
-// expose a display name or avatar; both are deferred to Phase 4. Server
-// component so the data hits the control-plane through the request's session
-// cookie without leaking the cookie to the browser.
+// Read-only org card: name + slug + caller's role. The control-plane has no
+// org-rename endpoint yet (Phase 4 will add /v1/orgs/{id} PATCH); for Phase
+// 3 we surface the values verbatim from /v1/me.
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -34,7 +33,7 @@ function Field({
   );
 }
 
-export default async function ProfilePage() {
+export default async function OrganizationPage() {
   const c = await cookies();
   const session = c.get("nexis_session");
   if (!session) redirect("/sign-in");
@@ -48,15 +47,16 @@ export default async function ProfilePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Profile</h1>
+        <h1 className="text-2xl font-semibold">Organization</h1>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-          Your account details. Display name + avatar coming soon.
+          The tenant your account belongs to. Renaming + transfers coming soon.
         </p>
       </div>
       <div className="space-y-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-6">
-        <Field label="Email" value={me.user.email} />
-        <Field label="User ID" value={me.user.id} mono />
-        <Field label="Role" value={me.role} />
+        <Field label="Name" value={me.org.name} />
+        <Field label="Slug" value={me.org.slug} mono />
+        <Field label="Organization ID" value={me.org.id} mono />
+        <Field label="Your role" value={me.role} />
       </div>
     </div>
   );

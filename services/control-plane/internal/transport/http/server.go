@@ -146,6 +146,8 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			g.Get("/v1/apikeys", handler.APIKeyList(deps.Auth))
 			g.Delete("/v1/apikeys/{id}", handler.APIKeyRevoke(deps.Auth, aud))
 			g.Get("/v1/me", handler.Me(deps.Auth))
+			g.Get("/v1/me/preferences", handler.GetPreferences(deps.Auth))
+			g.Patch("/v1/me/preferences", handler.PatchPreferences(deps.Auth, aud))
 
 			// Audit chain integrity verify endpoint. Reads the admin pool
 			// (deps.Pool) — see handler.AuditVerify for why it bypasses RLS.

@@ -367,6 +367,20 @@ func (p *Provider) GetUser(ctx context.Context, id string) (domain.User, error) 
 	return *u, nil
 }
 
+// GetUserPreferences returns the persisted preferences blob for the user, or
+// an empty map when none have been set. The local Provider thinly wraps its
+// Store so the http handler can satisfy its prefsUpdater type-assertion
+// without coupling to the storage shape.
+func (p *Provider) GetUserPreferences(ctx context.Context, userID string) (map[string]any, error) {
+	return p.store.GetUserPreferences(ctx, userID)
+}
+
+// UpdateUserPreferences overwrites the user's preferences with prefs. The UI
+// always sends the full object so there is no merge.
+func (p *Provider) UpdateUserPreferences(ctx context.Context, userID string, prefs map[string]any) error {
+	return p.store.UpdateUserPreferences(ctx, userID, prefs)
+}
+
 // GetOrg resolves an Organization by id. Used by the /v1/me handler. Returns
 // ErrNotFound for unknown ids.
 func (p *Provider) GetOrg(ctx context.Context, id string) (domain.Organization, error) {

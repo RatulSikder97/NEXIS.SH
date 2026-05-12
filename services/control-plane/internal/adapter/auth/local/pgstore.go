@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -423,6 +424,52 @@ func (s *PGStore) MarkInviteClaimed(ctx context.Context, tokenHash []byte) error
 func (s *PGStore) DeleteInvite(ctx context.Context, tokenHash []byte) error {
 	const q = `DELETE FROM org_invites WHERE token_hash = $1`
 	tag, err := s.qry(ctx).Exec(ctx, q, tokenHash)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// GetUserPreferences reads the users.preferences jsonb column. Runs against
+// the admin pool because users is not org-scoped (preferences are a per-user
+// attribute, not a per-tenant one) and the row may need to be fetched even
+// when an RLS-bound tx isn't open.
+func (s *PGStore) GetUserPreferences(ctx context.Context, userID string) (map[string]any, error) {
+	const q = `SELECT COALESCE(preferences, '{}'::jsonb)::text FROM users WHERE id = $1`
+	var raw string
+	if err := s.pool.QueryRow(ctx, q, userID).Scan(&raw); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+	if raw == "" {
+		return map[string]any{}, nil
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil, fmt.Errorf("pgstore: unmarshal preferences: %w", err)
+	}
+	return out, nil
+}
+
+// UpdateUserPreferences performs a last-write-wins overwrite of the row's
+// preferences column. The UI submits the full preferences object so a merge
+// is unnecessary; if a future caller needs field-level merge, do it in the
+// handler before calling this method.
+func (s *PGStore) UpdateUserPreferences(ctx context.Context, userID string, prefs map[string]any) error {
+	if prefs == nil {
+		prefs = map[string]any{}
+	}
+	b, err := json.Marshal(prefs)
+	if err != nil {
+		return fmt.Errorf("pgstore: marshal preferences: %w", err)
+	}
+	const q = `UPDATE users SET preferences = $1::jsonb WHERE id = $2`
+	tag, err := s.pool.Exec(ctx, q, b, userID)
 	if err != nil {
 		return err
 	}

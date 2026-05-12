@@ -48,6 +48,13 @@ type Store interface {
 	ListInvites(ctx context.Context, orgID string) ([]domain.Invite, error)
 	MarkInviteClaimed(ctx context.Context, tokenHash []byte) error
 	DeleteInvite(ctx context.Context, tokenHash []byte) error
+
+	// Phase 3 Stage 8 — user preferences (theme, etc.). Stored in the
+	// users.preferences jsonb column. GetUserPreferences returns an empty
+	// map when none have been persisted yet; UpdateUserPreferences performs
+	// a last-write-wins overwrite of the column.
+	GetUserPreferences(ctx context.Context, userID string) (map[string]any, error)
+	UpdateUserPreferences(ctx context.Context, userID string, prefs map[string]any) error
 }
 
 // MemStore is an in-memory Store fake used exclusively by unit tests. It
@@ -62,6 +69,7 @@ type MemStore struct {
 	magic       map[string]magicEntry // hex(hash) → entry
 	apiKeys     map[string]apiKeyEntry
 	invites     map[string]domain.Invite // hex(tokenHash) → invite
+	prefs       map[string]map[string]any // userID → preferences
 	mailer      *TestMailer
 }
 
@@ -93,6 +101,7 @@ func NewMemStore() *MemStore {
 		magic:       map[string]magicEntry{},
 		apiKeys:     map[string]apiKeyEntry{},
 		invites:     map[string]domain.Invite{},
+		prefs:       map[string]map[string]any{},
 	}
 }
 
@@ -408,6 +417,36 @@ func (m *MemStore) DeleteInvite(_ context.Context, tokenHash []byte) error {
 		return domain.ErrNotFound
 	}
 	delete(m.invites, k)
+	return nil
+}
+
+// GetUserPreferences returns a shallow copy of the user's stored preferences
+// map. Returns an empty (non-nil) map when none have been set.
+func (m *MemStore) GetUserPreferences(_ context.Context, userID string) (map[string]any, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	p, ok := m.prefs[userID]
+	if !ok {
+		return map[string]any{}, nil
+	}
+	out := make(map[string]any, len(p))
+	for k, v := range p {
+		out[k] = v
+	}
+	return out, nil
+}
+
+// UpdateUserPreferences performs a last-write-wins overwrite of the user's
+// preferences. Stores a defensive copy so subsequent caller mutations don't
+// leak back into the in-memory store.
+func (m *MemStore) UpdateUserPreferences(_ context.Context, userID string, prefs map[string]any) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make(map[string]any, len(prefs))
+	for k, v := range prefs {
+		cp[k] = v
+	}
+	m.prefs[userID] = cp
 	return nil
 }
 
