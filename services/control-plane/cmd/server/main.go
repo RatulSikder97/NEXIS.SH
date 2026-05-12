@@ -28,22 +28,36 @@ func main() {
 
 	ctx := context.Background()
 
-	// Initialise the application-role pool. Missing URL is tolerated in dev
-	// so `go run ./cmd/server` still boots for the LLM-only diag surface
-	// from Phase 1; real connection errors are fatal in non-dev envs.
-	pool := mustPool(ctx, cfg, logger)
-	if pool != nil {
-		defer pool.Close()
+	// Two pools — see httpserver.Deps for the rationale.
+	//
+	//   - adminPool (DATABASE_URL): privileged role used by the AuthProvider
+	//     for signup/login bootstrap that must work without an RLS principal.
+	//   - appPool (DATABASE_URL_APP, nexis_app): used by the RLS middleware
+	//     for per-request tx-bound tenant queries.
+	//
+	// Missing URLs are tolerated in dev so `go run ./cmd/server` still boots
+	// for the LLM-only diag surface from Phase 1.
+	adminPool := mustPool(ctx, "DATABASE_URL", cfg.DatabaseURL, cfg, logger)
+	if adminPool != nil {
+		defer adminPool.Close()
+	}
+	appPool := mustPool(ctx, "DATABASE_URL_APP", cfg.DatabaseURLApp, cfg, logger)
+	if appPool != nil {
+		defer appPool.Close()
 	}
 
-	authProvider, err := auth.NewFromConfig(cfg, pool)
+	authProvider, err := auth.NewFromConfig(cfg, adminPool)
 	if err != nil {
 		logger.Error("auth provider", "err", err)
 		os.Exit(1)
 	}
 	logger.Info("auth provider initialised", "name", authProvider.Name())
 
-	srv := httpserver.New(cfg, logger, httpserver.Deps{Pool: pool, Auth: authProvider})
+	srv := httpserver.New(cfg, logger, httpserver.Deps{
+		Pool:    adminPool,
+		AppPool: appPool,
+		Auth:    authProvider,
+	})
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           srv,
@@ -71,20 +85,22 @@ func main() {
 	_ = httpServer.Shutdown(shutdownCtx)
 }
 
-// mustPool returns a connected pgx pool, or nil + a warning if no URL is set
-// (dev convenience). On a real connection error in non-dev we fail fast.
-func mustPool(ctx context.Context, cfg config.Config, logger *slog.Logger) *pgxpool.Pool {
-	if cfg.DatabaseURLApp == "" {
-		logger.Warn("DATABASE_URL_APP not set — auth routes will fail at runtime")
+// mustPool returns a connected pgx pool, or nil + a warning if the URL is
+// empty (dev convenience). On a real connection error in non-dev we fail
+// fast. envName is used only for logging so operators can tell which pool
+// failed at boot.
+func mustPool(ctx context.Context, envName, url string, cfg config.Config, logger *slog.Logger) *pgxpool.Pool {
+	if url == "" {
+		logger.Warn(envName + " not set — auth/RLS features depending on this pool will fail at runtime")
 		return nil
 	}
-	p, err := db.New(ctx, cfg.DatabaseURLApp)
+	p, err := db.New(ctx, url)
 	if err != nil {
 		if cfg.AppEnv == "dev" {
-			logger.Warn("db pool init failed in dev — continuing without it", "err", err)
+			logger.Warn("db pool init failed in dev — continuing without it", "pool", envName, "err", err)
 			return nil
 		}
-		logger.Error("db pool", "err", err)
+		logger.Error("db pool", "pool", envName, "err", err)
 		os.Exit(1)
 	}
 	return p

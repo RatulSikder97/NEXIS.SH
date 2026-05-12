@@ -10,23 +10,40 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
 )
 
 // PGStore is the pgx-backed implementation of Store used in production. It
 // queries Postgres directly without an ORM; the schema mirrors
 // migrations/0002_phase2_auth.up.sql.
 //
-// TODO(stage-3): switch every method to accept *pgx.Tx instead of using the
-// pool, so the RLS middleware can bind `SET LOCAL app.current_org_id` to the
-// same transaction the writes run in.
+// Stage 3 — RLS routing:
 //
-// TODO(testing): add `pgstore_test.go` (build-tag `integration`) once a
-// DATABASE_URL_TEST is wired into CI. Coverage for now lives in memStore unit
-// tests; the SQL strings here are exercised by Stage 2 integration tests that
-// exercise the full HTTP signup→login round trip.
+// The PGStore is supplied with an *admin* pool (the role that owns the
+// schema). Methods that bootstrap pre-session state — organizations, users,
+// org_members, sessions, magic_tokens — must run against the pool directly:
+// they execute before a principal exists, so the RLS middleware has no
+// org_id to pin and no per-request tx to thread.
+//
+// Methods that read/write tenant tables AFTER auth (today: api_keys CRUD;
+// Stage 4 will add audit_log writes) call qry(ctx). qry returns the
+// request-scoped pgx.Tx attached by the RLS middleware (which already issued
+// `SET LOCAL app.current_org_id`) if one is present, otherwise falls back to
+// the pool. That fallback path is exercised only by the memStore-backed unit
+// tests and by direct adapter callers — production traffic always carries a
+// tx in ctx.
+//
+// TODO(testing): add `pgstore_test.go` (build-tag `integration`) once
+// DATABASE_URL_TEST is wired into CI. RLS coverage for now lives in
+// tests/integration/rls_test.go.
 type PGStore struct {
 	pool *pgxpool.Pool
 }
+
+// qry returns the request-scoped pgx.Tx if one is attached to ctx (see
+// internal/platform/db/tx.go), otherwise the owning pool. Use this in every
+// tenant-table query so RLS is honoured automatically.
+func (s *PGStore) qry(ctx context.Context) db.Querier { return db.FromCtx(ctx, s.pool) }
 
 // NewPGStore constructs a PGStore against the supplied pool.
 func NewPGStore(pool *pgxpool.Pool) *PGStore {
@@ -246,6 +263,10 @@ func (s *PGStore) MarkMagicTokenUsed(ctx context.Context, hash []byte) error {
 
 // --- api keys --------------------------------------------------------------
 
+// Tenant-table ops below route through s.qry(ctx) so the per-request RLS tx
+// (with SET LOCAL app.current_org_id) is used when present. See the package
+// doc on PGStore for the bootstrap-vs-tenant split.
+
 func (s *PGStore) CreateAPIKey(ctx context.Context, k *domain.APIKey, hash []byte) error {
 	const q = `
 		INSERT INTO api_keys (id, org_id, user_id, prefix, hash, scopes, name, created_at)
@@ -255,7 +276,7 @@ func (s *PGStore) CreateAPIKey(ctx context.Context, k *domain.APIKey, hash []byt
 	if scopes == nil {
 		scopes = []string{}
 	}
-	return s.pool.QueryRow(ctx, q,
+	return s.qry(ctx).QueryRow(ctx, q,
 		k.ID, k.OrgID, k.UserID, k.Prefix, hash, scopes, k.Name, k.CreatedAt,
 	).Scan(&k.ID, &k.CreatedAt)
 }
@@ -265,7 +286,7 @@ func (s *PGStore) GetAPIKeyByHash(ctx context.Context, hash []byte) (*domain.API
 		SELECT id, org_id, user_id, prefix, name, scopes, created_at, last_used_at, revoked_at
 		FROM api_keys WHERE hash = $1`
 	var k domain.APIKey
-	err := s.pool.QueryRow(ctx, q, hash).Scan(
+	err := s.qry(ctx).QueryRow(ctx, q, hash).Scan(
 		&k.ID, &k.OrgID, &k.UserID, &k.Prefix, &k.Name, &k.Scopes,
 		&k.CreatedAt, &k.LastUsedAt, &k.RevokedAt,
 	)
@@ -283,7 +304,7 @@ func (s *PGStore) ListAPIKeysByOrg(ctx context.Context, orgID string) ([]domain.
 		SELECT id, org_id, user_id, prefix, name, scopes, created_at, last_used_at, revoked_at
 		FROM api_keys WHERE org_id = $1
 		ORDER BY created_at DESC`
-	rows, err := s.pool.Query(ctx, q, orgID)
+	rows, err := s.qry(ctx).Query(ctx, q, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +325,7 @@ func (s *PGStore) ListAPIKeysByOrg(ctx context.Context, orgID string) ([]domain.
 
 func (s *PGStore) RevokeAPIKey(ctx context.Context, orgID, id string) error {
 	const q = `UPDATE api_keys SET revoked_at = now() WHERE id = $1 AND org_id = $2 AND revoked_at IS NULL`
-	tag, err := s.pool.Exec(ctx, q, id, orgID)
+	tag, err := s.qry(ctx).Exec(ctx, q, id, orgID)
 	if err != nil {
 		return err
 	}

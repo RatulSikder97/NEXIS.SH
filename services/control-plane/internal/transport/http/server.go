@@ -23,9 +23,25 @@ import (
 // Deps carries pre-built adapter instances into the router. Auth-protected
 // routes are wired here in Stage 2; the LLM diag route still reads cfg directly
 // through the factory.
+//
+// Two pools live here for Stage 3:
+//
+//   - Pool: the admin/superuser pool (DATABASE_URL). Used by the AuthProvider
+//     for privileged ops that must work BEFORE a session exists — signup
+//     (organizations, users, org_members INSERT), magic-token issuance,
+//     session creation, session verification. These ops cannot run under RLS
+//     because there's no principal yet to pin app.current_org_id to.
+//   - AppPool: the application-role pool (DATABASE_URL_APP, nexis_app non-
+//     superuser). Used by the RLS middleware to open the per-request tx that
+//     binds the tenant GUC. Tenant queries (api_keys CRUD today, audit_log in
+//     Stage 4) go through this pool via db.WithTx → db.FromCtx in the pgstore.
+//
+// In tests we pass nil for both pools and rely on memStore — RLS is skipped
+// because the wiring guards on AppPool != nil.
 type Deps struct {
-	Pool *pgxpool.Pool
-	Auth domain.AuthProvider
+	Pool    *pgxpool.Pool
+	AppPool *pgxpool.Pool
+	Auth    domain.AuthProvider
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
@@ -56,9 +72,14 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		r.Post("/v1/auth/magic", handler.Magic(deps.Auth))
 		r.Get("/v1/auth/verify", handler.Verify(deps.Auth, cfg))
 
-		// Protected routes — RequireAuth issues 401 if no principal is in ctx.
+		// Protected routes — RequireAuth issues 401 if no principal is in ctx;
+		// RLS (when an AppPool is wired) opens a per-request tx and binds
+		// app.current_org_id so tenant-table queries see only the caller's org.
 		r.Group(func(g chi.Router) {
 			g.Use(appmw.RequireAuth)
+			if deps.AppPool != nil {
+				g.Use(appmw.RLS(deps.AppPool))
+			}
 			g.Post("/v1/auth/logout", handler.Logout(deps.Auth, cfg))
 			g.Post("/v1/auth/mfa/enroll", handler.MFAEnroll(deps.Auth))
 			g.Post("/v1/auth/mfa/verify", handler.MFAVerify(deps.Auth))
@@ -69,8 +90,6 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			g.Get("/v1/me", handler.Me(deps.Auth))
 		})
 	}
-
-	_ = deps.Pool // wired into RLS middleware in Stage 3
 
 	return r
 }
