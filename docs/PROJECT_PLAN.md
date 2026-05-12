@@ -545,6 +545,29 @@ Persisted via `next-themes`, default `light`, system-respecting opt-in.
 
 ---
 
+### Phase 3.5 — Workspaces + Billing (Week 9.5)
+
+**Scope**
+- Workspace as the compute unit inside an org. After signup, owner is redirected to onboarding to create their first workspace (name + region from 6 fake datacenters).
+- Provisioning state-machine animation: creating organization → allocating host → provisioning datacenter → deploying → ready. Streamed via SSE, ~6 seconds total.
+- Workspace switcher in the sidebar; selected workspace badge in topbar with region.
+- Billing: Stripe-style payment method form (mocked locally; real Stripe in Phase 7) + invoice list + current-period usage breakdown per workspace per project. AWS-style per-hour runtime metering — control-plane cron records `usage_records` for active workspaces.
+- New Settings sub-route: Billing.
+
+**Deliverables** — Signup → onboarding wizard → see provisioning animation → land on console with workspace + region visible. Settings → Billing shows payment method form and a usage summary.
+
+**Success criteria**
+- New user signup redirects to `/onboarding/workspace`; cannot reach `/console` until a workspace exists.
+- Provisioning animation completes; workspace row appears with `status=ready` and a region.
+- Settings → Billing accepts a (mocked) card; payment method displayed as `Visa ••••4242`.
+- `usage_records` table has runtime-hour rows for the live workspace.
+
+**Sub-agents** — `backend-engineer` (workspaces + billing + SSE) + `frontend-engineer` (onboarding animation + switcher + billing UI).
+
+**Dependencies** — Phase 3.
+
+---
+
 ### Phase 4 — Pipeline Substrate: Temporal + Sandbox (Weeks 10–12) — **LOCAL DOCKER**
 
 **Scope**
