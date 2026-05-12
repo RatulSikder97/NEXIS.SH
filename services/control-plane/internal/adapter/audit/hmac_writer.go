@@ -65,7 +65,12 @@ func (w *HMACWriter) Write(ctx context.Context, p domain.Principal, action, targ
 		prev = nil
 	}
 
-	now := time.Now().UTC()
+	// Postgres timestamptz stores microsecond precision; nanos are dropped on
+	// INSERT. We truncate to microseconds BEFORE computing the HMAC so the
+	// value we sign matches the value we read back during Verify — otherwise
+	// any timestamp with non-zero ns digits would round-trip differently and
+	// fail chain validation on a clean DB.
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	id := uuid.NewString()
 	payload := map[string]any{
 		"id":         id,

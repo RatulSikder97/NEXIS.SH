@@ -272,15 +272,19 @@ func Logout(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) ht
 func MFAEnroll(p domain.AuthProvider, aud domain.AuditWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
-		qr, _, err := p.EnrollMFA(r.Context(), princ.UserID)
+		qr, secret, err := p.EnrollMFA(r.Context(), princ.UserID)
 		if err != nil {
 			mapAuthError(w, err, "mfa enroll")
 			return
 		}
 		dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(qr)
+		// secret is also embedded inside the otpauth URL of the QR PNG; we
+		// surface it explicitly here so deterministic E2E tests can generate
+		// a TOTP code without decoding a PNG. Do not log this value.
 		auditWrite(r, aud, princ, "user.mfa_enroll_started", princ.UserID, map[string]any{})
 		writeJSON(w, http.StatusOK, dto.MFAEnrollResp{
 			QRDataURL:     dataURL,
+			Secret:        secret,
 			RecoveryCodes: []string{}, // reserved for Phase 3
 		})
 	}

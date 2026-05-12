@@ -3,7 +3,15 @@ import { redirect } from "next/navigation";
 
 import type { MeResp } from "@/lib/auth";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+// The dashboard runs as a server component, so it dials the control-plane
+// over the container network. API_URL_INTERNAL (e.g. http://control-plane:8080)
+// is the in-network URL; NEXT_PUBLIC_API_URL is the browser-facing URL
+// (e.g. http://localhost:8080). They differ inside docker compose but
+// collapse to the same value in pure-localhost dev.
+const API =
+  process.env.API_URL_INTERNAL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "http://localhost:8080";
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();

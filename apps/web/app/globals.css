@@ -18,7 +18,7 @@
   --primary-foreground: hsl(0 0% 100%);
   --secondary: hsl(210 20% 96%);
   --secondary-foreground: hsl(222 47% 11%);
-  --accent: hsl(217 60% 82%);                /* #BFCFE8 */
+  --accent: #b6cbed;                /* #BFCFE8 */
   --accent-foreground: hsl(222 47% 14%);
   --destructive: hsl(0 72% 51%);
   --destructive-foreground: hsl(0 0% 100%);

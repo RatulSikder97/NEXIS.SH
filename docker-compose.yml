@@ -170,6 +170,11 @@ services:
       DATABASE_URL: postgres://nexis:nexis_dev_password@postgres:5432/nexis?sslmode=disable
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       NEXT_PUBLIC_API_URL: http://localhost:8080
+      # Server-side fetches from Next.js (e.g. dashboard /v1/me) dial the
+      # control-plane over the in-network hostname; browser fetches still use
+      # NEXT_PUBLIC_API_URL above. Outside docker compose these collapse to
+      # the same value.
+      API_URL_INTERNAL: http://control-plane:8080
       NODE_ENV: production
       PORT: "3000"
       OTEL_SERVICE_NAME: nexis-web

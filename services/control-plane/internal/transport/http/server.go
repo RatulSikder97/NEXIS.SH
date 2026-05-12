@@ -68,6 +68,11 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(chiMiddleware.Timeout(60 * time.Second))
 
+	// CORS must run early so OPTIONS preflights short-circuit before chi
+	// otherwise rejects them with 405. cfg.AppBaseURL is the only allowed
+	// origin; this is locked down per request — see middleware/cors.go.
+	r.Use(appmw.CORS(cfg.AppBaseURL))
+
 	// Trace every request. otelhttp produces a server span and sets a
 	// span context on the request ctx. The traceIDHeader middleware below
 	// echoes the trace id so callers can correlate.

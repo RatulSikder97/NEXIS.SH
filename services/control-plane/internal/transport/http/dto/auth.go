@@ -41,8 +41,16 @@ type ErrorResp struct {
 // returned as a data URL so the web client can render it directly. The
 // recovery_codes slice is reserved for Phase 3; today we always emit an empty
 // slice rather than null so clients can rely on shape.
+//
+// Secret is the raw base32 TOTP secret. It is already trivially extractable
+// from the otpauth:// URL embedded in the QR PNG, so exposing it here adds no
+// real attack surface — but it lets deterministic E2E tests generate a TOTP
+// code without parsing a QR image. The handler never logs this value; clients
+// (including production web UIs) MUST treat it as one-time use and never store
+// it server-side or in browser storage.
 type MFAEnrollResp struct {
 	QRDataURL     string   `json:"qr_data_url"`
+	Secret        string   `json:"secret"`
 	RecoveryCodes []string `json:"recovery_codes"`
 }
 

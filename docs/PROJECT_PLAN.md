@@ -501,7 +501,7 @@ Persisted via `next-themes`, default `light`, system-respecting opt-in.
 
 ---
 
-### Phase 2 — Auth, Tenancy, Observability (Weeks 4–6)
+### Phase 2 — Auth, Tenancy, Observability (Weeks 4–6) — Completed 2026-05-12
 
 **Scope**
 - WorkOS integration (passwords + magic + GitHub OAuth + passkeys + MFA + SAML + SCIM + API keys).

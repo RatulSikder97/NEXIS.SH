@@ -280,6 +280,9 @@ func TestAuth_MFA_EnrollReturnsDataURL(t *testing.T) {
 	if body.RecoveryCodes == nil {
 		t.Errorf("recovery_codes is nil, want empty slice")
 	}
+	if body.Secret == "" {
+		t.Errorf("secret is empty; expected raw base32 TOTP secret for client-side code generation")
+	}
 }
 
 func TestAuth_MFA_VerifyWrongCode(t *testing.T) {

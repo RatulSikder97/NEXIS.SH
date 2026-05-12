@@ -41,6 +41,11 @@ export type APIKeyCreated = {
 
 export type MFAEnrollResp = {
   qr_data_url: string;
+  // secret is the raw base32 TOTP secret. It is also embedded in the
+  // otpauth:// URL inside the QR PNG; we surface it explicitly so test
+  // harnesses can generate a TOTP code without OCR'ing the QR. Treat it
+  // as one-time use — never persist client-side.
+  secret: string;
   recovery_codes: string[];
 };
 
