@@ -13,7 +13,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
 	httpserver "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http"
@@ -53,10 +55,24 @@ func main() {
 	}
 	logger.Info("auth provider initialised", "name", authProvider.Name())
 
+	// Audit writer wires the HMAC chain. We pass the admin pool as the
+	// Querier fallback — the writer uses the per-request RLS tx when one is
+	// in ctx (protected handlers) and the admin pool otherwise (signup,
+	// login, magic-link consume — none of which run inside RLS). When
+	// DATABASE_URL is unset in dev we wire a no-op so the server still boots
+	// for LLM-only diag work.
+	var auditWriter domain.AuditWriter
+	if adminPool != nil && cfg.AuditSecret != "" {
+		auditWriter = audit.New([]byte(cfg.AuditSecret), adminPool)
+	} else {
+		logger.Warn("audit writer disabled — DATABASE_URL or AUDIT_SECRET missing")
+	}
+
 	srv := httpserver.New(cfg, logger, httpserver.Deps{
 		Pool:    adminPool,
 		AppPool: appPool,
 		Auth:    authProvider,
+		Audit:   auditWriter,
 	})
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

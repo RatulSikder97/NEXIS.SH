@@ -90,6 +90,22 @@ func mapAuthError(w http.ResponseWriter, err error, op string) {
 	}
 }
 
+// auditWrite invokes the AuditWriter and logs any error. Audit failures don't
+// abort the response — the cookie/header may already be set by the caller —
+// but for protected endpoints the failed INSERT poisons the RLS tx, which
+// means the surrounding mutation is rolled back at commit time. Treating
+// audit as best-effort at the HTTP boundary but tx-atomic underneath is the
+// right balance: we never silently lose an audit row for a successful
+// mutation, while a transient audit DB hiccup still surfaces in logs.
+func auditWrite(r *http.Request, aud domain.AuditWriter, p domain.Principal, action, target string, metadata map[string]any) {
+	if aud == nil {
+		return
+	}
+	if err := aud.Write(r.Context(), p, action, target, metadata); err != nil {
+		slog.Default().Error("audit write", "action", action, "target", target, "err", err)
+	}
+}
+
 // decodeBody decodes the JSON request body into v. On failure it writes a 400
 // envelope and returns false so the caller can return early.
 func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -103,7 +119,12 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 }
 
 // Signup wires POST /v1/auth/signup. Returns 201 + session cookie on success.
-func Signup(p domain.AuthProvider, cfg config.Config) http.HandlerFunc {
+//
+// On success, an audit row is appended with the fresh principal we just
+// minted — the request hasn't carried one yet, so we synthesise it from the
+// signup result. Audit Write here runs OUTSIDE the RLS tx (the signup route
+// is unauthenticated), so the writer falls through to its owning pool.
+func Signup(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req dto.SignupReq
 		if !decodeBody(w, r, &req) {
@@ -119,6 +140,14 @@ func Signup(p domain.AuthProvider, cfg config.Config) http.HandlerFunc {
 			return
 		}
 		setSessionCookie(w, cfg, res.Session)
+		auditWrite(r, aud, domain.Principal{
+			UserID: res.User.ID,
+			OrgID:  res.Org.ID,
+			Role:   domain.RoleOwner,
+		}, "user.signup", res.User.ID, map[string]any{
+			"email": res.User.Email,
+			"org":   res.Org.ID,
+		})
 		writeJSON(w, http.StatusCreated, dto.AuthResp{
 			UserID:    res.User.ID,
 			OrgID:     res.Org.ID,
@@ -128,7 +157,12 @@ func Signup(p domain.AuthProvider, cfg config.Config) http.HandlerFunc {
 }
 
 // Login wires POST /v1/auth/login. Returns 200 + session cookie on success.
-func Login(p domain.AuthProvider, cfg config.Config) http.HandlerFunc {
+//
+// The audit row is only written when we can resolve the freshly-issued token
+// back to a Principal — otherwise we'd have no org id to bind to. A failed
+// VerifyToken here is unusual (we just signed it) but if it does happen we
+// skip the audit append rather than blocking the login.
+func Login(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req dto.LoginReq
 		if !decodeBody(w, r, &req) {
@@ -152,6 +186,9 @@ func Login(p domain.AuthProvider, cfg config.Config) http.HandlerFunc {
 		if err == nil {
 			body.UserID = princ.UserID
 			body.OrgID = princ.OrgID
+			auditWrite(r, aud, princ, "user.login", princ.UserID, map[string]any{
+				"email": req.Email,
+			})
 		}
 		writeJSON(w, http.StatusOK, body)
 	}
@@ -186,7 +223,12 @@ func Magic(p domain.AuthProvider) http.HandlerFunc {
 // IssueMagicLink. We forward it verbatim to ConsumeMagicLink, which hashes
 // the string and looks up the persisted hash. On success the session cookie
 // is set and the browser is 302'd to the configured dashboard URL.
-func Verify(p domain.AuthProvider, cfg config.Config) http.HandlerFunc {
+//
+// We audit the magic-link consumption with the principal we just minted —
+// see the Login handler for the same pattern. The query string carries the
+// purpose only as a hint; ConsumeMagicLink doesn't return it, so we record
+// the raw query param.
+func Verify(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.URL.Query().Get("token")
 		if token == "" {
@@ -199,6 +241,11 @@ func Verify(p domain.AuthProvider, cfg config.Config) http.HandlerFunc {
 			return
 		}
 		setSessionCookie(w, cfg, tok)
+		if princ, err := p.VerifyToken(r.Context(), tok.Token); err == nil {
+			auditWrite(r, aud, princ, "user.magic_consumed", princ.UserID, map[string]any{
+				"purpose": r.URL.Query().Get("purpose"),
+			})
+		}
 		dest := cfg.AppBaseURL + "/dashboard"
 		http.Redirect(w, r, dest, http.StatusFound)
 	}
@@ -206,7 +253,7 @@ func Verify(p domain.AuthProvider, cfg config.Config) http.HandlerFunc {
 
 // Logout wires POST /v1/auth/logout. RequireAuth guarantees a principal is
 // present in ctx.
-func Logout(p domain.AuthProvider, cfg config.Config) http.HandlerFunc {
+func Logout(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		if princ.SessionID != "" {
@@ -216,12 +263,13 @@ func Logout(p domain.AuthProvider, cfg config.Config) http.HandlerFunc {
 			}
 		}
 		clearSessionCookie(w, cfg)
+		auditWrite(r, aud, princ, "user.logout", princ.UserID, map[string]any{})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
 // MFAEnroll wires POST /v1/auth/mfa/enroll. Returns the QR as a data URL.
-func MFAEnroll(p domain.AuthProvider) http.HandlerFunc {
+func MFAEnroll(p domain.AuthProvider, aud domain.AuditWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		qr, _, err := p.EnrollMFA(r.Context(), princ.UserID)
@@ -230,6 +278,7 @@ func MFAEnroll(p domain.AuthProvider) http.HandlerFunc {
 			return
 		}
 		dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(qr)
+		auditWrite(r, aud, princ, "user.mfa_enroll_started", princ.UserID, map[string]any{})
 		writeJSON(w, http.StatusOK, dto.MFAEnrollResp{
 			QRDataURL:     dataURL,
 			RecoveryCodes: []string{}, // reserved for Phase 3
@@ -238,7 +287,7 @@ func MFAEnroll(p domain.AuthProvider) http.HandlerFunc {
 }
 
 // MFAVerify wires POST /v1/auth/mfa/verify.
-func MFAVerify(p domain.AuthProvider) http.HandlerFunc {
+func MFAVerify(p domain.AuthProvider, aud domain.AuditWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req dto.MFAVerifyReq
 		if !decodeBody(w, r, &req) {
@@ -249,24 +298,26 @@ func MFAVerify(p domain.AuthProvider) http.HandlerFunc {
 			mapAuthError(w, err, "mfa verify")
 			return
 		}
+		auditWrite(r, aud, princ, "user.mfa_enabled", princ.UserID, map[string]any{})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
 // MFADisable wires DELETE /v1/auth/mfa.
-func MFADisable(p domain.AuthProvider) http.HandlerFunc {
+func MFADisable(p domain.AuthProvider, aud domain.AuditWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		if err := p.DisableMFA(r.Context(), princ.UserID); err != nil {
 			mapAuthError(w, err, "mfa disable")
 			return
 		}
+		auditWrite(r, aud, princ, "user.mfa_disabled", princ.UserID, map[string]any{})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
 // APIKeyCreate wires POST /v1/apikeys.
-func APIKeyCreate(p domain.AuthProvider) http.HandlerFunc {
+func APIKeyCreate(p domain.AuthProvider, aud domain.AuditWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req dto.CreateAPIKeyReq
 		if !decodeBody(w, r, &req) {
@@ -286,6 +337,10 @@ func APIKeyCreate(p domain.AuthProvider) http.HandlerFunc {
 		if scopes == nil {
 			scopes = []string{}
 		}
+		auditWrite(r, aud, princ, "apikey.created", created.Key.ID, map[string]any{
+			"name":   req.Name,
+			"scopes": scopes,
+		})
 		writeJSON(w, http.StatusCreated, dto.APIKeyCreatedResp{
 			ID:        created.Key.ID,
 			Prefix:    created.Key.Prefix,
@@ -329,7 +384,7 @@ func APIKeyList(p domain.AuthProvider) http.HandlerFunc {
 }
 
 // APIKeyRevoke wires DELETE /v1/apikeys/{id}.
-func APIKeyRevoke(p domain.AuthProvider) http.HandlerFunc {
+func APIKeyRevoke(p domain.AuthProvider, aud domain.AuditWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if id == "" {
@@ -341,6 +396,7 @@ func APIKeyRevoke(p domain.AuthProvider) http.HandlerFunc {
 			mapAuthError(w, err, "apikey revoke")
 			return
 		}
+		auditWrite(r, aud, princ, "apikey.revoked", id, map[string]any{})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
