@@ -172,6 +172,8 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8080
       NODE_ENV: production
       PORT: "3000"
+      OTEL_SERVICE_NAME: nexis-web
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "3000:3000"
     depends_on:
@@ -192,7 +194,17 @@ services:
       OPENAI_MODEL_CHEAP: ${OPENAI_MODEL_CHEAP:-gpt-4o-mini}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL_GENERAL: ${OLLAMA_MODEL_GENERAL:-llama3.1:8b}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+      ALLOW_STUB_WORKOS: ${ALLOW_STUB_WORKOS:-0}
+      SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-replace-in-prod-32}
+      AUDIT_SECRET: ${AUDIT_SECRET:-dev-audit-secret-replace-in-prod-32}
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      SMTP_FROM: no-reply@nexis.local
+      APP_BASE_URL: http://localhost:3000
       DATABASE_URL: postgres://nexis:nexis_dev_password@postgres:5432/nexis?sslmode=disable
+      DATABASE_URL_APP: postgres://nexis_app:nexis_app_dev_password@postgres:5432/nexis?sslmode=disable
+      OTEL_SERVICE_NAME: nexis-control-plane
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "8080:8080"
@@ -200,6 +212,8 @@ services:
       postgres:
         condition: service_healthy
       otel-collector:
+        condition: service_started
+      mailhog:
         condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
