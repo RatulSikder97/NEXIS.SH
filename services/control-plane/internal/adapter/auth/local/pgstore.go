@@ -98,6 +98,21 @@ func (s *PGStore) GetUser(ctx context.Context, id string) (*domain.User, error) 
 	return &u, nil
 }
 
+func (s *PGStore) GetOrganization(ctx context.Context, id string) (*domain.Organization, error) {
+	const q = `
+		SELECT id, name, slug, owner_user_id, created_at
+		FROM organizations WHERE id = $1`
+	var o domain.Organization
+	err := s.pool.QueryRow(ctx, q, id).Scan(&o.ID, &o.Name, &o.Slug, &o.OwnerUserID, &o.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
 func (s *PGStore) GetMembership(ctx context.Context, userID string) (string, domain.Role, error) {
 	// Membership rows live inside an RLS-protected table. The signup path
 	// currently runs without `app.current_org_id` set, so this query returns

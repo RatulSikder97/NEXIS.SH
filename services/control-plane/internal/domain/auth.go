@@ -130,4 +130,9 @@ type AuthProvider interface {
 	// VerifyAPIKey is called by middleware when the request carries
 	// "Authorization: Bearer nx_live_...". Returns a Principal on success.
 	VerifyAPIKey(ctx context.Context, key string) (Principal, error)
+
+	// GetUser resolves a User by id. Used by the /v1/me handler.
+	GetUser(ctx context.Context, id string) (User, error)
+	// GetOrg resolves an Organization by id. Used by the /v1/me handler.
+	GetOrg(ctx context.Context, id string) (Organization, error)
 }

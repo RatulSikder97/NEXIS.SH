@@ -11,7 +11,7 @@ import (
 )
 
 // Store is the persistence boundary for the local auth adapter. The production
-// implementation is PGStore (pgx-backed); tests use memStore for a deterministic,
+// implementation is PGStore (pgx-backed); tests use MemStore for a deterministic,
 // in-memory fake. All Store methods are expected to be safe for concurrent use.
 type Store interface {
 	// org + user + membership
@@ -20,6 +20,7 @@ type Store interface {
 	CreateMembership(ctx context.Context, orgID, userID string, role domain.Role) error
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	GetUser(ctx context.Context, id string) (*domain.User, error)
+	GetOrganization(ctx context.Context, id string) (*domain.Organization, error)
 	GetMembership(ctx context.Context, userID string) (orgID string, role domain.Role, err error)
 	UpdateUserMFASecret(ctx context.Context, userID, secret string) error
 	UpdateUserMFAEnabled(ctx context.Context, userID string, enabled bool) error
@@ -42,9 +43,9 @@ type Store interface {
 	RevokeAPIKey(ctx context.Context, orgID, id string) error
 }
 
-// memStore is an in-memory Store fake used exclusively by unit tests. It
+// MemStore is an in-memory Store fake used exclusively by unit tests. It
 // returns deep copies for read methods so callers cannot mutate internal state.
-type memStore struct {
+type MemStore struct {
 	mu          sync.RWMutex
 	orgs        map[string]domain.Organization
 	users       map[string]domain.User
@@ -53,7 +54,7 @@ type memStore struct {
 	sessions    map[string]domain.Session
 	magic       map[string]magicEntry // hex(hash) → entry
 	apiKeys     map[string]apiKeyEntry
-	mailer      *testMailer
+	mailer      *TestMailer
 }
 
 type membership struct {
@@ -74,8 +75,8 @@ type apiKeyEntry struct {
 	hash []byte
 }
 
-func newMemStore() *memStore {
-	return &memStore{
+func NewMemStore() *MemStore {
+	return &MemStore{
 		orgs:        map[string]domain.Organization{},
 		users:       map[string]domain.User{},
 		usersByMail: map[string]string{},
@@ -86,22 +87,22 @@ func newMemStore() *memStore {
 	}
 }
 
-func (m *memStore) CreateOrganization(_ context.Context, o *domain.Organization) error {
+func (m *MemStore) CreateOrganization(_ context.Context, o *domain.Organization) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, dup := m.orgs[o.ID]; dup {
-		return fmt.Errorf("memStore: org %q already exists: %w", o.ID, domain.ErrConflict)
+		return fmt.Errorf("MemStore: org %q already exists: %w", o.ID, domain.ErrConflict)
 	}
 	cp := *o
 	m.orgs[o.ID] = cp
 	return nil
 }
 
-func (m *memStore) CreateUser(_ context.Context, u *domain.User) error {
+func (m *MemStore) CreateUser(_ context.Context, u *domain.User) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, dup := m.usersByMail[u.Email]; dup {
-		return fmt.Errorf("memStore: user %q already exists: %w", u.Email, domain.ErrConflict)
+		return fmt.Errorf("MemStore: user %q already exists: %w", u.Email, domain.ErrConflict)
 	}
 	cp := *u
 	m.users[u.ID] = cp
@@ -109,14 +110,14 @@ func (m *memStore) CreateUser(_ context.Context, u *domain.User) error {
 	return nil
 }
 
-func (m *memStore) CreateMembership(_ context.Context, orgID, userID string, role domain.Role) error {
+func (m *MemStore) CreateMembership(_ context.Context, orgID, userID string, role domain.Role) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.memberships[userID] = membership{orgID: orgID, role: role}
 	return nil
 }
 
-func (m *memStore) GetUserByEmail(_ context.Context, email string) (*domain.User, error) {
+func (m *MemStore) GetUserByEmail(_ context.Context, email string) (*domain.User, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	id, ok := m.usersByMail[email]
@@ -127,7 +128,7 @@ func (m *memStore) GetUserByEmail(_ context.Context, email string) (*domain.User
 	return &u, nil
 }
 
-func (m *memStore) GetUser(_ context.Context, id string) (*domain.User, error) {
+func (m *MemStore) GetUser(_ context.Context, id string) (*domain.User, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	u, ok := m.users[id]
@@ -137,7 +138,17 @@ func (m *memStore) GetUser(_ context.Context, id string) (*domain.User, error) {
 	return &u, nil
 }
 
-func (m *memStore) GetMembership(_ context.Context, userID string) (string, domain.Role, error) {
+func (m *MemStore) GetOrganization(_ context.Context, id string) (*domain.Organization, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	o, ok := m.orgs[id]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	return &o, nil
+}
+
+func (m *MemStore) GetMembership(_ context.Context, userID string) (string, domain.Role, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	mb, ok := m.memberships[userID]
@@ -147,7 +158,7 @@ func (m *memStore) GetMembership(_ context.Context, userID string) (string, doma
 	return mb.orgID, mb.role, nil
 }
 
-func (m *memStore) UpdateUserMFASecret(_ context.Context, userID, secret string) error {
+func (m *MemStore) UpdateUserMFASecret(_ context.Context, userID, secret string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	u, ok := m.users[userID]
@@ -160,7 +171,7 @@ func (m *memStore) UpdateUserMFASecret(_ context.Context, userID, secret string)
 	return nil
 }
 
-func (m *memStore) UpdateUserMFAEnabled(_ context.Context, userID string, enabled bool) error {
+func (m *MemStore) UpdateUserMFAEnabled(_ context.Context, userID string, enabled bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	u, ok := m.users[userID]
@@ -172,7 +183,7 @@ func (m *memStore) UpdateUserMFAEnabled(_ context.Context, userID string, enable
 	return nil
 }
 
-func (m *memStore) ClearUserMFA(_ context.Context, userID string) error {
+func (m *MemStore) ClearUserMFA(_ context.Context, userID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	u, ok := m.users[userID]
@@ -185,7 +196,7 @@ func (m *memStore) ClearUserMFA(_ context.Context, userID string) error {
 	return nil
 }
 
-func (m *memStore) CreateSession(_ context.Context, s *domain.Session) error {
+func (m *MemStore) CreateSession(_ context.Context, s *domain.Session) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cp := *s
@@ -193,7 +204,7 @@ func (m *memStore) CreateSession(_ context.Context, s *domain.Session) error {
 	return nil
 }
 
-func (m *memStore) GetSession(_ context.Context, id string) (*domain.Session, error) {
+func (m *MemStore) GetSession(_ context.Context, id string) (*domain.Session, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	s, ok := m.sessions[id]
@@ -203,7 +214,7 @@ func (m *memStore) GetSession(_ context.Context, id string) (*domain.Session, er
 	return &s, nil
 }
 
-func (m *memStore) RevokeSession(_ context.Context, id string) error {
+func (m *MemStore) RevokeSession(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.sessions[id]
@@ -216,7 +227,7 @@ func (m *memStore) RevokeSession(_ context.Context, id string) error {
 	return nil
 }
 
-func (m *memStore) CreateMagicToken(_ context.Context, hash []byte, userID, purpose string, expiresAt time.Time) error {
+func (m *MemStore) CreateMagicToken(_ context.Context, hash []byte, userID, purpose string, expiresAt time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	k := hex.EncodeToString(hash)
@@ -224,7 +235,7 @@ func (m *memStore) CreateMagicToken(_ context.Context, hash []byte, userID, purp
 	return nil
 }
 
-func (m *memStore) GetMagicToken(_ context.Context, hash []byte) (string, string, time.Time, *time.Time, error) {
+func (m *MemStore) GetMagicToken(_ context.Context, hash []byte) (string, string, time.Time, *time.Time, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	e, ok := m.magic[hex.EncodeToString(hash)]
@@ -239,7 +250,7 @@ func (m *memStore) GetMagicToken(_ context.Context, hash []byte) (string, string
 	return e.userID, e.purpose, e.expiresAt, used, nil
 }
 
-func (m *memStore) MarkMagicTokenUsed(_ context.Context, hash []byte) error {
+func (m *MemStore) MarkMagicTokenUsed(_ context.Context, hash []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	k := hex.EncodeToString(hash)
@@ -253,7 +264,7 @@ func (m *memStore) MarkMagicTokenUsed(_ context.Context, hash []byte) error {
 	return nil
 }
 
-func (m *memStore) CreateAPIKey(_ context.Context, k *domain.APIKey, hash []byte) error {
+func (m *MemStore) CreateAPIKey(_ context.Context, k *domain.APIKey, hash []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cp := *k
@@ -264,7 +275,7 @@ func (m *memStore) CreateAPIKey(_ context.Context, k *domain.APIKey, hash []byte
 	return nil
 }
 
-func (m *memStore) GetAPIKeyByHash(_ context.Context, hash []byte) (*domain.APIKey, error) {
+func (m *MemStore) GetAPIKeyByHash(_ context.Context, hash []byte) (*domain.APIKey, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, e := range m.apiKeys {
@@ -279,7 +290,7 @@ func (m *memStore) GetAPIKeyByHash(_ context.Context, hash []byte) (*domain.APIK
 	return nil, domain.ErrNotFound
 }
 
-func (m *memStore) ListAPIKeysByOrg(_ context.Context, orgID string) ([]domain.APIKey, error) {
+func (m *MemStore) ListAPIKeysByOrg(_ context.Context, orgID string) ([]domain.APIKey, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	var out []domain.APIKey
@@ -296,7 +307,7 @@ func (m *memStore) ListAPIKeysByOrg(_ context.Context, orgID string) ([]domain.A
 	return out, nil
 }
 
-func (m *memStore) RevokeAPIKey(_ context.Context, orgID, id string) error {
+func (m *MemStore) RevokeAPIKey(_ context.Context, orgID, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e, ok := m.apiKeys[id]
@@ -310,7 +321,7 @@ func (m *memStore) RevokeAPIKey(_ context.Context, orgID, id string) error {
 }
 
 // getMembership is a test helper: returns the role of userID within orgID.
-func (m *memStore) getMembership(orgID, userID string) (domain.Role, error) {
+func (m *MemStore) getMembership(orgID, userID string) (domain.Role, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	mb, ok := m.memberships[userID]
@@ -323,7 +334,7 @@ func (m *memStore) getMembership(orgID, userID string) (domain.Role, error) {
 // lastMagicToken returns the plaintext token captured by the test mailer in the
 // most recent IssueMagicLink call. It extracts the token query parameter from
 // the email link.
-func (m *memStore) lastMagicToken() string {
+func (m *MemStore) lastMagicToken() string {
 	if m.mailer == nil {
 		return ""
 	}

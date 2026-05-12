@@ -351,6 +351,26 @@ func (p *Provider) RevokeAPIKey(ctx context.Context, princ domain.Principal, id 
 	return p.store.RevokeAPIKey(ctx, princ.OrgID, id)
 }
 
+// GetUser resolves a User by id. Used by the /v1/me handler to enrich the
+// principal with email + verification state. Returns ErrNotFound for unknown ids.
+func (p *Provider) GetUser(ctx context.Context, id string) (domain.User, error) {
+	u, err := p.store.GetUser(ctx, id)
+	if err != nil {
+		return domain.User{}, err
+	}
+	return *u, nil
+}
+
+// GetOrg resolves an Organization by id. Used by the /v1/me handler. Returns
+// ErrNotFound for unknown ids.
+func (p *Provider) GetOrg(ctx context.Context, id string) (domain.Organization, error) {
+	o, err := p.store.GetOrganization(ctx, id)
+	if err != nil {
+		return domain.Organization{}, err
+	}
+	return *o, nil
+}
+
 // VerifyAPIKey resolves a bearer plaintext to a Principal, rejecting revoked keys.
 func (p *Provider) VerifyAPIKey(ctx context.Context, key string) (domain.Principal, error) {
 	hash := hashAPIKey(key)

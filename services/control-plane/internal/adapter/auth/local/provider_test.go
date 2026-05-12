@@ -13,12 +13,12 @@ import (
 )
 
 // newTestProvider builds a Provider wired against an in-memory Store + test
-// mailer, with a fixed clock so tests are deterministic. The returned memStore
+// mailer, with a fixed clock so tests are deterministic. The returned MemStore
 // has a back-reference to the mailer so lastMagicToken() works.
-func newTestProvider(t *testing.T) (*Provider, *memStore) {
+func newTestProvider(t *testing.T) (*Provider, *MemStore) {
 	t.Helper()
-	store := newMemStore()
-	mailer := &testMailer{}
+	store := NewMemStore()
+	mailer := &TestMailer{}
 	store.mailer = mailer
 	clk := func() time.Time { return time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC) }
 	p := New(Config{

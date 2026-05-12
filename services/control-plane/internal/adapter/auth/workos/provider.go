@@ -72,3 +72,11 @@ func (*Provider) RevokeAPIKey(_ context.Context, _ domain.Principal, _ string) e
 func (*Provider) VerifyAPIKey(_ context.Context, _ string) (domain.Principal, error) {
 	return domain.Principal{}, domain.ErrNotImplemented
 }
+
+func (*Provider) GetUser(_ context.Context, _ string) (domain.User, error) {
+	return domain.User{}, domain.ErrNotImplemented
+}
+
+func (*Provider) GetOrg(_ context.Context, _ string) (domain.Organization, error) {
+	return domain.Organization{}, domain.ErrNotImplemented
+}

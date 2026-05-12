@@ -28,13 +28,13 @@ func (m *SMTPMailer) SendMagicLink(_ context.Context, to, link string) error {
 	return smtp.SendMail(addr, nil, m.From, []string{to}, []byte(body))
 }
 
-// testMailer records the last link emitted instead of sending. Used by unit tests
+// TestMailer records the last link emitted instead of sending. Used by unit tests
 // to retrieve the plaintext magic-link token issued by the provider.
-type testMailer struct {
+type TestMailer struct {
 	lastLink string
 }
 
-func (m *testMailer) SendMagicLink(_ context.Context, _, link string) error {
+func (m *TestMailer) SendMagicLink(_ context.Context, _, link string) error {
 	m.lastLink = link
 	return nil
 }
