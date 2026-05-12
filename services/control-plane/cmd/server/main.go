@@ -18,6 +18,7 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
+	otelplatform "github.com/nexis-eco/nexis/services/control-plane/internal/platform/otel"
 	httpserver "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http"
 )
 
@@ -29,6 +30,21 @@ func main() {
 	logger.Info("control-plane starting", "port", cfg.Port, "env", cfg.AppEnv, "auth_provider", cfg.AuthProvider)
 
 	ctx := context.Background()
+
+	// OpenTelemetry — wire the global tracer provider before anything else
+	// so handlers, db code, and middleware can rely on otel.Tracer/Span APIs
+	// without panicking. If the collector is unreachable the SDK keeps
+	// retrying in the background; the server stays healthy.
+	shutdownOTel, err := otelplatform.Init(ctx, cfg.OTelServiceName, cfg.OTelEndpoint)
+	if err != nil {
+		logger.Warn("otel init failed", "err", err)
+	} else {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = shutdownOTel(shutdownCtx)
+		}()
+	}
 
 	// Two pools — see httpserver.Deps for the rationale.
 	//

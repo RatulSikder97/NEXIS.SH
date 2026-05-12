@@ -13,6 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/llm"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
@@ -65,6 +67,12 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 	r.Use(chiMiddleware.RequestID)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(chiMiddleware.Timeout(60 * time.Second))
+
+	// Trace every request. otelhttp produces a server span and sets a
+	// span context on the request ctx. The traceIDHeader middleware below
+	// echoes the trace id so callers can correlate.
+	r.Use(otelMiddleware)
+	r.Use(traceIDHeader)
 
 	// Auth decorates every request with an optional Principal. RequireAuth
 	// downstream enforces presence on protected routes. Wired only when an
@@ -122,4 +130,29 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 	}
 
 	return r
+}
+
+// otelMiddleware wraps the inner handler so chi-style middleware composes.
+// otelhttp.NewHandler returns an http.Handler that opens a server span and
+// puts the SpanContext on the request ctx; everything after it sees the
+// active trace.
+func otelMiddleware(next http.Handler) http.Handler {
+	return otelhttp.NewHandler(next, "http.server",
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
+			return r.Method + " " + r.URL.Path
+		}),
+	)
+}
+
+// traceIDHeader echoes the active span's trace id on the response. Callers
+// (web app, curl, dashboards) can grep `x-trace-id` from the response and
+// jump straight to the trace in Tempo without correlation queries.
+func traceIDHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		span := trace.SpanFromContext(r.Context())
+		if sc := span.SpanContext(); sc.IsValid() {
+			w.Header().Set("x-trace-id", sc.TraceID().String())
+		}
+		next.ServeHTTP(w, r)
+	})
 }
