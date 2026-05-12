@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/llm"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
@@ -56,10 +57,11 @@ func (noopAudit) Write(_ context.Context, _ domain.Principal, _, _ string, _ map
 // because the chain-hashing concern is orthogonal to the auth provider choice
 // (local vs workos) — both must record the same audit shape.
 type Deps struct {
-	Pool    *pgxpool.Pool
-	AppPool *pgxpool.Pool
-	Auth    domain.AuthProvider
-	Audit   domain.AuditWriter
+	Pool         *pgxpool.Pool
+	AppPool      *pgxpool.Pool
+	Auth         domain.AuthProvider
+	Audit        domain.AuditWriter
+	Integrations *integration.Registry
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {

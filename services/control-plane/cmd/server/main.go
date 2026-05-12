@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -15,6 +16,9 @@ import (
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/keyvault"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
@@ -71,6 +75,26 @@ func main() {
 	}
 	logger.Info("auth provider initialised", "name", authProvider.Name())
 
+	// LocalKeyVault — decodes MASTER_KEY (base64, 32 bytes) and constructs an
+	// AES-256-GCM cipher used by every integration adapter to seal webhook
+	// secrets / OAuth tokens at rest in integrations.secret_ciphertext. In dev
+	// we fall back to a zero key so the server boots without ceremony.
+	masterKey, err := base64.StdEncoding.DecodeString(cfg.MasterKey)
+	if err != nil || len(masterKey) != 32 {
+		if cfg.AppEnv == "dev" {
+			logger.Warn("MASTER_KEY invalid; using zero key for dev")
+			masterKey = make([]byte, 32)
+		} else {
+			logger.Error("MASTER_KEY missing or not 32 bytes (base64)")
+			os.Exit(1)
+		}
+	}
+	kv, err := keyvault.NewLocal(masterKey)
+	if err != nil {
+		logger.Error("keyvault", "err", err)
+		os.Exit(1)
+	}
+
 	// Audit writer wires the HMAC chain. We pass the admin pool as the
 	// Querier fallback — the writer uses the per-request RLS tx when one is
 	// in ctx (protected handlers) and the admin pool otherwise (signup,
@@ -84,11 +108,31 @@ func main() {
 		logger.Warn("audit writer disabled — DATABASE_URL or AUDIT_SECRET missing")
 	}
 
+	// Integration registry — three adapters today (github, sentry, argocd),
+	// all routed through the same integrations / incidents_raw repos. We pin
+	// the repos to the application pool so RLS-scoped queries inside the
+	// per-request tx see app.current_org_id; the pool itself is only the
+	// Querier fallback for code paths that don't carry a tx.
+	var registry *integration.Registry
+	if appPool != nil {
+		intRepo := repo.NewIntegrationsRepo(appPool)
+		incRepo := repo.NewIncidentsRepo(appPool)
+		registry = integration.NewRegistry(integration.Deps{
+			Repo:                intRepo,
+			KV:                  kv,
+			IncidentSink:        incRepo,
+			GitHubDefaultSecret: []byte(cfg.GitHubDefaultWebhookSecret),
+		})
+	} else {
+		logger.Warn("integration registry disabled — DATABASE_URL_APP missing")
+	}
+
 	srv := httpserver.New(cfg, logger, httpserver.Deps{
-		Pool:    adminPool,
-		AppPool: appPool,
-		Auth:    authProvider,
-		Audit:   auditWriter,
+		Pool:         adminPool,
+		AppPool:      appPool,
+		Auth:         authProvider,
+		Audit:        auditWriter,
+		Integrations: registry,
 	})
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
