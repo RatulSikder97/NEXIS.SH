@@ -524,7 +524,7 @@ Persisted via `next-themes`, default `light`, system-respecting opt-in.
 
 ---
 
-### Phase 3 — Console Shell + Integrations (Weeks 7–9)
+### Phase 3 — Console Shell + Integrations (Weeks 7–9) — Completed 2026-05-13
 
 **Scope**
 - Admin console with 8 navigation surfaces stubbed per §4.3. LIGHT MODE default + dark toggle.

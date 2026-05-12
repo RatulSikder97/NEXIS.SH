@@ -21,17 +21,16 @@ const API =
   process.env.NEXT_PUBLIC_API_URL ??
   "http://localhost:8080";
 
-// AuditRow mirrors the Go struct in services/control-plane that the
-// /v1/audit handler exposes verbatim as JSON. Field names are the Go
-// struct names; Metadata is opaque JSON.
+// AuditRow mirrors the JSON the /v1/audit handler returns (snake_case
+// per the Go struct tags). Metadata is opaque JSON.
 type AuditRow = {
-  ID: string;
-  OrgID: string;
-  Actor: string;
-  Action: string;
-  Target: string;
-  Metadata: Record<string, unknown> | null;
-  CreatedAt: string;
+  id: string;
+  org_id: string;
+  actor: string;
+  action: string;
+  target: string;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
 };
 
 type AuditResp = {
@@ -144,16 +143,16 @@ export default async function ConsoleHomePage() {
               <tbody>
                 {audit.rows.map((row) => (
                   <tr
-                    key={row.ID}
+                    key={row.id}
                     className="border-t border-[var(--color-border)] text-[var(--color-foreground)]"
                   >
                     <td className="whitespace-nowrap px-4 py-2 text-[var(--color-muted-foreground)]">
-                      {formatTime(row.CreatedAt)}
+                      {formatTime(row.created_at)}
                     </td>
-                    <td className="px-4 py-2 font-mono text-xs">{row.Actor}</td>
-                    <td className="px-4 py-2">{row.Action}</td>
+                    <td className="px-4 py-2 font-mono text-xs">{row.actor.slice(0, 8)}</td>
+                    <td className="px-4 py-2">{row.action}</td>
                     <td className="px-4 py-2 font-mono text-xs text-[var(--color-muted-foreground)]">
-                      {row.Target}
+                      {row.target}
                     </td>
                   </tr>
                 ))}
