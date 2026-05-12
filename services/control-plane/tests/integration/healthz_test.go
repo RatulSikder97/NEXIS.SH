@@ -16,6 +16,7 @@ func TestHealthz(t *testing.T) {
 	srv := httpserver.New(
 		config.Config{Port: "8080", AppEnv: "test"},
 		slog.New(slog.NewTextHandler(os.Stdout, nil)),
+		httpserver.Deps{},
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)

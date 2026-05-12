@@ -23,7 +23,7 @@ func TestLLMDiag_Ollama(t *testing.T) {
 	srv := httpserver.New(config.Config{
 		Port: "0", AppEnv: "test",
 		LLMProvider: "ollama", OllamaBaseURL: ollama.URL, OllamaModelGen: "llama3.1:8b",
-	}, slog.New(slog.NewTextHandler(os.Stdout, nil)))
+	}, slog.New(slog.NewTextHandler(os.Stdout, nil)), httpserver.Deps{})
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/_diag/llm", nil)
 	rec := httptest.NewRecorder()

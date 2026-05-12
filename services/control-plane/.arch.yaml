@@ -38,7 +38,11 @@ deps:
   usecase:
     mayDependOn: [domain]
   adapter:
-    mayDependOn: [domain, platform]
+    # adapter→adapter is allowed so a top-level adapter package (e.g. auth/)
+    # can compose its sibling sub-adapters (auth/local, auth/workos) via a
+    # factory. Without this rule the factory would have to live outside the
+    # adapter tree, which would break encapsulation.
+    mayDependOn: [domain, platform, adapter]
   transport:
     mayDependOn: [usecase, domain, platform, transport, adapter]
   workflow:
