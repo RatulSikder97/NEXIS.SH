@@ -100,6 +100,32 @@ type APIKeyCreated struct {
 	Plaintext string // shown once at creation
 }
 
+// Invite is a pending org membership offer. The token sent to the invitee is
+// a one-time secret; only its SHA-256 hash is persisted. The row stays in the
+// table after claim (ClaimedAt non-nil) so audit + admin UIs can show who has
+// been invited and whether they accepted.
+type Invite struct {
+	TokenHash     []byte
+	OrgID         string
+	Email         string
+	Role          Role
+	InviterUserID string
+	ExpiresAt     time.Time
+	ClaimedAt     *time.Time
+}
+
+// InviteInfo is the public-facing summary returned by GetInviteInfo — used
+// by the unauthenticated /v1/invites/{token} landing endpoint so the web app
+// can render "You've been invited to join {org} as {role}" before the user
+// commits to a password.
+type InviteInfo struct {
+	OrgID        string
+	OrgName      string
+	OrgSlug      string
+	Role         Role
+	InviterEmail string
+}
+
 // AuthProvider is the single port the auth usecases depend on. Adapters in
 // internal/adapter/auth/* (local, workos) implement it.
 type AuthProvider interface {
@@ -135,4 +161,18 @@ type AuthProvider interface {
 	GetUser(ctx context.Context, id string) (User, error)
 	// GetOrg resolves an Organization by id. Used by the /v1/me handler.
 	GetOrg(ctx context.Context, id string) (Organization, error)
+
+	// Invites — Phase 3 member onboarding flow. The token returned by
+	// IssueInvite is the raw value embedded in the magic link; only its hash
+	// is persisted. GetInviteInfo + ClaimInvite are called from the public
+	// /v1/invites/{token}{,/claim} endpoints, so they take a raw token rather
+	// than a Principal.
+	IssueInvite(ctx context.Context, p Principal, email string, role Role) (token string, err error)
+	GetInviteInfo(ctx context.Context, token string) (InviteInfo, error)
+	ClaimInvite(ctx context.Context, token, password string) (SessionToken, error)
+	ListInvites(ctx context.Context, p Principal) ([]Invite, error)
+	// RevokeInvite identifies the row by the hex-encoded token_hash that the
+	// admin saw in the list response — the raw token is one-time and not
+	// stored, so we can't reuse it here.
+	RevokeInvite(ctx context.Context, p Principal, tokenHashHex string) error
 }

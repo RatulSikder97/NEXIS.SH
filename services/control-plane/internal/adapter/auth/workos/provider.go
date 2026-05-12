@@ -80,3 +80,25 @@ func (*Provider) GetUser(_ context.Context, _ string) (domain.User, error) {
 func (*Provider) GetOrg(_ context.Context, _ string) (domain.Organization, error) {
 	return domain.Organization{}, domain.ErrNotImplemented
 }
+
+// --- invites (Phase 3 stubs) ------------------------------------------------
+
+func (*Provider) IssueInvite(_ context.Context, _ domain.Principal, _ string, _ domain.Role) (string, error) {
+	return "", domain.ErrNotImplemented
+}
+
+func (*Provider) GetInviteInfo(_ context.Context, _ string) (domain.InviteInfo, error) {
+	return domain.InviteInfo{}, domain.ErrNotImplemented
+}
+
+func (*Provider) ClaimInvite(_ context.Context, _, _ string) (domain.SessionToken, error) {
+	return domain.SessionToken{}, domain.ErrNotImplemented
+}
+
+func (*Provider) ListInvites(_ context.Context, _ domain.Principal) ([]domain.Invite, error) {
+	return nil, domain.ErrNotImplemented
+}
+
+func (*Provider) RevokeInvite(_ context.Context, _ domain.Principal, _ string) error {
+	return domain.ErrNotImplemented
+}

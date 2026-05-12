@@ -102,8 +102,11 @@ func main() {
 	// DATABASE_URL is unset in dev we wire a no-op so the server still boots
 	// for LLM-only diag work.
 	var auditWriter domain.AuditWriter
+	var auditLister audit.Lister
 	if adminPool != nil && cfg.AuditSecret != "" {
-		auditWriter = audit.New([]byte(cfg.AuditSecret), adminPool)
+		hw := audit.New([]byte(cfg.AuditSecret), adminPool)
+		auditWriter = hw
+		auditLister = hw
 	} else {
 		logger.Warn("audit writer disabled — DATABASE_URL or AUDIT_SECRET missing")
 	}
@@ -132,6 +135,7 @@ func main() {
 		AppPool:      appPool,
 		Auth:         authProvider,
 		Audit:        auditWriter,
+		AuditLister:  auditLister,
 		Integrations: registry,
 	})
 	httpServer := &http.Server{

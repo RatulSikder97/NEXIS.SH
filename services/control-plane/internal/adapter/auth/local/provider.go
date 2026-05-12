@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -18,6 +19,11 @@ import (
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 )
+
+// inviteTTL is how long a freshly-issued invite remains claimable. Mirrors the
+// 7-day window the spec calls out; constant rather than configurable to keep
+// the surface tight.
+const inviteTTL = 7 * 24 * time.Hour
 
 // defaultSessionTTL is the lifetime of a freshly-issued session token. Overridable
 // via Config.SessionTTL for tests that want shorter or fixed-clock semantics.
@@ -390,6 +396,174 @@ func (p *Provider) VerifyAPIKey(ctx context.Context, key string) (domain.Princip
 		OrgID:  k.OrgID,
 		Role:   role,
 	}, nil
+}
+
+// --- Invites (Phase 3) -----------------------------------------------------
+
+// IssueInvite mints a 32-byte token, persists its SHA-256 hash + the invite
+// metadata, and emails a magic link to the invitee. Returns the raw token so
+// the caller can derive a token_prefix for the audit row; the full token never
+// leaves the server beyond the email.
+//
+// Pre-check: if the email already maps to a user that is a member of the
+// caller's org, return ErrConflict — quietly creating a duplicate invite would
+// confuse operators reading the list. New users (or existing users not yet in
+// the org) get an invite that the claim flow upgrades to a membership.
+func (p *Provider) IssueInvite(ctx context.Context, princ domain.Principal, email string, role domain.Role) (string, error) {
+	if email == "" {
+		return "", fmt.Errorf("invite: email required: %w", domain.ErrInvalidCredentials)
+	}
+	if role != domain.RoleAdmin && role != domain.RoleMember {
+		return "", fmt.Errorf("invite: role must be admin|member: %w", domain.ErrInvalidCredentials)
+	}
+
+	// Conflict check: existing user already in this org?
+	if existing, err := p.store.GetUserByEmail(ctx, email); err == nil && existing != nil {
+		if orgID, _, err := p.store.GetMembership(ctx, existing.ID); err == nil && orgID == princ.OrgID {
+			return "", fmt.Errorf("invite: user already in org: %w", domain.ErrConflict)
+		}
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("invite: rand: %w", err)
+	}
+	plaintext := base64.RawURLEncoding.EncodeToString(raw)
+	h := sha256.Sum256([]byte(plaintext))
+
+	inv := domain.Invite{
+		TokenHash:     h[:],
+		OrgID:         princ.OrgID,
+		Email:         email,
+		Role:          role,
+		InviterUserID: princ.UserID,
+		ExpiresAt:     p.clock().Add(inviteTTL),
+	}
+	if err := p.store.CreateInvite(ctx, &inv); err != nil {
+		return "", fmt.Errorf("invite: persist: %w", err)
+	}
+
+	link := p.baseURL + "/invites/" + plaintext
+	if err := p.mailer.SendMagicLink(ctx, email, link); err != nil {
+		return "", fmt.Errorf("invite: send: %w", err)
+	}
+	return plaintext, nil
+}
+
+// GetInviteInfo resolves an invite token to the public-facing summary used by
+// the claim landing page. Returns ErrNotFound on bad/expired/claimed tokens —
+// the web UI funnels both into the same "this invite isn't usable" message.
+func (p *Provider) GetInviteInfo(ctx context.Context, token string) (domain.InviteInfo, error) {
+	if token == "" {
+		return domain.InviteInfo{}, domain.ErrNotFound
+	}
+	h := sha256.Sum256([]byte(token))
+	inv, err := p.store.GetInvite(ctx, h[:])
+	if err != nil {
+		return domain.InviteInfo{}, err
+	}
+	if inv.ClaimedAt != nil {
+		return domain.InviteInfo{}, fmt.Errorf("invite: already claimed: %w", domain.ErrConflict)
+	}
+	if p.clock().After(inv.ExpiresAt) {
+		return domain.InviteInfo{}, fmt.Errorf("invite: expired: %w", domain.ErrNotFound)
+	}
+	org, err := p.store.GetOrganization(ctx, inv.OrgID)
+	if err != nil {
+		return domain.InviteInfo{}, fmt.Errorf("invite: load org: %w", err)
+	}
+	inviter, err := p.store.GetUser(ctx, inv.InviterUserID)
+	if err != nil {
+		return domain.InviteInfo{}, fmt.Errorf("invite: load inviter: %w", err)
+	}
+	return domain.InviteInfo{
+		OrgID:        org.ID,
+		OrgName:      org.Name,
+		OrgSlug:      org.Slug,
+		Role:         inv.Role,
+		InviterEmail: inviter.Email,
+	}, nil
+}
+
+// ClaimInvite redeems an invite token, creating a user (if the email isn't
+// already registered) or upgrading the existing user into the org with the
+// invite's role. Returns a signed JWT for the new session.
+func (p *Provider) ClaimInvite(ctx context.Context, token, password string) (domain.SessionToken, error) {
+	if token == "" {
+		return domain.SessionToken{}, domain.ErrNotFound
+	}
+	h := sha256.Sum256([]byte(token))
+	inv, err := p.store.GetInvite(ctx, h[:])
+	if err != nil {
+		return domain.SessionToken{}, fmt.Errorf("claim invite: %w", err)
+	}
+	if inv.ClaimedAt != nil {
+		return domain.SessionToken{}, fmt.Errorf("claim invite: already claimed: %w", domain.ErrConflict)
+	}
+	if p.clock().After(inv.ExpiresAt) {
+		return domain.SessionToken{}, fmt.Errorf("claim invite: expired: %w", domain.ErrNotFound)
+	}
+
+	// Find or create the user. If an existing user is found we silently
+	// accept any password (the invite proves email control) — same as the
+	// magic-link flow. Brand-new users must supply a non-empty password.
+	now := p.clock().UTC()
+	var userID string
+	if existing, err := p.store.GetUserByEmail(ctx, inv.Email); err == nil && existing != nil {
+		userID = existing.ID
+	} else {
+		if password == "" {
+			return domain.SessionToken{}, fmt.Errorf("claim invite: password required for new user: %w", domain.ErrInvalidCredentials)
+		}
+		hash, err := hashPassword(password)
+		if err != nil {
+			return domain.SessionToken{}, fmt.Errorf("claim invite: hash password: %w", err)
+		}
+		userID = uuid.NewString()
+		u := domain.User{ID: userID, Email: inv.Email, PasswordHash: hash, CreatedAt: now}
+		if err := p.store.CreateUser(ctx, &u); err != nil {
+			return domain.SessionToken{}, fmt.Errorf("claim invite: create user: %w", err)
+		}
+	}
+
+	if err := p.store.CreateMembership(ctx, inv.OrgID, userID, inv.Role); err != nil {
+		return domain.SessionToken{}, fmt.Errorf("claim invite: membership: %w", err)
+	}
+	if err := p.store.MarkInviteClaimed(ctx, h[:]); err != nil {
+		return domain.SessionToken{}, fmt.Errorf("claim invite: mark used: %w", err)
+	}
+
+	session := domain.Session{
+		ID:        uuid.NewString(),
+		UserID:    userID,
+		OrgID:     inv.OrgID,
+		CreatedAt: now,
+		ExpiresAt: now.Add(p.sessionTTL),
+	}
+	if err := p.store.CreateSession(ctx, &session); err != nil {
+		return domain.SessionToken{}, fmt.Errorf("claim invite: session: %w", err)
+	}
+	tok, err := p.signJWT(session.ID, userID, inv.OrgID, inv.Role, now, session.ExpiresAt)
+	if err != nil {
+		return domain.SessionToken{}, fmt.Errorf("claim invite: sign jwt: %w", err)
+	}
+	return domain.SessionToken{Token: tok, ExpiresAt: session.ExpiresAt}, nil
+}
+
+// ListInvites delegates to the store. The handler layer filters/orders.
+func (p *Provider) ListInvites(ctx context.Context, princ domain.Principal) ([]domain.Invite, error) {
+	return p.store.ListInvites(ctx, princ.OrgID)
+}
+
+// RevokeInvite deletes the row identified by the hex-encoded token_hash. The
+// admin saw this hex value in the list response; the raw token is one-time and
+// not retrievable here.
+func (p *Provider) RevokeInvite(ctx context.Context, _ domain.Principal, tokenHashHex string) error {
+	raw, err := hex.DecodeString(tokenHashHex)
+	if err != nil {
+		return fmt.Errorf("revoke invite: bad hex: %w", domain.ErrInvalidCredentials)
+	}
+	return p.store.DeleteInvite(ctx, raw)
 }
 
 // --- internal helpers ------------------------------------------------------

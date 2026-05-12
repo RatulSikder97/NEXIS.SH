@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/llm"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
@@ -56,11 +57,17 @@ func (noopAudit) Write(_ context.Context, _ domain.Principal, _, _ string, _ map
 // AFTER the AuthProvider call succeeds. Audit lives outside the AuthProvider
 // because the chain-hashing concern is orthogonal to the auth provider choice
 // (local vs workos) — both must record the same audit shape.
+//
+// Stage 5 adds AuditLister: the read-side of the audit log. Concrete
+// *audit.HMACWriter satisfies both AuditWriter (Write) and the Lister
+// interface (List). We keep two fields for cleanliness so the write-path
+// stays bound to the narrower domain.AuditWriter interface.
 type Deps struct {
 	Pool         *pgxpool.Pool
 	AppPool      *pgxpool.Pool
 	Auth         domain.AuthProvider
 	Audit        domain.AuditWriter
+	AuditLister  audit.Lister
 	Integrations *integration.Registry
 }
 
@@ -100,16 +107,27 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		// Audit writer defaults to a no-op when not wired so the route registry
 		// here stays simple. Tests with the in-memory store pass deps.Audit=nil
 		// and rely on the no-op fallback.
-		audit := deps.Audit
-		if audit == nil {
-			audit = noopAudit{}
+		aud := deps.Audit
+		if aud == nil {
+			aud = noopAudit{}
 		}
 
 		// Public auth routes.
-		r.Post("/v1/auth/signup", handler.Signup(deps.Auth, audit, cfg))
-		r.Post("/v1/auth/login", handler.Login(deps.Auth, audit, cfg))
+		r.Post("/v1/auth/signup", handler.Signup(deps.Auth, aud, cfg))
+		r.Post("/v1/auth/login", handler.Login(deps.Auth, aud, cfg))
 		r.Post("/v1/auth/magic", handler.Magic(deps.Auth))
-		r.Get("/v1/auth/verify", handler.Verify(deps.Auth, audit, cfg))
+		r.Get("/v1/auth/verify", handler.Verify(deps.Auth, aud, cfg))
+
+		// Public invite routes (no session yet).
+		r.Get("/v1/invites/{token}", handler.InviteGet(deps.Auth))
+		r.Post("/v1/invites/{token}/claim", handler.InviteClaim(deps.Auth, cfg))
+
+		// Public webhook ingest. HMAC-authenticated inside each adapter; no
+		// session cookie or bearer is involved. Pool argument is the admin
+		// pool — see handler.Webhook for the RLS pinning rationale.
+		if deps.Integrations != nil && deps.Pool != nil {
+			r.Post("/v1/webhooks/{provider}/{org_id}", handler.Webhook(deps.Integrations, deps.Pool))
+		}
 
 		// Protected routes — RequireAuth issues 401 if no principal is in ctx;
 		// RLS (when an AppPool is wired) opens a per-request tx and binds
@@ -119,13 +137,14 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			if deps.AppPool != nil {
 				g.Use(appmw.RLS(deps.AppPool))
 			}
-			g.Post("/v1/auth/logout", handler.Logout(deps.Auth, audit, cfg))
-			g.Post("/v1/auth/mfa/enroll", handler.MFAEnroll(deps.Auth, audit))
-			g.Post("/v1/auth/mfa/verify", handler.MFAVerify(deps.Auth, audit))
-			g.Delete("/v1/auth/mfa", handler.MFADisable(deps.Auth, audit))
-			g.Post("/v1/apikeys", handler.APIKeyCreate(deps.Auth, audit))
+
+			// Routes open to any authenticated principal regardless of role.
+			g.Post("/v1/auth/logout", handler.Logout(deps.Auth, aud, cfg))
+			g.Post("/v1/auth/mfa/enroll", handler.MFAEnroll(deps.Auth, aud))
+			g.Post("/v1/auth/mfa/verify", handler.MFAVerify(deps.Auth, aud))
+			g.Delete("/v1/auth/mfa", handler.MFADisable(deps.Auth, aud))
 			g.Get("/v1/apikeys", handler.APIKeyList(deps.Auth))
-			g.Delete("/v1/apikeys/{id}", handler.APIKeyRevoke(deps.Auth, audit))
+			g.Delete("/v1/apikeys/{id}", handler.APIKeyRevoke(deps.Auth, aud))
 			g.Get("/v1/me", handler.Me(deps.Auth))
 
 			// Audit chain integrity verify endpoint. Reads the admin pool
@@ -133,6 +152,36 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			if deps.Pool != nil {
 				g.Get("/v1/audit/verify", handler.AuditVerify([]byte(cfg.AuditSecret), deps.Pool))
 			}
+
+			if deps.Integrations != nil {
+				g.Get("/v1/integrations", handler.IntegrationsList(deps.Integrations))
+			}
+
+			// Owner OR admin — Stage 5 RBAC. Owners and admins can manage
+			// integrations + api keys + the audit list/CSV; members are
+			// read-only on their own profile.
+			g.Group(func(g2 chi.Router) {
+				g2.Use(appmw.RequireRole(domain.RoleOwner, domain.RoleAdmin))
+				g2.Post("/v1/apikeys", handler.APIKeyCreate(deps.Auth, aud))
+				if deps.AuditLister != nil {
+					g2.Get("/v1/audit", handler.AuditList(deps.AuditLister))
+					g2.Get("/v1/audit.csv", handler.AuditCSV(deps.AuditLister))
+				}
+				if deps.Integrations != nil {
+					g2.Post("/v1/integrations/{provider}/connect", handler.IntegrationsConnect(deps.Integrations, aud))
+					g2.Delete("/v1/integrations/{provider}", handler.IntegrationsDisconnect(deps.Integrations, aud))
+					g2.Get("/v1/integrations/github/mock_install", handler.GitHubMockInstall(deps.Integrations, aud, cfg.AppBaseURL, cfg.AppEnv))
+				}
+				g2.Get("/v1/orgs/{id}/invites", handler.InviteList(deps.Auth))
+			})
+
+			// Owner only — issuing + revoking invites is reserved for the
+			// org's owner to keep the principal-elevation path tight.
+			g.Group(func(g2 chi.Router) {
+				g2.Use(appmw.RequireRole(domain.RoleOwner))
+				g2.Post("/v1/orgs/{id}/invites", handler.InviteIssue(deps.Auth, aud))
+				g2.Delete("/v1/orgs/{id}/invites/{token_hash}", handler.InviteRevoke(deps.Auth, aud))
+			})
 		})
 	}
 

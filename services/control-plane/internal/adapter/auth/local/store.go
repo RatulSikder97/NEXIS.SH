@@ -41,6 +41,13 @@ type Store interface {
 	GetAPIKeyByHash(ctx context.Context, hash []byte) (*domain.APIKey, error)
 	ListAPIKeysByOrg(ctx context.Context, orgID string) ([]domain.APIKey, error)
 	RevokeAPIKey(ctx context.Context, orgID, id string) error
+
+	// Phase 3 — invites
+	CreateInvite(ctx context.Context, i *domain.Invite) error
+	GetInvite(ctx context.Context, tokenHash []byte) (*domain.Invite, error)
+	ListInvites(ctx context.Context, orgID string) ([]domain.Invite, error)
+	MarkInviteClaimed(ctx context.Context, tokenHash []byte) error
+	DeleteInvite(ctx context.Context, tokenHash []byte) error
 }
 
 // MemStore is an in-memory Store fake used exclusively by unit tests. It
@@ -54,6 +61,7 @@ type MemStore struct {
 	sessions    map[string]domain.Session
 	magic       map[string]magicEntry // hex(hash) → entry
 	apiKeys     map[string]apiKeyEntry
+	invites     map[string]domain.Invite // hex(tokenHash) → invite
 	mailer      *TestMailer
 }
 
@@ -84,6 +92,7 @@ func NewMemStore() *MemStore {
 		sessions:    map[string]domain.Session{},
 		magic:       map[string]magicEntry{},
 		apiKeys:     map[string]apiKeyEntry{},
+		invites:     map[string]domain.Invite{},
 	}
 }
 
@@ -317,6 +326,88 @@ func (m *MemStore) RevokeAPIKey(_ context.Context, orgID, id string) error {
 	now := time.Now().UTC()
 	e.key.RevokedAt = &now
 	m.apiKeys[id] = e
+	return nil
+}
+
+// --- invites (Phase 3) -----------------------------------------------------
+
+// CreateInvite persists a pending invite. Keyed by hex(tokenHash) so the
+// MemStore lookup mirrors PGStore's bytea-keyed table.
+func (m *MemStore) CreateInvite(_ context.Context, i *domain.Invite) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	k := hex.EncodeToString(i.TokenHash)
+	cp := *i
+	cp.TokenHash = append([]byte(nil), i.TokenHash...)
+	m.invites[k] = cp
+	return nil
+}
+
+// GetInvite returns the invite row for the given token hash, or ErrNotFound.
+func (m *MemStore) GetInvite(_ context.Context, tokenHash []byte) (*domain.Invite, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	k := hex.EncodeToString(tokenHash)
+	v, ok := m.invites[k]
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	cp := v
+	cp.TokenHash = append([]byte(nil), v.TokenHash...)
+	if v.ClaimedAt != nil {
+		t := *v.ClaimedAt
+		cp.ClaimedAt = &t
+	}
+	return &cp, nil
+}
+
+// ListInvites returns all invites for the org, newest expiry first. Includes
+// claimed + expired rows — the UI surfaces them with a status badge.
+func (m *MemStore) ListInvites(_ context.Context, orgID string) ([]domain.Invite, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := []domain.Invite{}
+	for _, v := range m.invites {
+		if v.OrgID != orgID {
+			continue
+		}
+		cp := v
+		cp.TokenHash = append([]byte(nil), v.TokenHash...)
+		if v.ClaimedAt != nil {
+			t := *v.ClaimedAt
+			cp.ClaimedAt = &t
+		}
+		out = append(out, cp)
+	}
+	return out, nil
+}
+
+// MarkInviteClaimed stamps claimed_at on the row. Idempotent — claiming an
+// already-claimed row is a noop here; the higher layer (ClaimInvite on
+// Provider) is responsible for the precondition check.
+func (m *MemStore) MarkInviteClaimed(_ context.Context, tokenHash []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	k := hex.EncodeToString(tokenHash)
+	v, ok := m.invites[k]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	now := time.Now().UTC()
+	v.ClaimedAt = &now
+	m.invites[k] = v
+	return nil
+}
+
+// DeleteInvite removes the row. Used by RevokeInvite.
+func (m *MemStore) DeleteInvite(_ context.Context, tokenHash []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	k := hex.EncodeToString(tokenHash)
+	if _, ok := m.invites[k]; !ok {
+		return domain.ErrNotFound
+	}
+	delete(m.invites, k)
 	return nil
 }
 

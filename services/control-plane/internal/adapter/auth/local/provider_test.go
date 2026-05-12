@@ -377,3 +377,105 @@ func TestProvider_APIKey_List(t *testing.T) {
 		t.Errorf("len(keys) = %d, want 3", len(keys))
 	}
 }
+
+// TestProvider_Invite_Roundtrip exercises issue → get → claim end-to-end on
+// the MemStore. The new-user branch creates the user + membership in one
+// shot and emits a signed JWT bound to the org with the invite's role.
+func TestProvider_Invite_Roundtrip(t *testing.T) {
+	p, store := newTestProvider(t)
+	owner, _ := p.Signup(context.Background(), domain.SignupInput{Email: "owner@x.com", Password: "p", OrgName: "X"})
+	princ := domain.Principal{UserID: owner.User.ID, OrgID: owner.Org.ID, Role: domain.RoleOwner}
+
+	tok, err := p.IssueInvite(context.Background(), princ, "newbie@x.com", domain.RoleMember)
+	if err != nil {
+		t.Fatalf("IssueInvite: %v", err)
+	}
+	if tok == "" {
+		t.Fatal("empty invite token")
+	}
+	if strings.Contains(store.mailer.lastLink, tok) == false {
+		t.Errorf("mailer link missing token: %q", store.mailer.lastLink)
+	}
+
+	info, err := p.GetInviteInfo(context.Background(), tok)
+	if err != nil {
+		t.Fatalf("GetInviteInfo: %v", err)
+	}
+	if info.OrgID != owner.Org.ID {
+		t.Errorf("info.OrgID = %q, want %q", info.OrgID, owner.Org.ID)
+	}
+	if info.Role != domain.RoleMember {
+		t.Errorf("info.Role = %q, want member", info.Role)
+	}
+	if info.InviterEmail != "owner@x.com" {
+		t.Errorf("info.InviterEmail = %q", info.InviterEmail)
+	}
+
+	st, err := p.ClaimInvite(context.Background(), tok, "newpass")
+	if err != nil {
+		t.Fatalf("ClaimInvite: %v", err)
+	}
+	claim, err := p.VerifyToken(context.Background(), st.Token)
+	if err != nil {
+		t.Fatalf("VerifyToken after claim: %v", err)
+	}
+	if claim.OrgID != owner.Org.ID {
+		t.Errorf("claim.OrgID = %q, want %q", claim.OrgID, owner.Org.ID)
+	}
+	if claim.Role != domain.RoleMember {
+		t.Errorf("claim.Role = %q, want member", claim.Role)
+	}
+
+	// Second claim must fail — claimed_at is non-nil.
+	if _, err := p.ClaimInvite(context.Background(), tok, "newpass"); err == nil {
+		t.Errorf("second claim must fail")
+	}
+}
+
+// TestProvider_Invite_RejectsDuplicateOrgMember covers the conflict path: an
+// owner who tries to invite an email that's already a member of the same org
+// gets ErrConflict, NOT a quiet success.
+func TestProvider_Invite_RejectsDuplicateOrgMember(t *testing.T) {
+	p, _ := newTestProvider(t)
+	owner, _ := p.Signup(context.Background(), domain.SignupInput{Email: "owner2@x.com", Password: "p", OrgName: "X2"})
+	princ := domain.Principal{UserID: owner.User.ID, OrgID: owner.Org.ID, Role: domain.RoleOwner}
+	if _, err := p.IssueInvite(context.Background(), princ, "owner2@x.com", domain.RoleAdmin); err == nil {
+		t.Fatal("expected error inviting existing org member")
+	} else if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("err = %v, want ErrConflict", err)
+	}
+}
+
+// TestProvider_Invite_Revoke removes the row so a subsequent claim 404s.
+func TestProvider_Invite_Revoke(t *testing.T) {
+	p, _ := newTestProvider(t)
+	owner, _ := p.Signup(context.Background(), domain.SignupInput{Email: "owner3@x.com", Password: "p", OrgName: "X3"})
+	princ := domain.Principal{UserID: owner.User.ID, OrgID: owner.Org.ID, Role: domain.RoleOwner}
+	tok, err := p.IssueInvite(context.Background(), princ, "tobeshown@x.com", domain.RoleMember)
+	if err != nil {
+		t.Fatalf("IssueInvite: %v", err)
+	}
+	invites, err := p.ListInvites(context.Background(), princ)
+	if err != nil || len(invites) != 1 {
+		t.Fatalf("ListInvites = (%v, %v), want 1 row", invites, err)
+	}
+	hashHex := encodeHex(invites[0].TokenHash)
+	if err := p.RevokeInvite(context.Background(), princ, hashHex); err != nil {
+		t.Fatalf("RevokeInvite: %v", err)
+	}
+	if _, err := p.ClaimInvite(context.Background(), tok, "x"); err == nil {
+		t.Errorf("claim after revoke must fail")
+	}
+}
+
+// encodeHex sidesteps an import of encoding/hex in test scope; the production
+// helper in handler/json.go does the same thing.
+func encodeHex(b []byte) string {
+	const hexdigits = "0123456789abcdef"
+	out := make([]byte, len(b)*2)
+	for i, c := range b {
+		out[i*2] = hexdigits[c>>4]
+		out[i*2+1] = hexdigits[c&0x0F]
+	}
+	return string(out)
+}

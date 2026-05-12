@@ -335,5 +335,102 @@ func (s *PGStore) RevokeAPIKey(ctx context.Context, orgID, id string) error {
 	return nil
 }
 
+// --- invites (Phase 3) -----------------------------------------------------
+//
+// org_invites is RLS-protected — every method routes through s.qry(ctx) so
+// the per-request tx (with SET LOCAL app.current_org_id) is used when one is
+// present. Routes that hit these methods always run after RequireAuth + RLS,
+// so the tenant pin is always in place in production.
+
+// CreateInvite inserts a new pending invite. PK is token_hash.
+func (s *PGStore) CreateInvite(ctx context.Context, i *domain.Invite) error {
+	const q = `
+		INSERT INTO org_invites (token_hash, org_id, email, role, inviter_user_id, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6)`
+	_, err := s.qry(ctx).Exec(ctx, q,
+		i.TokenHash, i.OrgID, i.Email, string(i.Role), i.InviterUserID, i.ExpiresAt,
+	)
+	return err
+}
+
+// GetInvite returns the row for the given token hash. We deliberately do NOT
+// route this through the tenant-scoped qry — the claim flow runs before the
+// claimer has a session, so app.current_org_id is unset and an RLS-bound query
+// would return zero rows. Reading directly off the pool sidesteps that. The
+// token itself is unguessable (32 random bytes), so we lose no security by
+// skipping RLS here.
+func (s *PGStore) GetInvite(ctx context.Context, tokenHash []byte) (*domain.Invite, error) {
+	const q = `
+		SELECT token_hash, org_id, email, role, inviter_user_id, expires_at, claimed_at
+		FROM org_invites WHERE token_hash = $1`
+	var i domain.Invite
+	var role string
+	err := s.pool.QueryRow(ctx, q, tokenHash).Scan(
+		&i.TokenHash, &i.OrgID, &i.Email, &role, &i.InviterUserID, &i.ExpiresAt, &i.ClaimedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	i.Role = domain.Role(role)
+	return &i, nil
+}
+
+// ListInvites returns rows for orgID ordered by expires_at DESC. RLS-bound
+// via qry(ctx) — the admin/owner listing the invites must already be signed
+// into the org.
+func (s *PGStore) ListInvites(ctx context.Context, orgID string) ([]domain.Invite, error) {
+	const q = `
+		SELECT token_hash, org_id, email, role, inviter_user_id, expires_at, claimed_at
+		FROM org_invites WHERE org_id = $1
+		ORDER BY expires_at DESC`
+	rows, err := s.qry(ctx).Query(ctx, q, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.Invite{}
+	for rows.Next() {
+		var i domain.Invite
+		var role string
+		if err := rows.Scan(&i.TokenHash, &i.OrgID, &i.Email, &role, &i.InviterUserID, &i.ExpiresAt, &i.ClaimedAt); err != nil {
+			return nil, err
+		}
+		i.Role = domain.Role(role)
+		out = append(out, i)
+	}
+	return out, rows.Err()
+}
+
+// MarkInviteClaimed sets claimed_at to now() for the matching token hash.
+// Pool-bound (same rationale as GetInvite) — the claimer has no session yet.
+func (s *PGStore) MarkInviteClaimed(ctx context.Context, tokenHash []byte) error {
+	const q = `UPDATE org_invites SET claimed_at = now() WHERE token_hash = $1 AND claimed_at IS NULL`
+	tag, err := s.pool.Exec(ctx, q, tokenHash)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// DeleteInvite removes an invite by token hash. RLS-bound via qry(ctx) —
+// revocation only happens through the authenticated admin/owner endpoint.
+func (s *PGStore) DeleteInvite(ctx context.Context, tokenHash []byte) error {
+	const q = `DELETE FROM org_invites WHERE token_hash = $1`
+	tag, err := s.qry(ctx).Exec(ctx, q, tokenHash)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 // compile-time conformance check
 var _ Store = (*PGStore)(nil)

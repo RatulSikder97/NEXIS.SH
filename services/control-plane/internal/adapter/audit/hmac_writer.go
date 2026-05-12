@@ -19,6 +19,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -129,6 +130,110 @@ func canonicalJSON(m map[string]any) []byte {
 	out = append(out, '}')
 	return out
 }
+
+// AuditFilter is the set of optional filters applied by HMACWriter.List. Empty
+// strings and nil timestamps are treated as "no constraint". Limit defaults to
+// 50 when zero; Offset is honoured verbatim. Constructed by the HTTP handler
+// from the request query string.
+type AuditFilter struct {
+	Since  *time.Time
+	Until  *time.Time
+	Actor  string
+	Action string
+	Limit  int
+	Offset int
+}
+
+// AuditRow is the JSON-friendly view of one audit_log row. Metadata is
+// pre-decoded so the handler can pass it straight through to json.Encode
+// without a second round-trip. Note: row_hash / prev_hash are intentionally
+// omitted — those are integrity bookkeeping, not user-facing.
+type AuditRow struct {
+	ID        string         `json:"id"`
+	OrgID     string         `json:"org_id"`
+	Actor     string         `json:"actor"`
+	Action    string         `json:"action"`
+	Target    string         `json:"target"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
+// Lister is the port the AuditList / AuditCSV handlers depend on. HMACWriter
+// satisfies it; tests can substitute a fake without bringing in pgx.
+type Lister interface {
+	List(ctx context.Context, orgID string, f AuditFilter) ([]AuditRow, int, error)
+}
+
+// List returns the rows matching f for the given org, plus the total row count
+// before pagination. Rows ship in created_at DESC order (newest first) which
+// matches the UI's natural read.
+//
+// The query is built dynamically so unused filters do not appear in the WHERE
+// clause — this keeps the planner from binding NULL parameters that would
+// otherwise prevent index usage on audit_log(org_id, created_at).
+func (w *HMACWriter) List(ctx context.Context, orgID string, f AuditFilter) ([]AuditRow, int, error) {
+	q := db.FromCtx(ctx, w.pool)
+	where := "WHERE org_id=$1"
+	args := []any{orgID}
+	idx := 2
+	if f.Since != nil {
+		where += fmt.Sprintf(" AND created_at >= $%d", idx)
+		args = append(args, *f.Since)
+		idx++
+	}
+	if f.Until != nil {
+		where += fmt.Sprintf(" AND created_at <= $%d", idx)
+		args = append(args, *f.Until)
+		idx++
+	}
+	if f.Actor != "" {
+		where += fmt.Sprintf(" AND actor = $%d", idx)
+		args = append(args, f.Actor)
+		idx++
+	}
+	if f.Action != "" {
+		where += fmt.Sprintf(" AND action = $%d", idx)
+		args = append(args, f.Action)
+		idx++
+	}
+
+	var total int
+	if err := q.QueryRow(ctx, "SELECT count(*) FROM audit_log "+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	rowsQ := "SELECT id, org_id, actor, action, COALESCE(target, ''), metadata, created_at FROM audit_log " + where +
+		fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", idx, idx+1)
+	args = append(args, limit, f.Offset)
+	rows, err := q.Query(ctx, rowsQ, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := []AuditRow{}
+	for rows.Next() {
+		var row AuditRow
+		var meta []byte
+		if err := rows.Scan(&row.ID, &row.OrgID, &row.Actor, &row.Action, &row.Target, &meta, &row.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		if len(meta) > 0 {
+			_ = json.Unmarshal(meta, &row.Metadata)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return out, total, nil
+}
+
+// compile-time conformance check: HMACWriter satisfies the Lister port.
+var _ Lister = (*HMACWriter)(nil)
 
 // VerifyResult is the body returned by GET /v1/audit/verify.
 //
