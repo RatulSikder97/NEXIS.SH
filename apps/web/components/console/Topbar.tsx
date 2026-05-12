@@ -15,6 +15,7 @@ import { usePathname } from "next/navigation";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "@/components/console/CommandPalette";
+import { UserMenu } from "@/components/console/UserMenu";
 
 function humanize(segment: string): string {
   if (!segment) return "";
@@ -69,7 +70,7 @@ function openPalette() {
   window.dispatchEvent(ev);
 }
 
-export function Topbar() {
+export function Topbar({ userEmail }: { userEmail: string }) {
   return (
     <>
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-background)]/95 px-6 backdrop-blur">
@@ -87,6 +88,7 @@ export function Topbar() {
             </kbd>
           </button>
           <ThemeToggle />
+          <UserMenu email={userEmail} />
         </div>
       </header>
       <CommandPalette />

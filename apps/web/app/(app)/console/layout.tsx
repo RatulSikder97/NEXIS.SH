@@ -38,12 +38,13 @@ export default async function ConsoleLayout({
     cache: "no-store",
   });
   if (!res.ok) redirect("/sign-in");
+  const me = (await res.json()) as { user: { email: string } };
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-foreground)]">
       <Sidebar />
       <div className="ml-60">
-        <Topbar />
+        <Topbar userEmail={me.user.email} />
         <main className="mx-auto max-w-[1440px] px-6 py-6">{children}</main>
       </div>
     </div>
