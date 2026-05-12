@@ -6,6 +6,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
   boolean,
   primaryKey,
   customType,
@@ -28,6 +29,7 @@ export const users = pgTable("users", {
   mfaSecret:        text("mfa_secret"),
   mfaEnabled:       boolean("mfa_enabled").notNull().default(false),
   emailVerifiedAt:  timestamp("email_verified_at", { withTimezone: true }),
+  preferences:      jsonb("preferences").notNull().default(sql`'{}'::jsonb`),
   createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -91,4 +93,47 @@ export const apiKeys = pgTable("api_keys", {
   revokedAt:   timestamp("revoked_at", { withTimezone: true }),
 }, t => ({
   prefixIdx: index("api_keys_prefix_idx").on(t.prefix),
+}));
+
+export const integrations = pgTable("integrations", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  orgId:             uuid("org_id").notNull().references(() => organizations.id),
+  provider:          text("provider", { enum: ["github", "sentry", "argocd"] }).notNull(),
+  status:            text("status", { enum: ["connected", "pending", "error", "disconnected"] }).notNull(),
+  installationId:    text("installation_id"),
+  secretCiphertext:  bytea("secret_ciphertext"),
+  metadata:          jsonb("metadata"),
+  lastError:         text("last_error"),
+  createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:         timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  uniqOrgProvider: uniqueIndex("integrations_org_provider_uniq").on(t.orgId, t.provider),
+}));
+
+export const incidentsRaw = pgTable("incidents_raw", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  orgId:        uuid("org_id").notNull().references(() => organizations.id),
+  source:       text("source", { enum: ["sentry", "github", "otel"] }).notNull(),
+  sourceEventId: text("source_event_id"),
+  title:        text("title"),
+  level:        text("level"),
+  service:      text("service"),
+  environment:  text("environment"),
+  rawPayload:   jsonb("raw_payload"),
+  receivedAt:   timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  uniqSource: uniqueIndex("incidents_raw_source_uniq").on(t.orgId, t.source, t.sourceEventId),
+  orgReceivedIdx: index("incidents_raw_org_received_idx").on(t.orgId, t.receivedAt),
+}));
+
+export const orgInvites = pgTable("org_invites", {
+  tokenHash:     bytea("token_hash").primaryKey(),
+  orgId:         uuid("org_id").notNull().references(() => organizations.id),
+  email:         text("email").notNull(),
+  role:          text("role", { enum: ["admin", "member"] }).notNull(),
+  inviterUserId: uuid("inviter_user_id").notNull().references(() => users.id),
+  expiresAt:     timestamp("expires_at", { withTimezone: true }).notNull(),
+  claimedAt:     timestamp("claimed_at", { withTimezone: true }),
+}, t => ({
+  orgEmailIdx: index("org_invites_org_email_idx").on(t.orgId, t.email),
 }));

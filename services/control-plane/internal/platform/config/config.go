@@ -40,6 +40,10 @@ type Config struct {
 	// Observability (Phase 2)
 	OTelServiceName string
 	OTelEndpoint    string
+
+	// Phase 3
+	MasterKey                  string // 32-byte base64 for LocalKeyVault
+	GitHubDefaultWebhookSecret string
 }
 
 func Load() Config {
@@ -69,6 +73,9 @@ func Load() Config {
 
 		OTelServiceName: env("OTEL_SERVICE_NAME", "nexis-control-plane"),
 		OTelEndpoint:    env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4318"),
+
+		MasterKey:                  env("MASTER_KEY", ""),
+		GitHubDefaultWebhookSecret: env("GITHUB_WEBHOOK_SECRET", "dev-github-webhook-secret-32-byte"),
 	}
 }
 
