@@ -1,17 +1,39 @@
-// Phase 3 Stage 6 — Live Demo placeholder. Ships in Phase 6.
+// Phase 4 Stage 7 — Live Demo page.
+//
+// Server component shell. Resolves the current workspace from the
+// nexis_workspace cookie (same pattern as the incidents pages), then hands
+// it off to the client component which owns the CTA + navigation.
+//
+// Phase 4 ships the trigger only; the underlying RecoveryPipeline is the
+// real Temporal workflow registered by the control-plane.
 
-export default function LiveDemoPage() {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold">Live Demo</h1>
-        <span className="rounded-full bg-[var(--color-accent)]/30 text-[var(--color-accent-foreground)] px-2 py-0.5 text-xs font-medium">
-          Phase 6
-        </span>
-      </div>
-      <p className="text-sm text-[var(--color-muted-foreground)] max-w-2xl">
-        Interactive scripted scenario that walks a freshly-seeded org through an end-to-end incident detection → triage → recovery flow. Designed for design partner walkthroughs. Ships in Phase 6.
-      </p>
-    </div>
-  );
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
+import { LiveDemoClient } from "./client";
+import type { Workspace } from "@/lib/workspaces";
+
+const API =
+  process.env.API_URL_INTERNAL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "http://localhost:8080";
+
+export default async function LiveDemoPage() {
+  const c = await cookies();
+  const session = c.get("nexis_session");
+  if (!session) redirect("/sign-in");
+  const cookieHeader = `nexis_session=${session.value}`;
+
+  const wsRes = await fetch(`${API}/v1/workspaces`, {
+    headers: { cookie: cookieHeader },
+    cache: "no-store",
+  });
+  const workspaces: Workspace[] = wsRes.ok ? await wsRes.json() : [];
+  const currentCookie = c.get("nexis_workspace");
+  const current =
+    workspaces.find((w) => w.id === currentCookie?.value) ??
+    workspaces.find((w) => w.status === "ready") ??
+    workspaces[0];
+
+  return <LiveDemoClient workspaceId={current?.id ?? ""} />;
 }

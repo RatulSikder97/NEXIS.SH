@@ -166,3 +166,16 @@ func (r *WorkspacesRepo) HasAny(ctx context.Context, orgID string) (bool, error)
 	}
 	return n > 0, nil
 }
+
+// OwnsWorkspace reports whether (orgID, workspaceID) names a real row. Uses
+// the admin pool so it can be called from contexts outside a request tx —
+// the SSE handler runs this check before opening the long-lived stream,
+// before RLS would even be useful.
+func (r *WorkspacesRepo) OwnsWorkspace(ctx context.Context, orgID, workspaceID string) (bool, error) {
+	var n int
+	if err := r.adminPool.QueryRow(ctx,
+		`SELECT count(*) FROM workspaces WHERE org_id=$1 AND id=$2`, orgID, workspaceID).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}

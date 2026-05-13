@@ -199,3 +199,47 @@ export const usageRecords = pgTable("usage_records", {
 }, t => ({
   orgRecordedIdx: index("usage_records_org_recorded_idx").on(t.orgId, t.recordedAt),
 }));
+
+// ---------------------------------------------------------------------------
+// Phase 4 — Pipeline substrate (Temporal workflows + activity events).
+// ---------------------------------------------------------------------------
+
+const workflowRunStatus = ["queued", "running", "succeeded", "failed", "timed_out", "cancelled"] as const;
+const activityStatus    = ["started", "succeeded", "failed", "retrying", "timed_out"] as const;
+
+export const workflowRuns = pgTable("workflow_runs", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  orgId:           uuid("org_id").notNull().references(() => organizations.id),
+  workspaceId:     uuid("workspace_id").notNull().references(() => workspaces.id),
+  workflowType:    text("workflow_type").notNull(),
+  temporalRunId:   text("temporal_run_id").notNull(),
+  temporalWfId:    text("temporal_wf_id").notNull(),
+  status:          text("status", { enum: workflowRunStatus }).notNull(),
+  currentStep:     text("current_step"),
+  input:           jsonb("input"),
+  output:          jsonb("output"),
+  error:           text("error"),
+  startedAt:       timestamp("started_at",   { withTimezone: true }).notNull().defaultNow(),
+  completedAt:     timestamp("completed_at", { withTimezone: true }),
+  durationMs:      bigint("duration_ms", { mode: "number" }),
+  createdBy:       uuid("created_by").references(() => users.id),
+}, t => ({
+  uniqOrgTemporal: uniqueIndex("workflow_runs_org_temporal_uniq").on(t.orgId, t.temporalRunId),
+  orgWsStartedIdx: index("workflow_runs_org_ws_started_idx").on(t.orgId, t.workspaceId, t.startedAt),
+}));
+
+export const activityEvents = pgTable("activity_events", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  orgId:           uuid("org_id").notNull().references(() => organizations.id),
+  workflowRunId:   uuid("workflow_run_id").notNull().references(() => workflowRuns.id, { onDelete: "cascade" }),
+  seq:             integer("seq").notNull(),
+  agentRole:       text("agent_role").notNull(),
+  activityName:    text("activity_name").notNull(),
+  status:          text("status", { enum: activityStatus }).notNull(),
+  attempt:         integer("attempt").notNull().default(1),
+  message:         text("message"),
+  payload:         jsonb("payload"),
+  ts:              timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  uniqRunSeq: uniqueIndex("activity_events_run_seq_uniq").on(t.workflowRunId, t.seq),
+}));

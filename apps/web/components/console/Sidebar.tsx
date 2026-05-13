@@ -31,20 +31,84 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { pipelines } from "@/lib/pipelines";
 import { WorkspaceSwitcher } from "@/components/workspaces/WorkspaceSwitcher";
 
 type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  // navKey lets a NavLink consumer correlate this row with side-channel
+  // state (e.g. a running-count badge on Incidents) without leaking that
+  // logic into the static config table.
+  navKey?: "incidents";
 };
 
 const WORKSPACE: NavItem[] = [
   { href: "/console", label: "Home", icon: Home },
-  { href: "/console/incidents", label: "Incidents", icon: AlertTriangle },
+  {
+    href: "/console/incidents",
+    label: "Incidents",
+    icon: AlertTriangle,
+    navKey: "incidents",
+  },
   { href: "/console/approvals", label: "Approvals", icon: CheckSquare },
   { href: "/console/audit", label: "Audit", icon: FileText },
 ];
+
+// COOKIE_WORKSPACE mirrors the value WorkspaceSwitcher reads/writes so the
+// running-pipelines polling badge queries the same workspace the rest of
+// the console is scoped to.
+const COOKIE_WORKSPACE = "nexis_workspace";
+const INCIDENTS_POLL_MS = 10_000;
+
+function readWorkspaceCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(
+    new RegExp(
+      "(?:^|; )" +
+        COOKIE_WORKSPACE.replace(/[.$?*|{}()[\]\\/+^]/g, "\\$&") +
+        "=([^;]*)",
+    ),
+  );
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+// useRunningPipelineCount polls /v1/workspaces/{ws}/pipelines every 10s and
+// returns the count of queued|running rows. Returns 0 (not null) until the
+// first fetch resolves so the badge stays out of the layout until we know
+// there's something to show.
+function useRunningPipelineCount(): number {
+  const [count, setCount] = React.useState(0);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function tick() {
+      const wsId = readWorkspaceCookie();
+      if (!wsId) {
+        if (!cancelled) setCount(0);
+        return;
+      }
+      try {
+        const rows = await pipelines.list(wsId, 50);
+        if (cancelled) return;
+        let n = 0;
+        for (const r of rows) {
+          if (r.status === "queued" || r.status === "running") n++;
+        }
+        setCount(n);
+      } catch {
+        // swallow — the next tick will retry.
+      }
+    }
+    void tick();
+    const id = window.setInterval(tick, INCIDENTS_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+  return count;
+}
 
 const PLATFORM: NavItem[] = [
   { href: "/console/agents", label: "Agents", icon: Activity },
@@ -58,12 +122,17 @@ function NavLink({
   item,
   collapsed,
   active,
+  badge,
 }: {
   item: NavItem;
   collapsed: boolean;
   active: boolean;
+  // Optional positive integer rendered as a pill next to the label (or as
+  // a small superscript dot when the sidebar is collapsed).
+  badge?: number;
 }) {
   const Icon = item.icon;
+  const showBadge = typeof badge === "number" && badge > 0;
   return (
     <Link
       // typedRoutes treats the href as Route; cast through unknown for the
@@ -72,7 +141,7 @@ function NavLink({
       title={collapsed ? item.label : undefined}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+        "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
         active
           ? "bg-[var(--color-muted)] text-[var(--color-foreground)] font-medium"
           : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]",
@@ -80,6 +149,20 @@ function NavLink({
     >
       <Icon className="h-4 w-4 shrink-0" />
       {!collapsed && <span className="truncate">{item.label}</span>}
+      {!collapsed && showBadge && (
+        <span
+          aria-label={`${badge} running`}
+          className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 ring-1 ring-blue-500/30 dark:text-blue-300"
+        >
+          {badge}
+        </span>
+      )}
+      {collapsed && showBadge && (
+        <span
+          aria-label={`${badge} running`}
+          className="absolute right-1 top-1 inline-block h-1.5 w-1.5 rounded-full bg-blue-500"
+        />
+      )}
     </Link>
   );
 }
@@ -129,6 +212,9 @@ export function Sidebar() {
     readCollapsed,
     () => false,
   );
+  // Running-pipelines count is hoisted out of the per-NavLink render so the
+  // 10s poll runs exactly once for the whole sidebar.
+  const runningIncidents = useRunningPipelineCount();
   // Force-read `tick` so the IDE doesn't strip the unused import; the
   // subscribe callback already triggers re-renders.
   void tick;
@@ -184,7 +270,14 @@ export function Sidebar() {
         <ul className="space-y-0.5">
           {WORKSPACE.map((item) => (
             <li key={item.href}>
-              <NavLink item={item} collapsed={collapsed} active={isActive(item.href)} />
+              <NavLink
+                item={item}
+                collapsed={collapsed}
+                active={isActive(item.href)}
+                badge={
+                  item.navKey === "incidents" ? runningIncidents : undefined
+                }
+              />
             </li>
           ))}
         </ul>

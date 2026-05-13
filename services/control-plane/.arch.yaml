@@ -42,7 +42,13 @@ deps:
     # can compose its sibling sub-adapters (auth/local, auth/workos) via a
     # factory. Without this rule the factory would have to live outside the
     # adapter tree, which would break encapsulation.
-    mayDependOn: [domain, platform, adapter]
+    #
+    # adapter→workflow is allowed for Phase 4: the WorkflowService adapter
+    # (internal/adapter/workflow) wraps the Temporal client + the
+    # internal/workflow/recovery package (workflow + activity registrations).
+    # Without this rule the bridge would have to live in main, which would
+    # leak Temporal types into the cmd-package surface.
+    mayDependOn: [domain, platform, adapter, workflow]
   transport:
     mayDependOn: [usecase, domain, platform, transport, adapter]
   workflow:

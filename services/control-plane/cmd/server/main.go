@@ -19,7 +19,10 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/billing"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/keyvault"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/patchstore"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
+	validatorclient "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/validator"
+	adapterworkflow "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/workflow"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/workspace"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
@@ -27,8 +30,10 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
 	otelplatform "github.com/nexis-eco/nexis/services/control-plane/internal/platform/otel"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/sse"
+	temporalplatform "github.com/nexis-eco/nexis/services/control-plane/internal/platform/temporal"
 	httpserver "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
+	recoverywf "github.com/nexis-eco/nexis/services/control-plane/internal/workflow/recovery"
 )
 
 func main() {
@@ -173,6 +178,77 @@ func main() {
 		logger.Warn("workspaces + billing disabled — DATABASE_URL_APP missing")
 	}
 
+	// Phase 4 — Temporal worker + WorkflowService. The worker registers the
+	// 9-stub RecoveryPipeline + the Activities struct (10 methods). Both
+	// pools must exist (worker uses adminPool; HTTP handlers use appPool via
+	// the request tx). Temporal-dial failures are tolerated in dev so a
+	// missing temporal service doesn't block the rest of the surface.
+	var wfService domain.WorkflowService
+	var wfRepo *repo.WorkflowRepo
+	if appPool != nil && adminPool != nil {
+		wfRepo = repo.NewWorkflowRepo(appPool, adminPool)
+		tc, err := temporalplatform.Dial(temporalplatform.Config{
+			HostPort:  cfg.TemporalHostPort,
+			Namespace: cfg.TemporalNamespace,
+		}, logger)
+		if err != nil {
+			if cfg.AppEnv != "dev" {
+				logger.Error("temporal dial", "err", err)
+				os.Exit(1)
+			}
+			logger.Warn("temporal disabled (dev fallback)", "err", err)
+		} else {
+			defer tc.Close()
+			wfBroker := sse.New[domain.ActivityEvent]()
+			stubSleep := time.Duration(cfg.WorkflowStubDurationMs) * time.Millisecond
+
+			// Phase 5 — patch store wiring. The activity dependency tolerates
+			// nil (test path), so a misconfigured PATCH_STORE in dev logs a
+			// warning and keeps the worker running without object storage.
+			var ps domain.PatchStore
+			if got, perr := patchstore.NewFromConfig(cfg, kv); perr != nil {
+				logger.Warn("patchstore disabled", "err", perr)
+			} else {
+				ps = got
+				logger.Info("patchstore initialised", "kind", cfg.PatchStore, "endpoint", cfg.MinIOEndpoint)
+			}
+
+			// Phase 6 — validator client. Empty BaseURL is tolerated in dev
+			// — the activity falls back to patch-only when no validator is
+			// reachable.
+			var vc recoverywf.ValidatorClient
+			if cfg.ValidatorURL != "" && cfg.ValidatorToken != "" {
+				vc = validatorclient.New(validatorclient.Config{
+					BaseURL: cfg.ValidatorURL,
+					Token:   cfg.ValidatorToken,
+				})
+				logger.Info("validator client initialised", "url", cfg.ValidatorURL)
+			} else {
+				logger.Warn("validator client disabled — VALIDATOR_URL/TOKEN missing")
+			}
+			acts := recoverywf.NewActivitiesFull(wfRepo, wfBroker, ps, vc, stubSleep)
+
+			wfService = adapterworkflow.New(adapterworkflow.Config{
+				Repo:       wfRepo,
+				Workspaces: wsRepo,
+				Temporal:   tc,
+				Broker:     wfBroker,
+				TaskQueue:  cfg.TemporalTaskQueue,
+				Logger:     logger,
+			})
+			go func() {
+				if err := temporalplatform.Start(context.Background(), tc,
+					temporalplatform.WorkerSpec{
+						TaskQueue:  cfg.TemporalTaskQueue,
+						Workflows:  []any{recoverywf.RecoveryPipeline},
+						Activities: []any{acts},
+					}, logger); err != nil {
+					logger.Error("temporal worker", "err", err)
+				}
+			}()
+		}
+	}
+
 	srv := httpserver.New(cfg, logger, httpserver.Deps{
 		Pool:           adminPool,
 		AppPool:        appPool,
@@ -184,6 +260,8 @@ func main() {
 		WorkspacesRepo: wsRepo,
 		Billing:        billingProvider,
 		BillingRepo:    billingRepo,
+		Workflows:      wfService,
+		WorkflowsRepo:  wfRepo,
 	})
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

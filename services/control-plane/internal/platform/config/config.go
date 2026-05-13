@@ -50,6 +50,19 @@ type Config struct {
 	BillingProvider        string  // "local" | "stripe"
 	UsageTickSeconds       int     // default 60
 	WorkspaceProvisionFail float64 // default 0.0 — fraction of provisioning runs that should fail synthetically
+
+	// Phase 4 — Temporal + validator + patch storage.
+	TemporalHostPort  string // 'temporal:7233' in compose; Cloud HostPort in Phase 7
+	TemporalNamespace string // 'default' for dev; 'nexis-prod' in Phase 7
+	TemporalTaskQueue string // 'nexis-recovery'
+	ValidatorURL      string // 'http://validator:8081'
+	ValidatorToken    string // shared bearer between control-plane + validator
+	PatchStore        string // 'minio' | 's3'
+	MinIOEndpoint     string
+	MinIOAccessKey    string
+	MinIOSecretKey    string
+	MinIOUseSSL       bool
+	WorkflowStubDurationMs int // default 0 — when >0 each stub activity sleeps this long
 }
 
 func Load() Config {
@@ -86,6 +99,18 @@ func Load() Config {
 		BillingProvider:        env("BILLING_PROVIDER", "local"),
 		UsageTickSeconds:       envInt("USAGE_TICK_SECONDS", 60),
 		WorkspaceProvisionFail: envFloat("WORKSPACE_PROVISION_FAIL", 0.0),
+
+		TemporalHostPort:       env("TEMPORAL_HOST_PORT", "temporal:7233"),
+		TemporalNamespace:      env("TEMPORAL_NAMESPACE", "default"),
+		TemporalTaskQueue:      env("TEMPORAL_TASK_QUEUE", "nexis-recovery"),
+		ValidatorURL:           env("VALIDATOR_URL", "http://validator:8081"),
+		ValidatorToken:         env("VALIDATOR_TOKEN", "dev-validator-token-32byte"),
+		PatchStore:             env("PATCH_STORE", "minio"),
+		MinIOEndpoint:          env("MINIO_ENDPOINT", "minio:9000"),
+		MinIOAccessKey:         env("MINIO_ACCESS_KEY", "nexis"),
+		MinIOSecretKey:         env("MINIO_SECRET_KEY", "nexis_dev_password"),
+		MinIOUseSSL:            parseBool(env("MINIO_USE_SSL", "0")),
+		WorkflowStubDurationMs: envInt("WORKFLOW_STUB_DURATION_MS", 0),
 	}
 }
 

@@ -214,6 +214,17 @@ services:
       BILLING_PROVIDER: ${BILLING_PROVIDER:-local}
       USAGE_TICK_SECONDS: ${USAGE_TICK_SECONDS:-60}
       WORKSPACE_PROVISION_FAIL: ${WORKSPACE_PROVISION_FAIL:-0.0}
+      TEMPORAL_HOST_PORT: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: nexis-recovery
+      VALIDATOR_URL: http://validator:8081
+      VALIDATOR_TOKEN: ${VALIDATOR_TOKEN:-dev-validator-token-32byte}
+      PATCH_STORE: minio
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: nexis
+      MINIO_SECRET_KEY: nexis_dev_password
+      MINIO_USE_SSL: "0"
+      WORKFLOW_STUB_DURATION_MS: ${WORKFLOW_STUB_DURATION_MS:-0}
       OTEL_SERVICE_NAME: nexis-control-plane
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -225,6 +236,10 @@ services:
         condition: service_started
       mailhog:
         condition: service_started
+      temporal:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks: [nexis]
@@ -235,6 +250,11 @@ services:
       dockerfile: Dockerfile
     environment:
       PORT: "8081"
+      VALIDATOR_TOKEN: ${VALIDATOR_TOKEN:-dev-validator-token-32byte}
+      NEXIS_VALIDATOR_IMAGE: nexis/validator-fixture:latest
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8081:8081"
     networks: [nexis]

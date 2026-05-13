@@ -74,6 +74,10 @@ type Deps struct {
 	WorkspacesRepo *repo.WorkspacesRepo
 	Billing        domain.BillingProvider
 	BillingRepo    *repo.BillingRepo
+
+	// Phase 4 — Temporal-backed pipeline runs.
+	Workflows     domain.WorkflowService
+	WorkflowsRepo *repo.WorkflowRepo
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
@@ -179,6 +183,17 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				g.Get("/v1/workspaces/{id}/events", handler.WorkspaceEvents(deps.Workspaces))
 			}
 
+			// Phase 4 — pipeline read paths. Any authenticated principal can
+			// list / read runs + tail the SSE stream for their org's
+			// workspaces. The handler verifies workspace ownership before
+			// streaming.
+			if deps.Workflows != nil {
+				g.Get("/v1/workspaces/{ws_id}/pipelines", handler.PipelinesList(deps.Workflows))
+				g.Get("/v1/workspaces/{ws_id}/pipelines/{run_id}", handler.PipelineGet(deps.Workflows))
+				g.Get("/v1/workspaces/{ws_id}/pipelines/{run_id}/events",
+					handler.PipelineEvents(deps.Workflows, deps.WorkflowsRepo, deps.WorkspacesRepo))
+			}
+
 			// Owner OR admin — Stage 5 RBAC. Owners and admins can manage
 			// integrations + api keys + the audit list/CSV; members are
 			// read-only on their own profile.
@@ -199,6 +214,16 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				// Workspaces — create is owner|admin per Phase 3.5 RBAC.
 				if deps.Workspaces != nil {
 					g2.Post("/v1/workspaces", handler.WorkspaceCreate(deps.Workspaces, aud))
+				}
+
+				// Phase 4 — pipeline mutations are owner|admin. The /demo
+				// route is gated to dev so prod-shaped clusters don't
+				// accidentally accept synthetic-incident triggers.
+				if deps.Workflows != nil {
+					g2.Post("/v1/workspaces/{ws_id}/pipelines", handler.PipelineCreate(deps.Workflows, aud))
+					if cfg.AppEnv == "dev" {
+						g2.Post("/v1/workspaces/{ws_id}/pipelines/demo", handler.PipelineDemo(deps.Workflows, aud, cfg))
+					}
 				}
 
 				// Billing read paths + dev recompute are owner|admin.
