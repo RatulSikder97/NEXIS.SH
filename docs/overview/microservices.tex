@@ -1,0 +1,165 @@
+\documentclass[border=14pt,tikz]{standalone}
+\usepackage{tikz}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usetikzlibrary{positioning,fit,arrows.meta,shapes.geometric,backgrounds,calc,shadows.blur}
+
+\begin{document}
+\begin{tikzpicture}[
+  font=\small,
+  node distance=8mm and 14mm,
+  every node/.style={align=center, font=\small\sffamily},
+  svc/.style   ={rectangle, rounded corners=4pt, draw=blue!55!black, line width=0.6pt,
+                 fill=blue!8,  inner sep=6pt, minimum height=14mm, minimum width=42mm,
+                 blur shadow={shadow blur steps=3, shadow opacity=10}},
+  iso/.style   ={rectangle, rounded corners=4pt, draw=red!60!black,  line width=0.6pt,
+                 fill=red!8,   inner sep=6pt, minimum height=14mm, minimum width=42mm,
+                 blur shadow={shadow blur steps=3, shadow opacity=10}},
+  data/.style  ={cylinder, shape border rotate=90, aspect=0.18, draw=green!55!black, line width=0.6pt,
+                 fill=green!10, inner sep=4pt, minimum height=18mm, minimum width=30mm},
+  obs/.style   ={rectangle, rounded corners=3pt, draw=orange!70!black, line width=0.5pt,
+                 fill=orange!12, inner sep=4pt, minimum height=10mm, minimum width=26mm},
+  ext/.style   ={rectangle, rounded corners=3pt, draw=violet!55!black, line width=0.5pt,
+                 fill=violet!10, inner sep=4pt, minimum height=10mm, minimum width=32mm},
+  ui/.style    ={rectangle, rounded corners=4pt, draw=black!70, line width=0.6pt,
+                 fill=black!4, inner sep=6pt, minimum height=14mm, minimum width=52mm},
+  grp/.style   ={rectangle, rounded corners=6pt, draw=black!35, dashed, line width=0.4pt,
+                 inner sep=12pt},
+  grplbl/.style={font=\footnotesize\sffamily\bfseries, text=black!65},
+  arrow/.style ={-{Latex[length=2.2mm]}, draw=black!55, line width=0.45pt},
+  sse/.style   ={{Latex[length=2mm]}-{Latex[length=2mm]}, draw=blue!60!black, dashed, line width=0.45pt},
+  webhook/.style={-{Latex[length=2.2mm]}, draw=violet!55!black, line width=0.45pt},
+  obsedge/.style={-{Latex[length=1.8mm]}, draw=orange!70!black, line width=0.35pt, dotted},
+]
+
+% =========================== TITLE ===========================
+\node[font=\Large\sffamily\bfseries] (TITLE) at (0,0)
+  {NEXIS — Microservices Topology};
+\node[font=\footnotesize\sffamily\itshape, text=black!55, below=1mm of TITLE]
+  (SUB) {4 backend processes + 1 frontend, behind a reverse proxy, fanned-in to one OTel collector};
+
+% =========================== BROWSER + EDGE ===========================
+\node[ui, below=8mm of SUB] (UI) {Browser — Next.js 16 console\\\footnotesize shadcn $\cdot$ Tremor $\cdot$ Monaco};
+\node[svc, below=8mm of UI] (LB) {Reverse proxy\\\footnotesize Caddy (dev) / ALB+WAF (cloud)};
+
+% =========================== CONTROL PLANE (centre) ===========================
+\node[svc, below=14mm of LB] (API)  {control-plane: HTTP/RPC\\\footnotesize Chi $\cdot$ middleware $\cdot$ RLS};
+\node[svc, below=8mm of API] (WFW)  {Temporal worker\\\footnotesize RecoveryPipeline activities};
+\node[svc, below=8mm of WFW] (AG)   {9-agent plane\\\footnotesize L2: Sentinel $\cdot$ Pathfinder $\cdot$ Synthesiser\\L1: Architect $\cdot$ Backend $\cdot$ QA $\cdot$ DevOps $\cdot$ DataEng\\Gate: ApprovalGate};
+\node[svc, below=8mm of AG]  (LLM)  {LLM Provider interface\\\footnotesize OpenAIProvider $\cdot$ OllamaProvider};
+
+\begin{scope}[on background layer]
+  \node[grp, fit=(API)(WFW)(AG)(LLM),
+        label={[grplbl]above:Control plane (Go modular monolith)}] (CP) {};
+\end{scope}
+
+% =========================== ISOLATION SERVICES (below control plane) ===========================
+\node[iso, below=24mm of LLM, xshift=-50mm] (VAL) {validator\\\footnotesize docker run\\--network=none --read-only};
+\node[iso, below=24mm of LLM]               (GIT) {gitops\\\footnotesize holds GitHub App key\\10-min JWT TTL};
+\node[iso, below=24mm of LLM, xshift= 50mm] (CAU) {causal-inference\\\footnotesize Python gRPC :8090\\DoWhy};
+
+\begin{scope}[on background layer]
+  \node[grp, fit=(VAL)(GIT)(CAU),
+        label={[grplbl]below:Isolation-boundary services + Python sidecar}] (ISO) {};
+\end{scope}
+
+% =========================== DATA PLANE (left) ===========================
+\node[data, left=40mm of API] (PG)  {Postgres 16\\\footnotesize +pgvector\\RLS \textsc{FORCE}};
+\node[data, below=8mm of PG]  (NEO) {Neo4j 5\\\footnotesize codegraph};
+\node[data, below=8mm of NEO] (RED) {Redis 7\\\footnotesize cache + RL};
+\node[data, below=8mm of RED] (OBJ) {MinIO / S3\\\footnotesize encrypted patches};
+\node[data, below=8mm of OBJ] (TMP) {Temporal\\\footnotesize history};
+
+\begin{scope}[on background layer]
+  \node[grp, fit=(PG)(NEO)(RED)(OBJ)(TMP),
+        label={[grplbl]above:Data plane}] (DP) {};
+\end{scope}
+
+% =========================== EXTERNAL (right) ===========================
+\node[ext, right=40mm of API] (SEN) {Sentry / ArgoCD\\\footnotesize webhooks};
+\node[ext, below=4mm of SEN]  (GH)  {GitHub App\\\footnotesize PRs + check-runs};
+\node[ext, below=4mm of GH]   (SLK) {Slack\\\footnotesize approval notify};
+\node[ext, below=4mm of SLK]  (OAI) {OpenAI · Ollama\\\footnotesize LLM};
+\node[ext, below=4mm of OAI]  (STR) {Stripe\\\footnotesize Phase 7};
+\node[ext, below=4mm of STR]  (WKS) {WorkOS\\\footnotesize Phase 7};
+
+\begin{scope}[on background layer]
+  \node[grp, fit=(SEN)(GH)(SLK)(OAI)(STR)(WKS),
+        label={[grplbl]above:External SaaS}] (EX) {};
+\end{scope}
+
+% =========================== OBSERVABILITY (bottom) ===========================
+\node[obs, below=18mm of GIT, xshift=-58mm] (OTEL) {OTel Collector\\\footnotesize :4318};
+\node[obs, right=4mm of OTEL]               (PROM) {Prometheus};
+\node[obs, right=4mm of PROM]               (LOK)  {Loki};
+\node[obs, right=4mm of LOK]                (TMPO) {Tempo};
+\node[obs, right=4mm of TMPO]               (GRA)  {Grafana};
+
+\begin{scope}[on background layer]
+  \node[grp, fit=(OTEL)(PROM)(LOK)(TMPO)(GRA),
+        label={[grplbl]below:Observability stack}] (OB) {};
+\end{scope}
+
+% =========================== EDGES ===========================
+% browser <-> edge
+\draw[arrow] (UI) -- node[right=1mm, font=\scriptsize]{HTTPS} (LB);
+\draw[sse]   (UI.east) to[bend left=22]
+              node[above, font=\scriptsize, sloped]{SSE} (API.north east);
+
+% edge -> control plane
+\draw[arrow] (LB) -- (API);
+
+% control plane internal
+\draw[arrow] (API) -- (WFW);
+\draw[arrow] (WFW) -- (AG);
+\draw[arrow] (AG)  -- (LLM);
+
+% to data plane (control-plane -> data)
+\draw[arrow] (API.west) to[bend right=6] (PG.east);
+\draw[arrow] (API.west) to[bend right=14] (RED.east);
+\draw[arrow] (WFW.west) to[bend right=20] (TMP.east);
+\draw[arrow] (AG.west)  to[bend right=10] (OBJ.east);
+\draw[arrow] (AG.west)  to[bend right=20] (NEO.east);
+
+% to isolated
+\draw[arrow] (AG.south west) to[bend right=14] node[left,  font=\scriptsize, near end]{patch} (VAL.north);
+\draw[arrow] (AG.south)      -- node[right,  font=\scriptsize]{PR req} (GIT.north);
+\draw[arrow] (AG.south east) to[bend left=14] node[right, font=\scriptsize, near end]{gRPC} (CAU.north);
+\draw[arrow] (VAL.east) -- node[below, font=\scriptsize]{artefact} (GIT.west);
+
+% external
+\draw[webhook] (SEN.west) to[bend right=10] node[above, font=\scriptsize, sloped]{webhook} (API.east);
+\draw[arrow]   (GIT.east) to[bend right=18] (GH.west);
+\draw[arrow]   (AG.east)  to[bend left=10]  (SLK.west);
+\draw[arrow]   (LLM.east) to[bend left=6]   (OAI.west);
+\draw[webhook] (STR.west) to[bend right=14] (API.east);
+\draw[webhook] (WKS.west) to[bend right=22] (UI.east);
+
+% observability fan-in
+\draw[obsedge] (API.south west) to[bend right=30] (OTEL.north);
+\draw[obsedge] (WFW.south west) to[bend right=24] (OTEL.north);
+\draw[obsedge] (VAL.south)      -- (OTEL.north);
+\draw[obsedge] (GIT.south)      to[bend left=8]  (OTEL.north);
+\draw[obsedge] (CAU.south)      to[bend left=18] (OTEL.north);
+\draw[obsedge] (OTEL) -- (PROM);
+\draw[obsedge] (OTEL.south east) to[bend right=10] (LOK.south west);
+\draw[obsedge] (OTEL.south east) to[bend right=14] (TMPO.south west);
+\draw[obsedge] (PROM) -- (GRA);
+\draw[obsedge] (LOK)  -- (GRA);
+\draw[obsedge] (TMPO) -- (GRA);
+
+% =========================== LEGEND ===========================
+\node[draw=black!40, rounded corners=3pt, fill=white, inner sep=8pt,
+      below=14mm of OB, font=\scriptsize\sffamily, align=left] (LEG) {
+  \textcolor{blue!55!black}{\rule{8pt}{8pt}}~Go service \qquad
+  \textcolor{red!60!black}{\rule{8pt}{8pt}}~Isolation boundary \qquad
+  \textcolor{green!55!black}{\rule{8pt}{8pt}}~Datastore \\[2pt]
+  \textcolor{orange!70!black}{\rule{8pt}{8pt}}~Observability \qquad
+  \textcolor{violet!55!black}{\rule{8pt}{8pt}}~External SaaS \\[3pt]
+  \textbf{---}~RPC / HTTP \qquad
+  \textbf{- -}~SSE bidirectional \qquad
+  $\cdots$~OTLP telemetry
+};
+
+\end{tikzpicture}
+\end{document}

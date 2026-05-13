@@ -1,24 +1,78 @@
 "use client";
 
-// ProviderLogo — official-ish brand marks rendered as inline SVG. Inline
-// keeps them theme-aware (each path's fill is controlled by tailwind classes
-// or the brand-monochrome treatment) and avoids any network fetch on the
-// /console/integrations grid.
-//
-// All glyphs sit on a 24×24 canvas. Pass `className` to control size + tint.
+// ProviderLogo — brand marks for every integration NEXIS supports (or plans
+// to support). The first six (github, sentry, argocd, slack, datadog,
+// pagerduty) have full inline SVG brand glyphs. Roadmap providers use a
+// neutral lucide-react fallback icon with a brand-tinted background so the
+// /console/integrations grid renders consistently while the adapters are
+// being built.
 
 import * as React from "react";
+import {
+  Activity,
+  AlertTriangle,
+  BellRing,
+  Box,
+  Boxes,
+  Cloud,
+  Container,
+  Database,
+  GitBranch,
+  KeyRound,
+  LineChart,
+  MessageSquare,
+  Rocket,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
+
+export type ProviderID =
+  | "github"
+  | "sentry"
+  | "argocd"
+  | "slack"
+  | "datadog"
+  | "pagerduty"
+  // Roadmap — source control
+  | "gitlab"
+  | "bitbucket"
+  // Roadmap — incident management
+  | "opsgenie"
+  | "incident_io"
+  // Roadmap — chat
+  | "ms_teams"
+  | "discord"
+  // Roadmap — observability
+  | "newrelic"
+  | "grafana_cloud"
+  | "prometheus"
+  | "honeycomb"
+  | "splunk"
+  // Roadmap — infra
+  | "kubernetes"
+  | "aws_cloudwatch"
+  | "gcp_monitoring"
+  | "azure_monitor"
+  | "flux_cd"
+  // Roadmap — data / pipelines
+  | "spark"
+  | "databricks"
+  | "airflow"
+  | "snowflake"
+  | "dbt"
+  | "kafka"
+  // Roadmap — feature flags + secrets
+  | "launchdarkly"
+  | "vault";
 
 type ProviderLogoProps = {
-  provider:
-    | "github"
-    | "sentry"
-    | "argocd"
-    | "slack"
-    | "datadog"
-    | "pagerduty";
+  provider: ProviderID;
   className?: string;
 };
+
+// ---- Full inline brand glyphs for live providers ---------------------------
 
 const GitHub = (
   <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden>
@@ -78,7 +132,7 @@ const PagerDuty = (
   </svg>
 );
 
-const LOGOS: Record<ProviderLogoProps["provider"], React.ReactNode> = {
+const SVG_LOGOS: Partial<Record<ProviderID, React.ReactNode>> = {
   github: GitHub,
   sentry: Sentry,
   argocd: ArgoCD,
@@ -87,6 +141,44 @@ const LOGOS: Record<ProviderLogoProps["provider"], React.ReactNode> = {
   pagerduty: PagerDuty,
 };
 
+// ---- Fallback icons for roadmap providers ----------------------------------
+
+const FALLBACK_ICONS: Record<ProviderID, LucideIcon> = {
+  github: GitBranch,
+  sentry: AlertTriangle,
+  argocd: Rocket,
+  slack: MessageSquare,
+  datadog: Activity,
+  pagerduty: BellRing,
+  gitlab: GitBranch,
+  bitbucket: GitBranch,
+  opsgenie: BellRing,
+  incident_io: AlertTriangle,
+  ms_teams: MessageSquare,
+  discord: MessageSquare,
+  newrelic: LineChart,
+  grafana_cloud: LineChart,
+  prometheus: Activity,
+  honeycomb: Activity,
+  splunk: LineChart,
+  kubernetes: Boxes,
+  aws_cloudwatch: Cloud,
+  gcp_monitoring: Cloud,
+  azure_monitor: Cloud,
+  flux_cd: Rocket,
+  spark: Sparkles,
+  databricks: Database,
+  airflow: Box,
+  snowflake: Database,
+  dbt: Container,
+  kafka: Server,
+  launchdarkly: Sparkles,
+  vault: KeyRound,
+};
+
 export function ProviderLogo({ provider, className }: ProviderLogoProps) {
-  return <span className={className}>{LOGOS[provider]}</span>;
+  const svg = SVG_LOGOS[provider];
+  if (svg) return <span className={className}>{svg}</span>;
+  const Fallback = FALLBACK_ICONS[provider] ?? ShieldCheck;
+  return <Fallback className={className} aria-hidden />;
 }

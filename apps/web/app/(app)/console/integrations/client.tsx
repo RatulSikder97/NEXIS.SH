@@ -27,60 +27,77 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { IntegrationCard } from "@/components/integrations/IntegrationCard";
 import { ConfigureDialog } from "@/components/integrations/ConfigureDialog";
 import { HealthPill } from "@/components/integrations/HealthPill";
-import {
-  INTEGRATION_MANIFESTS,
-  type IntegrationProvider,
-} from "@/lib/integrations-config";
-import type { Integration, IntegrationHealth } from "@/lib/integrations";
+import { type ProviderID } from "@/components/integrations/ProviderLogo";
+import { INTEGRATION_MANIFESTS } from "@/lib/integrations-config";
+import type { Integration, IntegrationHealth, IntegrationProvider } from "@/lib/integrations";
 import { cn } from "@/lib/utils";
 
 type CardSpec = {
-  provider: IntegrationProvider;
+  // Provider widened to the full ProviderID set (includes roadmap providers
+  // like databricks/spark/vault that don't have backend rows yet).
+  provider: ProviderID;
   name: string;
   description: string;
-  // Wave 1: Slack is now live; Datadog + PagerDuty stay disabled until their
-  // backend adapters land in Wave 2.
   available: boolean;
+  category: "source" | "observability" | "incident" | "deploy" | "chat" | "data" | "security";
 };
 
 const CARDS: CardSpec[] = [
-  {
-    provider: "github",
-    name: "GitHub",
-    description: "PR creation + repo metadata for code changes.",
-    available: true,
-  },
-  {
-    provider: "sentry",
-    name: "Sentry",
-    description: "Incident ingestion via webhook.",
-    available: true,
-  },
-  {
-    provider: "argocd",
-    name: "ArgoCD",
-    description: "Deployment + rollback orchestration.",
-    available: true,
-  },
-  {
-    provider: "slack",
-    name: "Slack",
-    description: "Notify channels + DM approvers.",
-    available: true,
-  },
-  {
-    provider: "datadog",
-    name: "Datadog",
-    description: "Metric-driven anomaly detection.",
-    available: true,
-  },
-  {
-    provider: "pagerduty",
-    name: "PagerDuty",
-    description: "On-call routing + paging.",
-    available: true,
-  },
+  // ---- Source control ----
+  { provider: "github",      name: "GitHub",       description: "PR creation + repo metadata for code changes.", available: true,  category: "source" },
+  { provider: "gitlab",      name: "GitLab",       description: "Merge requests + repo metadata.",               available: false, category: "source" },
+  { provider: "bitbucket",   name: "Bitbucket",    description: "Pull requests + branch operations.",            available: false, category: "source" },
+
+  // ---- Observability ----
+  { provider: "sentry",         name: "Sentry",         description: "Error tracking + issue webhooks.",            available: true,  category: "observability" },
+  { provider: "datadog",        name: "Datadog",        description: "Metrics, APM, and anomaly detection.",        available: true,  category: "observability" },
+  { provider: "newrelic",       name: "New Relic",      description: "Full-stack observability and APM.",           available: false, category: "observability" },
+  { provider: "grafana_cloud",  name: "Grafana Cloud",  description: "Hosted Grafana + Mimir/Loki/Tempo.",          available: false, category: "observability" },
+  { provider: "prometheus",     name: "Prometheus",     description: "Metrics + Alertmanager webhook ingestion.",   available: false, category: "observability" },
+  { provider: "honeycomb",      name: "Honeycomb",      description: "Structured-event observability + BubbleUp.",  available: false, category: "observability" },
+  { provider: "splunk",         name: "Splunk",         description: "Log search + Observability Cloud alerts.",    available: false, category: "observability" },
+
+  // ---- Incident management ----
+  { provider: "pagerduty",   name: "PagerDuty",   description: "On-call routing + paging.",                     available: true,  category: "incident" },
+  { provider: "opsgenie",    name: "Opsgenie",    description: "Atlassian on-call + escalation.",              available: false, category: "incident" },
+  { provider: "incident_io", name: "incident.io", description: "Modern incident response platform.",           available: false, category: "incident" },
+
+  // ---- Deploy / infra ----
+  { provider: "argocd",          name: "ArgoCD",            description: "Deployment + rollback orchestration.",       available: true,  category: "deploy" },
+  { provider: "flux_cd",         name: "Flux CD",           description: "GitOps deploys + Helm controller.",          available: false, category: "deploy" },
+  { provider: "kubernetes",      name: "Kubernetes",        description: "Direct cluster API: scale, restart, drain.", available: false, category: "deploy" },
+  { provider: "aws_cloudwatch",  name: "AWS CloudWatch",    description: "AWS metrics, alarms, and Lambda recovery.",  available: false, category: "deploy" },
+  { provider: "gcp_monitoring",  name: "GCP Monitoring",    description: "GCP alerts + Cloud Run/GKE recovery.",       available: false, category: "deploy" },
+  { provider: "azure_monitor",   name: "Azure Monitor",     description: "Azure alerts + AKS recovery.",               available: false, category: "deploy" },
+
+  // ---- Chat / notifications ----
+  { provider: "slack",      name: "Slack",            description: "Notify channels + DM approvers.",       available: true,  category: "chat" },
+  { provider: "ms_teams",   name: "Microsoft Teams",  description: "Channel posts + approval actions.",     available: false, category: "chat" },
+  { provider: "discord",    name: "Discord",          description: "Webhook notifications.",                 available: false, category: "chat" },
+
+  // ---- Data / pipelines ----
+  { provider: "spark",       name: "Apache Spark",     description: "Job failure detection + retry orchestration.",     available: false, category: "data" },
+  { provider: "databricks",  name: "Databricks",       description: "Cluster + workflow recovery.",                     available: false, category: "data" },
+  { provider: "airflow",     name: "Apache Airflow",   description: "DAG failure recovery + backfill triggers.",        available: false, category: "data" },
+  { provider: "snowflake",   name: "Snowflake",        description: "Query failures + warehouse scaling.",              available: false, category: "data" },
+  { provider: "dbt",         name: "dbt",              description: "Model failure recovery + lineage-aware retries.",  available: false, category: "data" },
+  { provider: "kafka",       name: "Kafka",            description: "Consumer lag + dead-letter routing.",              available: false, category: "data" },
+
+  // ---- Security / flags ----
+  { provider: "launchdarkly", name: "LaunchDarkly",    description: "Auto-kill flags on incident detection.",          available: false, category: "security" },
+  { provider: "vault",        name: "HashiCorp Vault", description: "Secret rotation on credential compromise.",       available: false, category: "security" },
 ];
+
+const CATEGORY_ORDER: CardSpec["category"][] = ["source", "observability", "incident", "deploy", "chat", "data", "security"];
+const CATEGORY_LABELS: Record<CardSpec["category"], { title: string; description: string }> = {
+  source:        { title: "Source control",       description: "Where your code + PRs live." },
+  observability: { title: "Observability",        description: "Where incidents are detected." },
+  incident:      { title: "Incident management",  description: "On-call routing + paging." },
+  deploy:        { title: "Deploy & infrastructure", description: "Where rollbacks land." },
+  chat:          { title: "Chat & notifications", description: "Where approvers get pinged." },
+  data:          { title: "Data & pipelines",     description: "Job and pipeline recovery." },
+  security:      { title: "Security & flags",     description: "Feature flags + secret rotation." },
+};
 
 // Derives a HealthPill-ready health DTO from whatever the backend returned.
 // The Wave 1 backend (Task 1) will start populating `health`; until then we
@@ -192,33 +209,59 @@ export function IntegrationsClient({ initial }: IntegrationsClientProps) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {CARDS.map((c) => {
-          const row = byProvider.get(c.provider);
-          const health = healthFromIntegration(row, row);
-          return (
-            <IntegrationCard
-              key={c.provider}
-              provider={c.provider}
-              name={c.name}
-              description={c.description}
-              status={row?.status}
-              comingSoon={!c.available}
-              onConfigure={c.available ? () => setActiveProvider(c.provider) : undefined}
-              statusSlot={
-                c.available ? (
-                  <HealthPill
-                    state={health.state}
-                    latency_ms={health.latency_ms}
-                    last_check_at={health.last_check_at}
-                    last_error={health.last_error}
+      {CATEGORY_ORDER.map((cat) => {
+        const cards = CARDS.filter((c) => c.category === cat);
+        if (cards.length === 0) return null;
+        const liveCount = cards.filter((c) => c.available).length;
+        return (
+          <section key={cat} className="space-y-3">
+            <header className="flex items-end justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-[var(--color-foreground)]">
+                  {CATEGORY_LABELS[cat].title}
+                </h2>
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  {CATEGORY_LABELS[cat].description}
+                </p>
+              </div>
+              <span className="text-[11px] text-[var(--color-muted-foreground)]">
+                {liveCount} live · {cards.length - liveCount} roadmap
+              </span>
+            </header>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {cards.map((c) => {
+                const row = byProvider.get(c.provider as IntegrationProvider);
+                const health = healthFromIntegration(row, row);
+                return (
+                  <IntegrationCard
+                    key={c.provider}
+                    provider={c.provider}
+                    name={c.name}
+                    description={c.description}
+                    status={row?.status}
+                    comingSoon={!c.available}
+                    onConfigure={
+                      c.available
+                        ? () => setActiveProvider(c.provider as IntegrationProvider)
+                        : undefined
+                    }
+                    statusSlot={
+                      c.available ? (
+                        <HealthPill
+                          state={health.state}
+                          latency_ms={health.latency_ms}
+                          last_check_at={health.last_check_at}
+                          last_error={health.last_error}
+                        />
+                      ) : undefined
+                    }
                   />
-                ) : undefined
-              }
-            />
-          );
-        })}
-      </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
 
       {activeProvider !== null && (
         <ConfigureDialog

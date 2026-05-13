@@ -1,33 +1,40 @@
 // Console Home — operational dashboard.
 //
-// Server component shell. We resolve the session + current workspace + seed
-// the audit list, then hand off to client islands for the live signals.
+// Server component shell. We resolve the session + current workspace, then
+// fetch four things in parallel:
+//   * /v1/me                                        (auth)
+//   * /v1/audit?limit=10                            (recent activity feed)
+//   * /v1/workspaces                                (workspace list)
+//   * /v1/workspaces/{ws}/pipelines?limit=200       (chart series)
+//   * /v1/workspaces/{ws}/agents                    (token-usage stacked bars)
+//
+// The chart island consumes the seed and continues polling client-side on
+// a 60s cadence so the dashboard stays live.
 //
 // Layout (top → bottom):
 //   1. Greeting header
-//   2. KPI strip (4 cards): open incidents, pending approvals, active
-//      workflows, MTD spend.
-//   3. Recovery pipeline mini-canvas (8 stages, live counters).
-//   4. System Status panel (sub-systems + 6 integrations).
-//   5. Two-column row:
-//      - Recent activity feed (last 10 audit events)
-//      - Tenant overview (org + current workspace)
-//   6. Quick actions row.
-//
-// Each client island handles its own polling cadence so a single tab doesn't
-// stack up redundant intervals.
+//   2. DashboardCharts island
+//      - Row 1: 4 KpiCards w/ sparkline + delta
+//      - Row 2: Incidents over time + severity donut
+//      - Row 3: Recovery outcomes + token usage stacked bars
+//      - Row 4: Activity heatmap
+//   3. SystemStatusPanel
+//   4. ProjectsHealthGrid
+//   5. RecentActivityFeed + Organisation/Workspace cards
+//   6. QuickActionsRow
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { DashboardKpiStrip } from "@/components/console/DashboardKpiStrip";
+import { DashboardCharts } from "@/components/console/DashboardCharts";
 import { ProjectsHealthGrid } from "@/components/console/ProjectsHealthGrid";
 import { QuickActionsRow } from "@/components/console/QuickActionsRow";
 import { RecentActivityFeed } from "@/components/console/RecentActivityFeed";
-import { RecoveryPipelineMini } from "@/components/console/RecoveryPipelineMini";
 import { SystemStatusPanel } from "@/components/console/SystemStatusPanel";
 import { WorkspaceCard } from "@/components/workspaces/WorkspaceCard";
+import type { AgentInfo } from "@/lib/agents";
 import type { MeResp } from "@/lib/auth";
+import type { WorkflowRun } from "@/lib/pipelines";
 import type { Workspace } from "@/lib/workspaces";
 
 const API =
@@ -93,6 +100,30 @@ export default async function ConsoleHomePage() {
     ws.find((w) => w.status === "ready") ??
     ws[0];
 
+  // Fetch chart seed data only when we have a workspace. Both endpoints
+  // fail-soft to empty arrays — the chart island renders the empty
+  // states without throwing.
+  let runs: WorkflowRun[] = [];
+  let agents: AgentInfo[] = [];
+  if (currentWs) {
+    const [runsRes, agentsRes] = await Promise.all([
+      fetch(`${API}/v1/workspaces/${currentWs.id}/pipelines?limit=200`, {
+        headers: { cookie: cookieHeader },
+        cache: "no-store",
+      }).catch(() => null),
+      fetch(`${API}/v1/workspaces/${currentWs.id}/agents`, {
+        headers: { cookie: cookieHeader },
+        cache: "no-store",
+      }).catch(() => null),
+    ]);
+    if (runsRes && runsRes.ok) {
+      runs = (await runsRes.json()) as WorkflowRun[];
+    }
+    if (agentsRes && agentsRes.ok) {
+      agents = (await agentsRes.json()) as AgentInfo[];
+    }
+  }
+
   const firstName = me.user.email.split("@")[0];
   const greeting = greetingForHour(new Date().getHours());
 
@@ -111,13 +142,15 @@ export default async function ConsoleHomePage() {
         </p>
       </div>
 
-      <DashboardKpiStrip />
-
-      <ProjectsHealthGrid />
-
-      <RecoveryPipelineMini />
+      <DashboardCharts
+        workspaceId={currentWs?.id ?? ""}
+        initialRuns={runs}
+        initialAgents={agents}
+      />
 
       <SystemStatusPanel />
+
+      <ProjectsHealthGrid />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">

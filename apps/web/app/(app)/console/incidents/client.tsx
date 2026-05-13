@@ -6,6 +6,10 @@
 // polling refetch while any row is still in motion (queued|running), and
 // the "run a synthetic incident" CTA.
 //
+// Above the table we render the chart strip (IncidentsChartsStrip) that
+// derives every series from the same runs list, so the strip stays in
+// sync as the table polls.
+//
 // Polling cadence: 5s. We only poll while there's at least one queued or
 // running row — once everything terminates the table is frozen and we stop
 // hitting the API to keep idle tabs cheap. The user can switch tabs / come
@@ -22,6 +26,7 @@ import { AlertTriangle, Loader2, PlayCircle, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/empty-state/EmptyState";
+import { IncidentsChartsStrip } from "@/components/incidents/IncidentsChartsStrip";
 import { PipelineRunsTable } from "@/components/pipelines/PipelineRunsTable";
 import { pipelines, type WorkflowRun } from "@/lib/pipelines";
 
@@ -30,6 +35,12 @@ const TICK_MS = 1000;
 
 function hasInFlight(runs: WorkflowRun[]): boolean {
   return runs.some((r) => r.status === "queued" || r.status === "running");
+}
+
+function dayStart(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }
 
 export function IncidentsClient({
@@ -45,6 +56,9 @@ export function IncidentsClient({
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [demoSubmitting, setDemoSubmitting] = React.useState(false);
+  // dayFilter scopes the table to runs that started on the selected day.
+  // Driven by a click on the area chart in the strip.
+  const [dayFilter, setDayFilter] = React.useState<number | null>(null);
 
   // Mirror runs in a ref so the interval callback always sees the latest
   // value without re-creating the interval on every state change.
@@ -108,6 +122,19 @@ export function IncidentsClient({
     }
   }
 
+  // tableRows mirrors `runs` filtered by the dayFilter (if any). The
+  // chart strip always sees the full `runs` list so the trend doesn't
+  // collapse when the user filters.
+  const tableRows = React.useMemo(() => {
+    if (dayFilter === null) return runs;
+    const start = dayFilter;
+    const end = dayFilter + 24 * 60 * 60 * 1000;
+    return runs.filter((r) => {
+      const t = Date.parse(r.started_at);
+      return Number.isFinite(t) && t >= start && t < end;
+    });
+  }, [runs, dayFilter]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -165,28 +192,60 @@ export function IncidentsClient({
         </div>
       )}
 
-      {runs.length === 0 ? (
-        <EmptyState
-          icon={AlertTriangle}
-          title="No incidents yet"
-          description="Trigger a synthetic incident to walk through the recovery loop end-to-end."
-          cta={
-            <Button
-              size="sm"
-              onClick={runDemo}
-              disabled={demoSubmitting || !workspaceId}
+      {/* Chart strip — derives every series from the same `runs` list so
+          the trend curves stay in sync as the table polls. */}
+      <IncidentsChartsStrip
+        runs={runs}
+        onSelectDay={(ms) => setDayFilter(ms === null ? null : dayStart(ms))}
+        selectedDayMs={dayFilter}
+      />
+
+      {tableRows.length === 0 ? (
+        dayFilter !== null ? (
+          <div
+            role="status"
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-6 text-center text-sm text-[var(--color-muted-foreground)]"
+          >
+            No incidents on{" "}
+            <span className="font-medium text-[var(--color-foreground)]">
+              {new Date(dayFilter).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </span>
+            .{" "}
+            <button
+              type="button"
+              onClick={() => setDayFilter(null)}
+              className="text-[var(--color-primary)] hover:underline"
             >
-              {demoSubmitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <PlayCircle className="h-4 w-4" />
-              )}
-              Run synthetic incident
-            </Button>
-          }
-        />
+              Clear filter
+            </button>
+          </div>
+        ) : (
+          <EmptyState
+            icon={AlertTriangle}
+            title="No incidents yet"
+            description="Trigger a synthetic incident to walk through the recovery loop end-to-end."
+            cta={
+              <Button
+                size="sm"
+                onClick={runDemo}
+                disabled={demoSubmitting || !workspaceId}
+              >
+                {demoSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <PlayCircle className="h-4 w-4" />
+                )}
+                Run synthetic incident
+              </Button>
+            }
+          />
+        )
       ) : (
-        <PipelineRunsTable runs={runs} now={now} />
+        <PipelineRunsTable runs={tableRows} now={now} />
       )}
     </div>
   );

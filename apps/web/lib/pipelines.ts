@@ -231,6 +231,30 @@ export const pipelines = {
     return failOr<WorkflowRun>(r);
   },
 
+  // createScenario kicks off a recovery run for a Live Demo catalog entry.
+  // Conceptually posts {scenario, severity, source} — but the current
+  // PipelineDemoReq uses DisallowUnknownFields and only validates the
+  // `scenario` key against its allowlist. To stay forward-compatible with
+  // the future typed-severity/source backend without breaking today's
+  // decoder we forward just `{scenario}` on the wire; the additional
+  // fields are kept in the function signature so callers don't need to
+  // change once the backend widens the DTO. When that lands we drop the
+  // void-references below and JSON.stringify the full object.
+  createScenario: async (
+    wsId: string,
+    args: { scenario: string; severity: string; source: string },
+  ): Promise<WorkflowRun> => {
+    void args.severity;
+    void args.source;
+    const r = await fetch(`${API}/v1/workspaces/${wsId}/pipelines/demo`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scenario: args.scenario }),
+    });
+    return failOr<WorkflowRun>(r);
+  },
+
   // latestFinishPayload returns the payload from the highest-seq terminal
   // (succeeded/failed/timed_out) ActivityEvent matching the given agent
   // role. Returns undefined when the activity hasn't reached a finish

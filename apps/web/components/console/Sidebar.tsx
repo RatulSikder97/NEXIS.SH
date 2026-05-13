@@ -61,6 +61,7 @@ import { projects } from "@/lib/projects";
 import { WorkspaceSwitcher } from "@/components/workspaces/WorkspaceSwitcher";
 import { SystemStatusPill } from "@/components/console/SystemStatusPill";
 import { ActivityTicker } from "@/components/console/ActivityTicker";
+import { readyCount as readyDemoScenariosCount } from "@/components/live-demo/SCENARIOS";
 
 type BadgeTone = "info" | "warn" | "ok" | "muted";
 
@@ -310,7 +311,15 @@ const SECTION_OPERATIONS: { label: string; items: NavItem[] } = {
       icon: ShieldAlert,
     },
     { href: "/console/eval", label: "Eval Harness", icon: Beaker },
-    { href: "/console/live-demo", label: "Live Demo", icon: PlayCircle },
+    {
+      href: "/console/live-demo",
+      label: "Live Demo",
+      icon: PlayCircle,
+      // Constant badge surfaces the count of fully-wired scenarios so the
+      // operator knows how many fault scripts the backend will actually
+      // run today. Grows in lockstep with the SCENARIOS catalog.
+      constantBadge: String(readyDemoScenariosCount()),
+    },
     { href: "/console/knowledge", label: "Knowledge Base", icon: BookOpen },
   ],
 };
