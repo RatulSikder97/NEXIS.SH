@@ -130,9 +130,17 @@ func (a *Activities) RecordActivityEvent(ctx context.Context, in RecordEventInpu
 }
 
 // stub is the body shared by the L2 stub activities (Phase 4 carryover).
-// Phase 6 replaces those four bodies.
+// Phase 6 replaces those four bodies for the agents that have real
+// implementations; Pathfinder + Synthesiser still call into this path until
+// their Phase 7 rewrites land.
+//
+// The stub now emits a richer payload (tokens, cost, tool_calls,
+// output_summary) so the per-agent drill-down UI has something to render
+// even when the LLM fleet is offline. The agent_role / model / degrade
+// fields are owned by the caller (runAgent or the L2 activity body).
 func (a *Activities) stub(ctx context.Context, role domain.AgentRole, name string) (domain.ActivityResult, error) {
 	activity.GetLogger(ctx).Info("stub start", "agent", role, "activity", name)
+	start := time.Now()
 	if a.StubSleep > 0 {
 		select {
 		case <-time.After(a.StubSleep):
@@ -141,18 +149,41 @@ func (a *Activities) stub(ctx context.Context, role domain.AgentRole, name strin
 		}
 	}
 	activity.GetLogger(ctx).Info("stub end", "agent", role, "activity", name)
+
+	// Synthesise the agent-specific stub payload up-front so every stubbed
+	// run carries the same key set as a real run — tool_calls, input/output
+	// summaries, token estimates, model="stub-fallback".
+	payload := buildStubPayload(role, "", 0)
+	payload["agent_role"] = string(role)
+	payload["duration_ms"] = time.Since(start).Milliseconds()
+
 	return domain.ActivityResult{
 		AgentRole: role,
 		Status:    domain.ActSucceeded,
-		Message:   "stub completed",
+		Message:   fmt.Sprintf("agent=%s stub completed", role),
+		Payload:   payload,
 	}, nil
 }
 
 // runAgent dispatches one L1 agent via the Registry. When Agents is nil
 // (test path / Phase 4 compatibility) it falls back to the stub.
 func (a *Activities) runAgent(ctx context.Context, name domain.AgentName, in PipelineInput) (domain.ActivityResult, error) {
+	start := time.Now()
+	role := agentRoleOf(name)
+	inputSummary := summariseAgentInput(in, name)
+
 	if a.Agents == nil {
-		return a.stub(ctx, agentRoleOf(name), string(name)+".Run")
+		// No registry wired — Phase 4 stub path. Promote the stub to a
+		// degraded synthetic run so admins can still inspect tool calls
+		// and tokens in the drill-down UI.
+		res, err := a.stub(ctx, role, string(name)+".Run")
+		if err != nil {
+			return res, err
+		}
+		enrichStubFallback(res.Payload, role, inputSummary,
+			"agents registry not wired", start, name)
+		res.Message = fmt.Sprintf("agent=%s degraded (no registry)", name)
+		return res, nil
 	}
 	out, err := a.Agents.Run(ctx, name, domain.AgentInput{
 		WorkflowRunID: in.RunID,
@@ -174,35 +205,301 @@ func (a *Activities) runAgent(ctx context.Context, name domain.AgentName, in Pip
 		// retries exhausted, etc.) demotes to the Phase-4 stub so the demo loop
 		// still lights up end-to-end without a live LLM key. The stub payload
 		// includes the original error so the timeline UI can show "degraded".
-		res, stubErr := a.stub(ctx, agentRoleOf(name), string(name)+".Run")
+		res, stubErr := a.stub(ctx, role, string(name)+".Run")
 		if stubErr != nil {
 			return domain.ActivityResult{}, err
 		}
 		if res.Payload == nil {
 			res.Payload = map[string]any{}
 		}
-		res.Payload["degraded"] = true
-		res.Payload["degrade_reason"] = err.Error()
+		enrichStubFallback(res.Payload, role, inputSummary, err.Error(), start, name)
 		res.Message = fmt.Sprintf("agent=%s degraded (stub fallback)", name)
 		return res, nil
 	}
+	// Success path. Every finish frame MUST carry duration_ms / model /
+	// output_summary alongside the existing token/cost trio so the admin
+	// drill-down can render the same set of fields for real + stubbed
+	// runs.
+	duration := out.DurationMs
+	if duration == 0 {
+		duration = time.Since(start).Milliseconds()
+	}
 	payload := map[string]any{
-		"tokens_in":     out.TokensIn,
-		"tokens_out":    out.TokensOut,
-		"cached_tokens": out.CachedTokens,
-		"cost_cents":    out.CostCents,
-		"model":         out.Model,
-		"provider":      out.Provider,
-		"structured":    out.Structured,
-		"schema_retries": out.SchemaRetries,
+		"agent_role":      string(role),
+		"tokens_in":       out.TokensIn,
+		"tokens_out":      out.TokensOut,
+		"cached_tokens":   out.CachedTokens,
+		"cost_cents":      out.CostCents,
+		"duration_ms":     duration,
+		"model":           out.Model,
+		"provider":        out.Provider,
+		"structured":      out.Structured,
+		"schema_retries":  out.SchemaRetries,
+		"input_summary":   inputSummary,
+		"output_summary":  summariseAgentOutput(role, out),
+		"degraded":        false,
 	}
 	return domain.ActivityResult{
-		AgentRole: agentRoleOf(name),
+		AgentRole: role,
 		Status:    domain.ActSucceeded,
 		Message: fmt.Sprintf("agent=%s tokens=%d/%d cost_cents=%.4f",
 			name, out.TokensIn, out.TokensOut, out.CostCents),
 		Payload: payload,
 	}, nil
+}
+
+// enrichStubFallback decorates a stub payload with the full key set required
+// by the admin drill-down: degraded + reason, agent_role, token estimates,
+// duration_ms, model="stub-fallback", tool_calls, output_summary, and the
+// input_summary the caller pre-computed.
+//
+// `start` is the time runAgent began, so duration_ms reflects the real
+// elapsed wall-clock — including the (failed) LLM call that triggered the
+// fallback, not just the stub's sleep.
+func enrichStubFallback(payload map[string]any, role domain.AgentRole, inputSummary, reason string, start time.Time, name domain.AgentName) {
+	if payload == nil {
+		return
+	}
+	stubOut := stubTokenEstimate(role)
+	tokensIn := estimateTokensFromText(inputSummary)
+	payload["agent_role"] = string(role)
+	payload["degraded"] = true
+	payload["degrade_reason"] = reason
+	payload["tokens_in"] = tokensIn
+	payload["tokens_out"] = stubOut
+	payload["cost_cents"] = 0
+	payload["duration_ms"] = time.Since(start).Milliseconds()
+	payload["model"] = "stub-fallback"
+	payload["input_summary"] = inputSummary
+	payload["output_summary"] = stubOutputSummary(role)
+	payload["tool_calls"] = stubToolCalls(role, inputSummary)
+	_ = name // currently unused, here so future per-name branching can land cleanly
+}
+
+// summariseAgentInput returns a <=200 char digest of the incoming
+// AgentInput message — incident title + service + first stacktrace line
+// when present, falling back to the synthesiser scenario or the agent name.
+//
+// This is what the drill-down UI shows as "what did this agent see when it
+// started" so the field must always be filled in even when the incident is
+// nil.
+func summariseAgentInput(in PipelineInput, name domain.AgentName) string {
+	const maxLen = 200
+	var s string
+	switch {
+	case in.Incident != nil && in.Incident.Title != "":
+		s = in.Incident.Title
+		if in.Incident.Service != "" {
+			s += " (" + in.Incident.Service + ")"
+		}
+		if in.Incident.Stacktrace != "" {
+			// First line of the stack adds the most signal.
+			first := in.Incident.Stacktrace
+			for i, c := range first {
+				if c == '\n' {
+					first = first[:i]
+					break
+				}
+			}
+			s += " — " + first
+		}
+	case in.IncidentID != "":
+		s = "incident=" + in.IncidentID + " triggered_by=" + in.TriggeredBy
+	default:
+		s = "agent=" + string(name) + " run=" + in.RunID
+	}
+	if len(s) > maxLen {
+		s = s[:maxLen-3] + "..."
+	}
+	return s
+}
+
+// summariseAgentOutput returns a one-line description of what the agent
+// produced — used by the drill-down UI as the "output_summary" tile.
+// Inspects out.Structured by agent role; falls back to a token / model
+// snapshot when the structured payload is empty.
+func summariseAgentOutput(role domain.AgentRole, out domain.AgentOutput) string {
+	if out.Structured != nil {
+		switch role {
+		case domain.AgentBackend:
+			if d, ok := out.Structured["patch_diff"].(string); ok && d != "" {
+				lines := 1
+				for _, c := range d {
+					if c == '\n' {
+						lines++
+					}
+				}
+				return fmt.Sprintf("Unified diff: %d lines (%d tokens, %s)", lines, out.TokensOut, out.Model)
+			}
+		case domain.AgentQA:
+			if cases, ok := out.Structured["test_cases"].([]any); ok {
+				return fmt.Sprintf("Generated %d test cases (%d tokens, %s)", len(cases), out.TokensOut, out.Model)
+			}
+		case domain.AgentArchitect:
+			if plan, ok := out.Structured["solution_plan"].(string); ok && plan != "" {
+				return fmt.Sprintf("Solution plan: %d chars (%d tokens, %s)", len(plan), out.TokensOut, out.Model)
+			}
+		case domain.AgentDevOps:
+			if yaml, ok := out.Structured["pipeline_yaml"].(string); ok && yaml != "" {
+				return fmt.Sprintf("Pipeline YAML: %d chars (%d tokens, %s)", len(yaml), out.TokensOut, out.Model)
+			}
+		case domain.AgentDataEngineer:
+			if sql, ok := out.Structured["migration_sql"].(string); ok && sql != "" {
+				return fmt.Sprintf("Migration SQL: %d chars (%d tokens, %s)", len(sql), out.TokensOut, out.Model)
+			}
+		}
+	}
+	return fmt.Sprintf("Completed: %d tokens out (%s)", out.TokensOut, out.Model)
+}
+
+// buildStubPayload returns the per-agent synthetic payload skeleton — tool
+// calls + output summary keyed by role. The runAgent / activity caller
+// decorates it with degraded + tokens + duration on top. Kept as a separate
+// helper so tests can assert the exact tool_calls shape without dragging in
+// the full activity stack.
+func buildStubPayload(role domain.AgentRole, inputSummary string, tokensIn int) map[string]any {
+	return map[string]any{
+		"tool_calls":     stubToolCalls(role, inputSummary),
+		"output_summary": stubOutputSummary(role),
+		"tokens_in":      tokensIn,
+		"tokens_out":     stubTokenEstimate(role),
+		"cost_cents":     0,
+		"model":          "stub-fallback",
+	}
+}
+
+// stubTokenEstimate returns the constant tokens_out estimate per the spec
+// — 256 for L1, 128 for L2 detectors, 64 for routers.
+func stubTokenEstimate(role domain.AgentRole) int {
+	switch role {
+	case domain.AgentArchitect, domain.AgentBackend, domain.AgentQA,
+		domain.AgentDevOps, domain.AgentDataEngineer:
+		return 256
+	case domain.AgentSentinel, domain.AgentPathfinder,
+		domain.AgentSynthesiser:
+		return 128
+	case domain.AgentApprovalGate, domain.AgentPipeline:
+		return 64
+	}
+	return 64
+}
+
+// estimateTokensFromText is the cheap len/4 approximation used by the stub
+// fallback to fill tokens_in. Real agents pass through tiktoken; this is a
+// good-enough proxy when there's no LLM in the loop.
+func estimateTokensFromText(s string) int {
+	if s == "" {
+		return 0
+	}
+	return len(s) / 4
+}
+
+// stubToolCalls returns the synthetic but plausible tool-call array per
+// agent. The shape mirrors what a real LLM-driven tool-use trace looks like
+// so the admin drill-down UI can reuse the same renderer.
+func stubToolCalls(role domain.AgentRole, inputSummary string) []map[string]any {
+	switch role {
+	case domain.AgentBackend:
+		return []map[string]any{
+			{"tool": "graph.fetch_caller_chain", "args": map[string]any{"symbol": firstWord(inputSummary)}, "result": "ok"},
+			{"tool": "patch.synthesize", "args": map[string]any{"scope": "single-file"}, "result": "draft.patch (32 lines)"},
+		}
+	case domain.AgentQA:
+		return []map[string]any{
+			{"tool": "test.generate", "args": map[string]any{"target": firstWord(inputSummary)}, "result": "3 cases"},
+			{"tool": "test.coverage_estimate", "args": map[string]any{"target": firstWord(inputSummary)}, "result": "94% line coverage"},
+		}
+	case domain.AgentArchitect:
+		return []map[string]any{
+			{"tool": "plan.synthesize", "args": map[string]any{"layers": []string{"backend", "qa"}}, "result": "2-step recovery plan"},
+			{"tool": "graph.list_callers", "args": map[string]any{"symbol": firstWord(inputSummary)}, "result": "4 callers"},
+		}
+	case domain.AgentDevOps:
+		return []map[string]any{
+			{"tool": "ci.synthesize_workflow", "args": map[string]any{"runtime": "github-actions"}, "result": "workflow.yaml (12 jobs)"},
+			{"tool": "ci.diff", "args": map[string]any{"branch": "main"}, "result": "3 lines changed"},
+		}
+	case domain.AgentDataEngineer:
+		return []map[string]any{
+			{"tool": "schema.diff", "args": map[string]any{"target": "public"}, "result": "1 column added"},
+			{"tool": "migration.synthesize", "args": map[string]any{"engine": "postgres"}, "result": "0042_add_column.up.sql"},
+		}
+	case domain.AgentPathfinder:
+		return []map[string]any{
+			{"tool": "graph.causal_estimand", "args": map[string]any{"symbol": firstWord(inputSummary)}, "result": "1 cause"},
+			{"tool": "log.cluster", "args": map[string]any{"service": firstWord(inputSummary)}, "result": "2 clusters"},
+		}
+	case domain.AgentSynthesiser:
+		return []map[string]any{
+			{"tool": "plan.classify_scenario", "args": map[string]any{"input": firstWord(inputSummary)}, "result": "null-deref (0.91)"},
+			{"tool": "plan.pick_agents", "args": map[string]any{"scenario": "null-deref"}, "result": "[backend, qa, devops]"},
+		}
+	case domain.AgentRole("validator_l2"):
+		return []map[string]any{
+			{"tool": "sandbox.run_tests", "args": map[string]any{"timeout_ms": 30000}, "result": "12 passed / 0 failed"},
+			{"tool": "hypothesis.property_check", "args": map[string]any{"strategy": "fuzz"}, "result": "0 counter-examples"},
+		}
+	case domain.AgentSentinel:
+		return []map[string]any{
+			{"tool": "sentry.poll_fatal", "args": map[string]any{"since": "5m"}, "result": "1 incident"},
+		}
+	case domain.AgentApprovalGate:
+		return []map[string]any{
+			{"tool": "approval.classify_severity", "args": map[string]any{"scenario": "null-deref"}, "result": "medium (risk 0.42)"},
+		}
+	}
+	return []map[string]any{
+		{"tool": "stub.noop", "args": map[string]any{}, "result": "ok"},
+	}
+}
+
+// stubOutputSummary returns the per-agent one-liner shown in the
+// "output_summary" tile. Used by both the stub-fallback path (degraded
+// runs) and the regular L2 stub bodies still on the Phase 4 carryover.
+func stubOutputSummary(role domain.AgentRole) string {
+	switch role {
+	case domain.AgentArchitect:
+		return "Stubbed plan: dispatch [backend, qa] in sequence"
+	case domain.AgentBackend:
+		return "Stubbed unified diff: 1 file, +12 −3 lines"
+	case domain.AgentQA:
+		return "Stubbed 3 unit tests covering happy + 2 edge paths"
+	case domain.AgentDevOps:
+		return "Stubbed CI workflow: 12 jobs, 1 patched gate"
+	case domain.AgentDataEngineer:
+		return "Stubbed migration: 1 column add, backfill plan included"
+	case domain.AgentPathfinder:
+		return "Stubbed root-cause: null-pointer at handler/foo.go:42"
+	case domain.AgentSynthesiser:
+		return "Stubbed plan: scenario=null-deref, fleet=[backend, qa, devops]"
+	case domain.AgentRole("validator_l2"):
+		return "Stubbed validation: 12 tests passed, 0 property counter-examples"
+	case domain.AgentSentinel:
+		return "Stubbed detection: 1 fatal incident ingested"
+	case domain.AgentApprovalGate:
+		return "Stubbed decision: severity=medium, 2-min countdown queued"
+	case domain.AgentPipeline:
+		return "Stubbed pipeline summary: 9 stages, all completed"
+	}
+	return "Stub completed"
+}
+
+// firstWord plucks the first whitespace-delimited token out of the input
+// summary so tool-call args can carry a "symbol" / "service" hint without
+// dragging the whole sentence into the wire payload.
+func firstWord(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	for i, c := range s {
+		if c == ' ' || c == '\t' || c == '\n' {
+			if i == 0 {
+				continue
+			}
+			return s[:i]
+		}
+	}
+	return s
 }
 
 func isBudgetExceeded(err error) bool {

@@ -4,49 +4,27 @@
 // router) with per-org observability rolled up from activity_events over the
 // last 7 days: recent runs, last-seen, token totals, p50/p95 duration, and a
 // degraded-status badge when any recent finish carried `payload.degraded`.
+//
+// Each card links into the per-agent drill-down at /console/agents/{name},
+// where the operator can see every run that agent has executed plus the full
+// per-event payload (tokens, cost, tool calls, decisions, etc).
 
+import Link from "next/link";
+import type { Route } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { agents, type AgentInfo } from "@/lib/agents";
+import {
+  formatRelative,
+  formatTokens,
+  formatUSD,
+} from "@/lib/agents-format";
 
 const API =
   process.env.API_URL_INTERNAL ??
   process.env.NEXT_PUBLIC_API_URL ??
   "http://localhost:8080";
-
-function formatUSD(cents: number): string {
-  const dollars = cents / 100;
-  const decimals = Math.abs(dollars) >= 0.01 || dollars === 0 ? 2 : 4;
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(dollars);
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + "k";
-  return String(n);
-}
-
-function formatRelative(iso?: string): string {
-  if (!iso) return "—";
-  try {
-    const diff = Date.now() - new Date(iso).getTime();
-    const m = Math.floor(diff / 60_000);
-    if (m < 1) return "just now";
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    const d = Math.floor(h / 24);
-    return `${d}d ago`;
-  } catch {
-    return iso;
-  }
-}
 
 const LAYER_LABEL: Record<AgentInfo["layer"], string> = {
   l1: "L1",
@@ -106,74 +84,81 @@ export default async function AgentsPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {fleet.map((a) => (
-          <article
+          <Link
             key={a.name}
-            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-5"
+            // typedRoutes is on; the agent name is dynamic so we cast to
+            // Route to satisfy the typed-routes signature.
+            href={`/console/agents/${a.name}` as Route}
+            className="group block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background)] rounded-lg"
           >
-            <header className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-semibold text-[var(--color-foreground)]">
-                    {a.label}
-                  </h2>
-                  <span
-                    className={
-                      "rounded px-1.5 py-0.5 text-[10px] font-medium " +
-                      LAYER_COLOR[a.layer]
-                    }
-                  >
-                    {LAYER_LABEL[a.layer]}
-                  </span>
+            <article
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-5 transition-colors cursor-pointer group-hover:border-[var(--color-primary)]/60 group-hover:bg-[var(--color-muted)]/30"
+            >
+              <header className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-semibold text-[var(--color-foreground)]">
+                      {a.label}
+                    </h2>
+                    <span
+                      className={
+                        "rounded px-1.5 py-0.5 text-[10px] font-medium " +
+                        LAYER_COLOR[a.layer]
+                      }
+                    >
+                      {LAYER_LABEL[a.layer]}
+                    </span>
+                  </div>
+                  <p className="font-mono text-[10px] text-[var(--color-muted-foreground)] mt-0.5">
+                    {a.name}
+                  </p>
                 </div>
-                <p className="font-mono text-[10px] text-[var(--color-muted-foreground)] mt-0.5">
-                  {a.name}
-                </p>
-              </div>
-              <span
-                className="inline-flex items-center gap-1.5 text-[11px] text-[var(--color-muted-foreground)]"
-                aria-label={`status ${a.status}`}
-              >
                 <span
-                  aria-hidden
-                  className={
-                    "inline-block h-2 w-2 rounded-full " +
-                    STATUS_COLOR[a.status] +
-                    (a.status === "available" ? " animate-pulse" : "")
+                  className="inline-flex items-center gap-1.5 text-[11px] text-[var(--color-muted-foreground)]"
+                  aria-label={`status ${a.status}`}
+                >
+                  <span
+                    aria-hidden
+                    className={
+                      "inline-block h-2 w-2 rounded-full " +
+                      STATUS_COLOR[a.status] +
+                      (a.status === "available" ? " animate-pulse" : "")
+                    }
+                  />
+                  {a.status}
+                </span>
+              </header>
+
+              <p className="mt-3 text-xs text-[var(--color-muted-foreground)] leading-relaxed">
+                {a.description}
+              </p>
+
+              <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                <Stat label="Recent runs (7d)" value={String(a.recent_runs)} />
+                <Stat label="Last seen" value={formatRelative(a.last_seen_at)} />
+                <Stat
+                  label="Tokens (in / out)"
+                  value={
+                    a.total_tokens_in === 0 && a.total_tokens_out === 0
+                      ? "—"
+                      : `${formatTokens(a.total_tokens_in)} / ${formatTokens(a.total_tokens_out)}`
                   }
                 />
-                {a.status}
-              </span>
-            </header>
-
-            <p className="mt-3 text-xs text-[var(--color-muted-foreground)] leading-relaxed">
-              {a.description}
-            </p>
-
-            <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
-              <Stat label="Recent runs (7d)" value={String(a.recent_runs)} />
-              <Stat label="Last seen" value={formatRelative(a.last_seen_at)} />
-              <Stat
-                label="Tokens (in / out)"
-                value={
-                  a.total_tokens_in === 0 && a.total_tokens_out === 0
-                    ? "—"
-                    : `${formatTokens(a.total_tokens_in)} / ${formatTokens(a.total_tokens_out)}`
-                }
-              />
-              <Stat
-                label="Total cost"
-                value={a.total_cost_cents_exact > 0 ? formatUSD(a.total_cost_cents_exact) : "—"}
-              />
-              <Stat
-                label="p50 duration"
-                value={a.p50_duration_ms > 0 ? `${a.p50_duration_ms}ms` : "—"}
-              />
-              <Stat
-                label="p95 duration"
-                value={a.p95_duration_ms > 0 ? `${a.p95_duration_ms}ms` : "—"}
-              />
-            </dl>
-          </article>
+                <Stat
+                  label="Total cost"
+                  value={a.total_cost_cents_exact > 0 ? formatUSD(a.total_cost_cents_exact) : "—"}
+                />
+                <Stat
+                  label="p50 duration"
+                  value={a.p50_duration_ms > 0 ? `${a.p50_duration_ms}ms` : "—"}
+                />
+                <Stat
+                  label="p95 duration"
+                  value={a.p95_duration_ms > 0 ? `${a.p95_duration_ms}ms` : "—"}
+                />
+              </dl>
+            </article>
+          </Link>
         ))}
       </div>
 

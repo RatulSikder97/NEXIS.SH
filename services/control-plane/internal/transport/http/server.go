@@ -209,8 +209,16 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			// Phase 5+6 — agents fleet. Read-only catalog + per-org observability
 			// rolled up from activity_events. Open to any authenticated principal
 			// in the workspace.
+			//
+			// Drill-down endpoints (per-agent run log + per-run event timeline)
+			// share the same auth + tenancy gate as the catalog: any
+			// authenticated principal whose (org_id, workspace_id) match the
+			// query parameters. The handlers filter at SQL time so the RLS
+			// boundary is enforced regardless of which pool is used.
 			if deps.Pool != nil {
 				g.Get("/v1/workspaces/{ws_id}/agents", handler.AgentsList(deps.Pool))
+				g.Get("/v1/workspaces/{ws_id}/agents/{name}/runs", handler.AgentRunsList(deps.Pool))
+				g.Get("/v1/workspaces/{ws_id}/agents/{name}/runs/{run_id}/events", handler.AgentRunEvents(deps.Pool))
 			}
 
 			// Workspace read paths — open to any authenticated principal.
