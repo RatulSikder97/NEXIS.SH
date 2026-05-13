@@ -13,14 +13,43 @@ import (
 // upstream natural key — used by the multi-source dedupe layer to collapse
 // duplicates inside a 60-second window. Rate-spike triggers leave it empty
 // because they correspond to an aggregate count, not a single event.
+//
+// IncidentRawID is the FK to incidents_raw — Sentinel writes back project_id
+// onto that row once the router resolves a match, so downstream queries
+// (timeline, dashboards) can scope by project without re-running the match.
+//
+// ProjectID is stamped by the sentinel.Router after a successful fingerprint
+// match against the projects table. Empty when no project owns this trigger's
+// upstream selectors — the workflow still runs, just falls back to the legacy
+// fixture path.
+//
+// The fingerprint fields (Source + Sentry/Datadog/PagerDuty/GitHub identifiers)
+// are filled by the rules layer from the matching IncidentRow before the
+// trigger enters the router. They are the inputs to ProjectMatcher.
 type IncidentTrigger struct {
 	OrgID         string
 	WorkspaceID   string
 	IncidentID    string
+	IncidentRawID string
 	SourceEventID string
 	Rule          string // 'fatal_level' | 'error_rate_spike'
 	DetectedAt    time.Time
 	ReceivedAt    time.Time
+
+	// ProjectID is filled by the sentinel.Router post-fingerprint match.
+	// Empty when no project owns the trigger.
+	ProjectID string
+
+	// Fingerprint fields. Populated from the incidents_raw row by the rules
+	// layer (or by adapters' webhook paths for direct fan-out). The router
+	// reads these into a domain.IncidentFingerprint and asks ProjectMatcher
+	// to resolve a project_id.
+	Source                 string
+	SentryOrganizationSlug string
+	SentryProjectSlug      string
+	DatadogServiceTag      string
+	PagerDutyServiceID     string
+	GitHubRepo             string
 }
 
 // IncidentRow is the minimal projection the Sentinel rules + downstream
@@ -44,6 +73,16 @@ type IncidentRow struct {
 	Stacktrace    string
 	Logs          string
 	ReceivedAt    time.Time
+
+	// Fingerprint fields persisted on incidents_raw by each adapter's
+	// HandleWebhook path. Sentinel's router uses these to resolve a project
+	// without re-decoding the raw payload. All optional — older rows
+	// pre-dating the projects-routing feature have these as empty strings.
+	SentryOrganizationSlug string
+	SentryProjectSlug      string
+	DatadogServiceTag      string
+	PagerDutyServiceID     string
+	GitHubRepo             string
 }
 
 // IncidentsReader is the read-only port the Sentinel goroutine depends on.

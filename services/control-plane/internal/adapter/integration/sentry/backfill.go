@@ -79,6 +79,9 @@ func (p *Provider) BackfillRecent(ctx context.Context, princ domain.Principal, s
 			Service:       blob.ProjectSlug,
 			Environment:   issueEnvironment(issue),
 			Payload:       payload,
+			// Fingerprint fields — feed Sentinel's project router.
+			SentryOrganizationSlug: blob.OrgSlug,
+			SentryProjectSlug:      blob.ProjectSlug,
 		}
 		if err := p.sink.Insert(ctx, princ.OrgID, raw); err != nil {
 			// Re-add to ensure the next tick retries (AddIfAbsent already

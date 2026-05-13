@@ -60,10 +60,15 @@ const (
 // WorkflowRun is one tenant-scoped execution of a workflow type. ID equals
 // the Temporal WorkflowID (we generate it client-side); TemporalRunID is
 // the Temporal-assigned per-attempt id.
+//
+// ProjectID (Phase 7 — projects/self-healing) is the optional project this
+// run targets. Persisted on workflow_runs.project_id by the workflow
+// adapter via InsertRun; downstream dashboards filter by it.
 type WorkflowRun struct {
 	ID            string
 	OrgID         string
 	WorkspaceID   string
+	ProjectID     string
 	WorkflowType  string
 	TemporalRunID string
 	TemporalWfID  string

@@ -53,8 +53,19 @@ func Apply(
 	for _, r := range fatals {
 		out = append(out, domain.IncidentTrigger{
 			OrgID: orgID, WorkspaceID: workspaceID, IncidentID: r.ID,
+			IncidentRawID: r.ID,
 			SourceEventID: r.SourceEventID,
 			Rule:          "fatal_level", DetectedAt: now, ReceivedAt: r.ReceivedAt,
+			// Fingerprint carried forward so the router can resolve a
+			// project without re-reading the incidents_raw row. Source
+			// matches the persisted source string ("sentry"|"datadog"|
+			// "pagerduty"); each row only fills its own native fields.
+			Source:                 r.Source,
+			SentryOrganizationSlug: r.SentryOrganizationSlug,
+			SentryProjectSlug:      r.SentryProjectSlug,
+			DatadogServiceTag:      r.DatadogServiceTag,
+			PagerDutyServiceID:     r.PagerDutyServiceID,
+			GitHubRepo:             r.GitHubRepo,
 		})
 	}
 	cooldownOK := lastTriggerAt.IsZero() || now.Sub(lastTriggerAt) > SpikeCooldown

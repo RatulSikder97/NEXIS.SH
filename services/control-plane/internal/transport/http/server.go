@@ -113,6 +113,14 @@ type Deps struct {
 	// POST /v1/integrations/slack/interactivity route is not mounted.
 	SlackDecider handler.SlackApprovalsService
 
+	// Projects — Phase 7 self-healing targets.
+	//
+	// Projects bundles integration selector mappings, recovery policy, and
+	// SLOs into one persisted aggregate. Sentinel uses it to route incoming
+	// incidents to the right repo/app/channel. Optional — when nil the
+	// /v1/(workspaces|projects)/* routes are not mounted.
+	Projects handler.ProjectsService
+
 	// Operational-surfaces stage — repos + probe deps for the read-only
 	// operator endpoints (activity feed, system-health, integration log,
 	// validator runs, cost rollup, knowledge status, system-status pill).
@@ -287,6 +295,14 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				g.Get("/v1/workspaces/{id}/events", handler.WorkspaceEvents(deps.Workspaces))
 			}
 
+			// Projects — read paths open to any authenticated principal.
+			// Mutations live in the owner|admin sub-group below.
+			if deps.Projects != nil {
+				g.Get("/v1/workspaces/{ws_id}/projects", handler.ProjectsListByWorkspace(deps.Projects))
+				g.Get("/v1/projects/{id}", handler.ProjectsGet(deps.Projects))
+				g.Get("/v1/projects/{id}/recovery-policy", handler.ProjectsGetPolicy(deps.Projects))
+			}
+
 			// Phase 4 — pipeline read paths. Any authenticated principal can
 			// list / read runs + tail the SSE stream for their org's
 			// workspaces. The handler verifies workspace ownership before
@@ -375,6 +391,17 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				// Workspaces — create is owner|admin per Phase 3.5 RBAC.
 				if deps.Workspaces != nil {
 					g2.Post("/v1/workspaces", handler.WorkspaceCreate(deps.Workspaces, aud))
+				}
+
+				// Projects — create/update/archive + policy mutations.
+				// Audit emission lives in the usecase layer so non-HTTP
+				// callers (future SDK / CLI / sentinel-triggered apply)
+				// pick up the same project.* audit actions.
+				if deps.Projects != nil {
+					g2.Post("/v1/workspaces/{ws_id}/projects", handler.ProjectsCreate(deps.Projects))
+					g2.Patch("/v1/projects/{id}", handler.ProjectsPatch(deps.Projects))
+					g2.Delete("/v1/projects/{id}", handler.ProjectsArchive(deps.Projects))
+					g2.Put("/v1/projects/{id}/recovery-policy", handler.ProjectsPutPolicy(deps.Projects))
 				}
 
 				// Phase 4 — pipeline mutations are owner|admin. The /demo

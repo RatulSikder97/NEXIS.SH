@@ -269,11 +269,11 @@ func (p *Provider) HandleWebhook(ctx context.Context, orgID string, headers map[
 	resource := headers["Sentry-Hook-Resource"]
 	switch resource {
 	case "issue":
-		return p.handleIssueEvent(ctx, orgID, body)
+		return p.handleIssueEvent(ctx, orgID, blob, body)
 	default:
 		// Any other resource type — ack-only for Phase 3. Future phases can
 		// extend this switch (event_alert, metric_alert, ...).
-		return p.handleLegacyEvent(ctx, orgID, body)
+		return p.handleLegacyEvent(ctx, orgID, blob, body)
 	}
 }
 
@@ -284,7 +284,11 @@ func (p *Provider) HandleWebhook(ctx context.Context, orgID string, headers map[
 //
 // Fingerprint is the Sentry issue id (`data.issue.id`) which is stable
 // across event volume — the canonical dedupe key.
-func (p *Provider) handleIssueEvent(ctx context.Context, orgID string, body []byte) error {
+//
+// blob is the decrypted secret blob — we re-use its OrgSlug / ProjectSlug
+// values to fill the RawIncident fingerprint so Sentinel's router can
+// resolve a project_id from the row without re-decoding the body.
+func (p *Provider) handleIssueEvent(ctx context.Context, orgID string, blob secretBlob, body []byte) error {
 	var envelope struct {
 		Action string `json:"action"`
 		Data   struct {
@@ -306,11 +310,18 @@ func (p *Provider) handleIssueEvent(ctx context.Context, orgID string, body []by
 	if issue.ID == "" {
 		// Malformed envelope — fall back to the legacy decoder so we still
 		// land *something* in incidents_raw for forensic replay.
-		return p.handleLegacyEvent(ctx, orgID, body)
+		return p.handleLegacyEvent(ctx, orgID, blob, body)
 	}
 	// Webhook is the source of truth; the backfill cron dedupes against
 	// fingerprints it already emitted in its own window.
 	p.dedupe.Add(issue.ID)
+
+	// Prefer the slug embedded in the payload (always matches the issue's
+	// originating project); fall back to the blob's persisted project slug.
+	projectSlug := issue.Project.Slug
+	if projectSlug == "" {
+		projectSlug = blob.ProjectSlug
+	}
 
 	var payload map[string]any
 	_ = json.Unmarshal(body, &payload)
@@ -322,6 +333,9 @@ func (p *Provider) handleIssueEvent(ctx context.Context, orgID string, body []by
 		Service:       issue.Project.Slug,
 		Environment:   issue.Environment,
 		Payload:       payload,
+		// Fingerprint fields — feed Sentinel's project router.
+		SentryOrganizationSlug: blob.OrgSlug,
+		SentryProjectSlug:      projectSlug,
 	})
 }
 
@@ -330,7 +344,7 @@ func (p *Provider) handleIssueEvent(ctx context.Context, orgID string, body []by
 // than the envelope; the original Phase 3 adapter targeted exactly this.
 // Keep it around so existing tenants on the older delivery path do not
 // regress.
-func (p *Provider) handleLegacyEvent(ctx context.Context, orgID string, body []byte) error {
+func (p *Provider) handleLegacyEvent(ctx context.Context, orgID string, blob secretBlob, body []byte) error {
 	var evt struct {
 		ID          string     `json:"id"`
 		Level       string     `json:"level"`
@@ -358,6 +372,10 @@ func (p *Provider) handleLegacyEvent(ctx context.Context, orgID string, body []b
 		Service:       service,
 		Environment:   evt.Environment,
 		Payload:       payload,
+		// Legacy path doesn't carry the project slug in the body — fall
+		// back to the persisted blob so Sentinel can still route.
+		SentryOrganizationSlug: blob.OrgSlug,
+		SentryProjectSlug:      blob.ProjectSlug,
 	})
 }
 

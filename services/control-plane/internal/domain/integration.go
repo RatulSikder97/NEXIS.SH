@@ -71,6 +71,12 @@ type IncidentSink interface {
 
 // RawIncident is the provider-agnostic shape we persist to incidents_raw.
 // Payload is the original JSON event for replay/forensics.
+//
+// The fingerprint fields (Sentry/Datadog/PagerDuty/GitHub identifiers) are
+// filled by each adapter's HandleWebhook path. They are the lookup keys
+// Sentinel's router uses to resolve a project_id at trigger time without
+// re-decoding the payload — see internal/sentinel/router.go. All optional;
+// adapters fill only the fields native to their source.
 type RawIncident struct {
 	Source        string
 	SourceEventID string
@@ -79,4 +85,16 @@ type RawIncident struct {
 	Service       string
 	Environment   string
 	Payload       map[string]any
+
+	// Fingerprint fields — written into incidents_raw alongside the canonical
+	// columns. Each adapter populates the fields native to its source:
+	//   - sentry    → SentryOrganizationSlug + SentryProjectSlug
+	//   - datadog   → DatadogServiceTag (the "service:<value>" form)
+	//   - pagerduty → PagerDutyServiceID (event.data.service.id)
+	//   - github    → GitHubRepo ("owner/repo" from repository.full_name)
+	SentryOrganizationSlug string
+	SentryProjectSlug      string
+	DatadogServiceTag      string
+	PagerDutyServiceID     string
+	GitHubRepo             string
 }

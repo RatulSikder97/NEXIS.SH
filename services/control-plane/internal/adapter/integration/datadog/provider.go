@@ -235,6 +235,17 @@ func (p *Provider) HandleWebhook(ctx context.Context, orgID string, headers map[
 		Environment:   evt.envTag(),
 		Payload:       payload,
 	}
+	// Fingerprint — the project router looks for "service:<value>". If the
+	// payload exposes a bare service token, normalise the leading "service:"
+	// prefix; if it's already prefixed (the projects.datadog_service_tag
+	// column stores it that way) pass through.
+	if svc := evt.serviceTag(); svc != "" {
+		if strings.HasPrefix(svc, "service:") {
+			raw.DatadogServiceTag = svc
+		} else {
+			raw.DatadogServiceTag = "service:" + svc
+		}
+	}
 	if raw.Title == "" {
 		raw.Title = evt.EventTitle
 	}

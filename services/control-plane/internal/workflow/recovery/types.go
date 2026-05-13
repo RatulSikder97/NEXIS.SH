@@ -14,9 +14,26 @@ import "github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 // optional incident id (Phase 4 uses 'manual' or 'demo'; Phase 6 fills in
 // from a Sentinel emission). Phase 5 adds Incident (full payload) + RepoSHA
 // (pgvector retrieval scope) + PriorOutputs (DAG fan-in).
+//
+// ProjectID (Phase 7 — projects/self-healing) is the optional project this
+// run targets. When set, recovery activities load the project's selectors +
+// recovery policy + SLO at workflow start and route every external action
+// (PR open, ArgoCD sync, Slack notify) through those mappings. Empty —
+// either because the trigger had no fingerprint match, or the call site is a
+// legacy stub — falls back to the existing fixture path (acme/orders-api-
+// fixture).
+//
+// Project is the loaded project snapshot, filled in by the workflow function
+// after LoadProject succeeds. Activities downstream of LoadProject read this
+// pointer (nil = no project bound; fixture path). Carrying the project on
+// PipelineInput is the simplest way to thread it through Temporal — each
+// activity already takes a snapshot of PipelineInput in clonePrior, so the
+// project propagates without a parallel state struct.
 type PipelineInput struct {
 	OrgID        string                  `json:"org_id"`
 	WorkspaceID  string                  `json:"workspace_id"`
+	ProjectID    string                  `json:"project_id,omitempty"`
+	Project      *domain.Project         `json:"project,omitempty"`
 	RunID        string                  `json:"run_id"` // also the Temporal WorkflowID
 	IncidentID   string                  `json:"incident_id"`
 	TriggeredBy  string                  `json:"triggered_by"` // 'manual' | 'demo' | 'sentinel'
@@ -62,4 +79,39 @@ type ApprovalFinalizeInput struct {
 	OrgID         string                  `json:"org_id"`
 	WorkflowRunID string                  `json:"workflow_run_id"`
 	Signal        domain.ApprovalSignal   `json:"signal"`
+}
+
+// LoadProjectInput is the input for the LoadProject activity. The activity
+// reads the projects table via the projects repo (admin pool) and returns a
+// snapshot of the row for downstream activities.
+type LoadProjectInput struct {
+	OrgID     string `json:"org_id"`
+	ProjectID string `json:"project_id"`
+}
+
+// LoadProjectOutput is the workflow-visible projection of a domain.Project.
+// We keep a flat shape (rather than passing domain.Project through Temporal
+// history directly) so the JSON serialisation of the activity input/output
+// stays stable across domain refactors. Pointer-valued Project signals
+// "no project bound for this run" — every downstream activity falls back to
+// the fixture path in that case.
+type LoadProjectOutput struct {
+	Project *domain.Project `json:"project,omitempty"`
+}
+
+// ApprovalRouteOutput is the wire shape of ApprovalGateRoute's payload —
+// duplicated as a typed key set so the workflow can branch on policy
+// outcomes without re-decoding map[string]any inside the workflow function.
+//
+// Today we still write into ActivityResult.Payload (map[string]any) for
+// backward compatibility with the existing tests; the typed keys here are
+// the supported subset.
+type ApprovalRouteOutput struct {
+	DecisionID    string  `json:"decision_id"`
+	Severity      string  `json:"severity"`
+	Scenario      string  `json:"scenario"`
+	RiskScore     float64 `json:"risk_score"`
+	AutoApproved  bool    `json:"auto_approved,omitempty"`
+	KillSwitch    bool    `json:"kill_switch,omitempty"`
+	CountdownSecs int     `json:"countdown_secs,omitempty"`
 }

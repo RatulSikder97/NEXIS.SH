@@ -40,6 +40,9 @@ func NewWorkflowRepo(app, admin *pgxpool.Pool) *WorkflowRepo {
 // db.FromCtx so the INSERT obeys the tenant policy. Caller fills id +
 // org_id + workspace_id + status + started_at; Temporal ids are written by
 // UpdateTemporalIDs once ExecuteWorkflow returns.
+//
+// project_id is optional — written when the caller bound the run to a
+// project at start time. Empty string lands as SQL NULL via NULLIF/cast.
 func (r *WorkflowRepo) InsertRun(ctx context.Context, w *domain.WorkflowRun) error {
 	q := db.FromCtx(ctx, r.app)
 	_, err := q.Exec(ctx, `
@@ -47,12 +50,15 @@ func (r *WorkflowRepo) InsertRun(ctx context.Context, w *domain.WorkflowRun) err
             id, org_id, workspace_id, workflow_type,
             temporal_run_id, temporal_wf_id, status,
             current_step, input, output, error,
-            started_at, completed_at, duration_ms, created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, NULLIF($15, '')::uuid)`,
+            started_at, completed_at, duration_ms, created_by,
+            project_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, NULLIF($15, '')::uuid,
+                  NULLIF($16, '')::uuid)`,
 		w.ID, w.OrgID, w.WorkspaceID, w.WorkflowType,
 		w.TemporalRunID, w.TemporalWfID, string(w.Status),
 		w.CurrentStep, jsonOrNil(w.Input), jsonOrNil(w.Output), w.Error,
 		w.StartedAt, w.CompletedAt, w.DurationMs, w.CreatedBy,
+		w.ProjectID,
 	)
 	return err
 }

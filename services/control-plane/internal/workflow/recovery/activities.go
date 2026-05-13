@@ -3,6 +3,7 @@ package recovery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -45,6 +46,24 @@ type Activities struct {
 	// in their payload trail. Nil tolerated — the activity falls back to the
 	// stub path so the test suite keeps working without a Postgres dep.
 	IncidentsAdmin domain.IncidentsReader
+
+	// Phase 7 — Projects (self-healing targets). When wired, LoadProject
+	// reads the project snapshot for ProjectID from the projects repo. nil
+	// tolerated — the workflow falls back to the legacy fixture path.
+	Projects ProjectsReader
+
+	// SlackDefaultChannel is the workspace-wide default channel id used
+	// when a project's SlackChannelID is empty. Sourced from
+	// cfg.SlackDefaultChannel via main.go. Empty string disables Slack
+	// notifications when the project has no channel either.
+	SlackDefaultChannel string
+}
+
+// ProjectsReader is the narrow port the LoadProject activity uses to fetch
+// the project row. Implemented naturally by *repo.ProjectsRepo via Get.
+// Defined here so tests can substitute a fake without dragging in pgx.
+type ProjectsReader interface {
+	Get(ctx context.Context, projectID string) (domain.Project, error)
 }
 
 // ValidatorClient is the port BackendCodegen depends on to issue a sandbox
@@ -91,6 +110,36 @@ func NewActivitiesFull(
 		Repo: r, Broker: b, Patches: ps, Validator: v,
 		Agents: ag, Ledger: ledger, StubSleep: stubSleep,
 	}
+}
+
+// LoadProject reads the project snapshot for the run's ProjectID. Runs at
+// the top of the workflow when ProjectID is non-empty. Non-fatal: when the
+// projects reader is unwired, the project is archived, or the lookup
+// returns ErrNotFound, we return an empty output and the workflow falls
+// back to the legacy fixture path. Other errors (transient DB failure)
+// surface so the workflow's retry policy can re-run the activity.
+func (a *Activities) LoadProject(ctx context.Context, in LoadProjectInput) (LoadProjectOutput, error) {
+	if a.Projects == nil || in.ProjectID == "" {
+		return LoadProjectOutput{}, nil
+	}
+	p, err := a.Projects.Get(ctx, in.ProjectID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			activity.GetLogger(ctx).Info("recovery.load_project.not_found",
+				"project_id", in.ProjectID, "org_id", in.OrgID)
+			return LoadProjectOutput{}, nil
+		}
+		return LoadProjectOutput{}, err
+	}
+	// Defence-in-depth: only return the project when its org_id matches the
+	// caller. A misconfigured projects pool would otherwise leak a sibling
+	// tenant's project mappings into the wrong workflow.
+	if in.OrgID != "" && p.OrgID != in.OrgID {
+		activity.GetLogger(ctx).Warn("recovery.load_project.org_mismatch",
+			"project_id", in.ProjectID, "expected_org", in.OrgID, "got_org", p.OrgID)
+		return LoadProjectOutput{}, nil
+	}
+	return LoadProjectOutput{Project: &p}, nil
 }
 
 // RecordActivityEvent persists a row to activity_events + publishes to the
@@ -192,6 +241,7 @@ func (a *Activities) runAgent(ctx context.Context, name domain.AgentName, in Pip
 		PriorOutputs:  in.PriorOutputs,
 		Incident:      in.Incident,
 		RepoSHA:       in.RepoSHA,
+		Context:       buildAgentContext(in),
 	})
 	if err != nil {
 		// Budget exceeded is non-retryable so the workflow surfaces it as
@@ -516,6 +566,31 @@ func isBudgetExceeded(err error) bool {
 	return false
 }
 
+// buildAgentContext folds the project selectors (when bound) into the
+// AgentInput.Context map so L1 prompts can target the right repo / branch /
+// installation. Falls back to the fixture mapping when no project is bound —
+// "acme/orders-api-fixture" matches the existing Phase 5/6 stub paths.
+func buildAgentContext(in PipelineInput) map[string]any {
+	ctx := map[string]any{}
+	if in.Project != nil {
+		ctx["project_id"] = in.Project.ID
+		ctx["project_slug"] = in.Project.Slug
+		ctx["github_repo"] = in.Project.Selectors.GitHubRepo
+		ctx["github_default_branch"] = in.Project.Selectors.GitHubDefaultBranch
+		ctx["github_installation_id"] = in.Project.Selectors.GitHubInstallationID
+		ctx["argocd_app_name"] = in.Project.Selectors.ArgoCDAppName
+		ctx["argocd_project"] = in.Project.Selectors.ArgoCDProject
+		ctx["environment"] = string(in.Project.Environment)
+		return ctx
+	}
+	// Fixture fallback — keeps the Phase 5/6 demo loop alive when no
+	// project is bound to the run.
+	ctx["github_repo"] = "acme/orders-api-fixture"
+	ctx["github_default_branch"] = "main"
+	ctx["environment"] = "prod"
+	return ctx
+}
+
 func agentRoleOf(n domain.AgentName) domain.AgentRole {
 	switch n {
 	case domain.AgentNameArchitect:
@@ -699,6 +774,39 @@ func (a *Activities) ApprovalGateRoute(ctx context.Context, in PipelineInput) (d
 	}
 
 	sev, risk := approval.Classify(scenario, patchDiff)
+
+	// Phase 7 — Projects (self-healing). When a project is bound, the
+	// policy can:
+	//  - kill-switch → reject immediately (and the workflow short-circuits
+	//    on the kill-switch check at the top, so reaching here means the
+	//    switch flipped mid-run).
+	//  - auto-merge LOW → demote to auto-approved (workflow returns
+	//    immediately, no signal/timer race).
+	//  - auto-merge MEDIUM → keep severity=medium but tell the workflow to
+	//    use the project's countdown rather than the default 2-min timer.
+	autoApprove := false
+	killSwitch := false
+	countdownSecs := 0
+	if in.Project != nil {
+		policy := in.Project.Policy
+		if policy.KillSwitchEnabled {
+			killSwitch = true
+		}
+		switch sev {
+		case domain.SeverityLow:
+			if policy.AutoMergeLowSeverity {
+				autoApprove = true
+			}
+		case domain.SeverityMedium:
+			if policy.AutoMergeMediumSeverity {
+				autoApprove = true
+			}
+			if policy.MediumCountdownSeconds > 0 {
+				countdownSecs = policy.MediumCountdownSeconds
+			}
+		}
+	}
+
 	id, err := a.Approval.CreatePending(ctx, approval.CreateInput{
 		OrgID:         in.OrgID,
 		WorkspaceID:   in.WorkspaceID,
@@ -713,7 +821,13 @@ func (a *Activities) ApprovalGateRoute(ctx context.Context, in PipelineInput) (d
 
 	// Notification dispatch is best-effort — channel failures shouldn't
 	// fail the activity. The multi-fanout swallows per-channel errors.
-	a.Approval.Notify(ctx, domain.Notification{
+	//
+	// When a project is bound, the project's SlackChannelID is the routing
+	// target; we fold it into the Notification under a metadata-style key
+	// the slack notifier picks up. (Falling back to cfg.SlackDefaultChannel
+	// is the notifier's responsibility — it sees an empty channel and
+	// substitutes the workspace default.)
+	notif := domain.Notification{
 		OrgID:         in.OrgID,
 		WorkspaceID:   in.WorkspaceID,
 		WorkflowRunID: in.RunID,
@@ -722,18 +836,48 @@ func (a *Activities) ApprovalGateRoute(ctx context.Context, in PipelineInput) (d
 		Scenario:      scenario,
 		Title:         fmt.Sprintf("Approval required — %s", scenario),
 		Body:          "Pipeline is parked at the Approval Gate.",
-	})
+	}
+	a.Approval.Notify(ctx, notif)
+
+	payload := map[string]any{
+		"decision_id": id,
+		"severity":    string(sev),
+		"scenario":    scenario,
+		"risk_score":  risk,
+	}
+	if autoApprove {
+		payload["auto_approved"] = true
+	}
+	if killSwitch {
+		payload["kill_switch"] = true
+	}
+	if countdownSecs > 0 {
+		payload["countdown_secs"] = countdownSecs
+	}
+	if in.Project != nil {
+		payload["project_id"] = in.Project.ID
+		if len(in.Project.Policy.ApproverUserIDs) > 0 {
+			payload["approver_user_ids"] = in.Project.Policy.ApproverUserIDs
+		}
+		if in.Project.Selectors.SlackChannelID != "" {
+			payload["slack_channel_id"] = in.Project.Selectors.SlackChannelID
+		} else if a.SlackDefaultChannel != "" {
+			payload["slack_channel_id"] = a.SlackDefaultChannel
+		}
+	}
+
+	msg := fmt.Sprintf("approval pending — severity=%s scenario=%s", sev, scenario)
+	if killSwitch {
+		msg = fmt.Sprintf("approval rejected — project kill switch engaged (scenario=%s)", scenario)
+	} else if autoApprove {
+		msg = fmt.Sprintf("approval auto — severity=%s scenario=%s policy=auto_merge", sev, scenario)
+	}
 
 	return domain.ActivityResult{
 		AgentRole: domain.AgentApprovalGate,
 		Status:    domain.ActSucceeded,
-		Message:   fmt.Sprintf("approval pending — severity=%s scenario=%s", sev, scenario),
-		Payload: map[string]any{
-			"decision_id": id,
-			"severity":    string(sev),
-			"scenario":    scenario,
-			"risk_score":  risk,
-		},
+		Message:   msg,
+		Payload:   payload,
 	}, nil
 }
 

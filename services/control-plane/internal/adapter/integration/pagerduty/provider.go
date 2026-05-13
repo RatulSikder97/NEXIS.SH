@@ -191,6 +191,10 @@ func (p *Provider) Status(ctx context.Context, princ domain.Principal) (domain.C
 // pagerDutyV3Envelope is the slim view of the V3 webhook body we care
 // about. PagerDuty emits a richer payload (links, references, log entries);
 // the parser drops everything else.
+//
+// Service.ID is the canonical PagerDuty service id (e.g. "P1234567") —
+// distinct from Service.Summary (display name) — and is the column the
+// projects table indexes on for routing.
 type pagerDutyV3Envelope struct {
 	Event struct {
 		ID        string `json:"id"`
@@ -200,6 +204,7 @@ type pagerDutyV3Envelope struct {
 			Title   string `json:"title"`
 			Urgency string `json:"urgency"`
 			Service struct {
+				ID      string `json:"id"`
 				Summary string `json:"summary"`
 			} `json:"service"`
 		} `json:"data"`
@@ -258,6 +263,10 @@ func (p *Provider) HandleWebhook(ctx context.Context, orgID string, headers map[
 		Level:         env.Event.Data.Urgency,
 		Service:       env.Event.Data.Service.Summary,
 		Payload:       payload,
+		// Fingerprint — feed Sentinel's project router. The service id
+		// (e.g. "P1234567") is what the projects table indexes on, not the
+		// summary string.
+		PagerDutyServiceID: env.Event.Data.Service.ID,
 	})
 }
 

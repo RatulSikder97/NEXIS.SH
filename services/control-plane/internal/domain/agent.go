@@ -54,6 +54,12 @@ type IncidentPayload struct {
 // map from earlier steps in the DAG (Architect.Structured keyed at "architect", etc.).
 // PromptContext is the workflow-run-scoped narrative the L2 Synthesiser produced;
 // Phase 5's demo path seeds it with a fixture incident description.
+//
+// Context (Phase 7 — projects/self-healing) is the optional per-agent
+// scratch map. Today it carries the project mappings (github_repo,
+// github_default_branch, github_installation_id) so the L1 prompts can tell
+// the LLM which repo to target. Nil-safe — agents must fall back to defaults
+// when a key is missing.
 type AgentInput struct {
 	WorkflowRunID string           `json:"workflow_run_id"`
 	OrgID         string           `json:"org_id"`
@@ -62,6 +68,7 @@ type AgentInput struct {
 	PromptContext string           `json:"prompt_context,omitempty"`
 	Incident      *IncidentPayload `json:"incident,omitempty"`
 	RepoSHA       string           `json:"repo_sha,omitempty"` // retrieval scope
+	Context       map[string]any   `json:"context,omitempty"`
 }
 
 // AgentOutput is what every agent returns. Structured is the schema-validated

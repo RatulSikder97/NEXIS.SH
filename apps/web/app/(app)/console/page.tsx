@@ -21,6 +21,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { DashboardKpiStrip } from "@/components/console/DashboardKpiStrip";
+import { ProjectsHealthGrid } from "@/components/console/ProjectsHealthGrid";
 import { QuickActionsRow } from "@/components/console/QuickActionsRow";
 import { RecentActivityFeed } from "@/components/console/RecentActivityFeed";
 import { RecoveryPipelineMini } from "@/components/console/RecoveryPipelineMini";
@@ -111,6 +112,8 @@ export default async function ConsoleHomePage() {
       </div>
 
       <DashboardKpiStrip />
+
+      <ProjectsHealthGrid />
 
       <RecoveryPipelineMini />
 

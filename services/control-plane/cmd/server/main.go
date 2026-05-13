@@ -410,6 +410,23 @@ func main() {
 		webhookDeliveriesRepo = repo.NewWebhookDeliveriesRepo(appPool, adminPool)
 	}
 
+	// Phase 7 — Projects (self-healing targets). Repo runs dual-pool so
+	// Sentinel's cross-tenant MatchByFingerprint sweeps via admin; the
+	// usecase enforces per-tier caps + the GitHub binding rule and audits
+	// every mutation under project.*. Wired only when both pools exist
+	// (the dev LLM-only path keeps booting without it).
+	//
+	// projectsHandlerSvc is the handler-facing interface form. We keep the
+	// concrete pointer + the interface separate so a nil concrete value
+	// becomes a clean nil interface (avoiding the "non-nil interface
+	// containing nil pointer" Go gotcha that would defeat the
+	// deps.Projects != nil guard inside server.go).
+	var projectsHandlerSvc handler.ProjectsService
+	if appPool != nil && adminPool != nil {
+		projectsRepo := repo.NewProjectsRepoWithAdmin(appPool, adminPool)
+		projectsHandlerSvc = usecase.NewProjectsService(projectsRepo, intRepo, auditWriter, nil)
+	}
+
 	srv := httpserver.New(cfg, logger, httpserver.Deps{
 		Pool:              adminPool,
 		AppPool:           appPool,
@@ -427,6 +444,7 @@ func main() {
 		EvalRunner:        evalRunner,
 		TokenLedgerRepo:   tokenLedgerRepoForHTTP,
 		WebhookDeliveries: webhookDeliveriesRepo,
+		Projects:          projectsHandlerSvc,
 		SystemHealth: handler.SystemHealthDeps{
 			AdminPool: adminPool,
 			RedisAddr: os.Getenv("REDIS_ADDR"),

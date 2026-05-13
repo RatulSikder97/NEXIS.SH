@@ -85,6 +85,9 @@ func (s *Service) Start(ctx context.Context, p domain.Principal, workspaceID, wo
 			if v, ok := raw["repo_sha"].(string); ok && v != "" {
 				in.RepoSHA = v
 			}
+			if v, ok := raw["project_id"].(string); ok && v != "" {
+				in.ProjectID = v
+			}
 			if inc, ok := raw["incident"].(map[string]any); ok {
 				ip := &domain.IncidentPayload{}
 				if v, ok := inc["label"].(string); ok {
@@ -114,6 +117,7 @@ func (s *Service) Start(ctx context.Context, p domain.Principal, workspaceID, wo
 		ID:            runID,
 		OrgID:         p.OrgID,
 		WorkspaceID:   workspaceID,
+		ProjectID:     in.ProjectID,
 		WorkflowType:  workflowType,
 		TemporalRunID: "pending", // overwritten after ExecuteWorkflow
 		TemporalWfID:  runID,

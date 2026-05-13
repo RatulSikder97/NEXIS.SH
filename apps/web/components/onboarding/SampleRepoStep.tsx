@@ -11,9 +11,11 @@
 //      The Phase 6 timeline UI takes over from there.
 //
 //   B. Connect your own GitHub repo (middle)
-//      → /console/integrations
-//      User completes the OAuth dance and comes back to the console at
-//      their leisure; we don't try to round-trip them through the wizard.
+//      → /console/projects/new
+//      Drops the user into the project-connect wizard. The wizard guides
+//      them through the GitHub integration + the rest of the providers
+//      and POSTs a new project at the end. If GitHub itself isn't connected
+//      yet, the wizard's step 2 surfaces a CTA back to /console/integrations.
 //
 //   C. Skip (right)
 //      → /console
@@ -63,7 +65,7 @@ export function SampleRepoStep({
 
   function connectGithub() {
     setSubmitting("github");
-    router.replace("/console/integrations" as Route);
+    router.replace("/console/projects/new" as Route);
   }
 
   function skip() {

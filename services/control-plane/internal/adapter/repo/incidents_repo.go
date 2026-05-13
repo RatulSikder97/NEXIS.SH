@@ -52,9 +52,41 @@ func NewIncidentsRepoWithAdmin(pool, adminPool *pgxpool.Pool) *IncidentsRepo {
 // Insert lands a single raw incident. The (org_id, source, source_event_id)
 // unique index makes Insert idempotent — a retried webhook delivery is a no-op
 // rather than a duplicate row.
+//
+// Fingerprint fields on RawIncident are folded into raw_payload under a
+// canonical "_fingerprint" key so the Sentinel router can recover them later
+// without each adapter reinventing the wire shape. The fingerprint copy is
+// purely additive — existing raw_payload keys are preserved untouched.
 func (r *IncidentsRepo) Insert(ctx context.Context, orgID string, raw domain.RawIncident) error {
 	q := db.FromCtx(ctx, r.pool)
-	payloadJSON, err := json.Marshal(raw.Payload)
+	payload := raw.Payload
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	// Fold the fingerprint into the payload under a stable key so a future
+	// schema-less reader (Phase 7 metric pipeline) can recover the routing
+	// inputs without a join. Per-field empty checks keep the payload tidy
+	// when an adapter has nothing to contribute.
+	fp := map[string]any{}
+	if raw.SentryOrganizationSlug != "" {
+		fp["sentry_organization_slug"] = raw.SentryOrganizationSlug
+	}
+	if raw.SentryProjectSlug != "" {
+		fp["sentry_project_slug"] = raw.SentryProjectSlug
+	}
+	if raw.DatadogServiceTag != "" {
+		fp["datadog_service_tag"] = raw.DatadogServiceTag
+	}
+	if raw.PagerDutyServiceID != "" {
+		fp["pagerduty_service_id"] = raw.PagerDutyServiceID
+	}
+	if raw.GitHubRepo != "" {
+		fp["github_repo"] = raw.GitHubRepo
+	}
+	if len(fp) > 0 {
+		payload["_fingerprint"] = fp
+	}
+	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
@@ -64,6 +96,34 @@ func (r *IncidentsRepo) Insert(ctx context.Context, orgID string, raw domain.Raw
         ON CONFLICT (org_id, source, source_event_id) DO NOTHING
     `, orgID, raw.Source, raw.SourceEventID, raw.Title, raw.Level, raw.Service, raw.Environment, payloadJSON)
 	return err
+}
+
+// UpdateProjectID stamps incidents_raw.project_id once Sentinel's router
+// resolves a project for the row. Runs on the admin pool because the call
+// site is the Sentinel goroutine (no principal in ctx), and the column is a
+// system-write that should not be filtered by RLS.
+//
+// Idempotent: re-stamping with the same value is a no-op. A nil/empty
+// projectID is rejected as a misuse rather than silently writing NULL — the
+// router only calls this on a successful match.
+func (r *IncidentsRepo) UpdateProjectID(ctx context.Context, incidentRawID, projectID string) error {
+	if incidentRawID == "" {
+		return fmt.Errorf("IncidentsRepo.UpdateProjectID: empty incident id")
+	}
+	if projectID == "" {
+		return fmt.Errorf("IncidentsRepo.UpdateProjectID: empty project id")
+	}
+	if r.adminPool == nil {
+		return fmt.Errorf("IncidentsRepo.UpdateProjectID: %w", domain.ErrUnknown)
+	}
+	_, err := r.adminPool.Exec(ctx, `
+		UPDATE incidents_raw SET project_id = $2::uuid
+		WHERE id = $1::uuid
+	`, incidentRawID, projectID)
+	if err != nil {
+		return fmt.Errorf("IncidentsRepo.UpdateProjectID: %w", err)
+	}
+	return nil
 }
 
 // compile-time conformance check
@@ -101,7 +161,12 @@ func (r *IncidentsRepo) PollFatalSince(ctx context.Context, orgID string, since 
 		       COALESCE(environment, '') AS environment,
 		       COALESCE(raw_payload->>'stacktrace', '') AS stacktrace,
 		       COALESCE(raw_payload->>'logs', '') AS logs,
-		       received_at
+		       received_at,
+		       COALESCE(raw_payload->'_fingerprint'->>'sentry_organization_slug', '') AS sentry_org_slug,
+		       COALESCE(raw_payload->'_fingerprint'->>'sentry_project_slug', '')      AS sentry_project_slug,
+		       COALESCE(raw_payload->'_fingerprint'->>'datadog_service_tag', '')       AS datadog_service_tag,
+		       COALESCE(raw_payload->'_fingerprint'->>'pagerduty_service_id', '')      AS pagerduty_service_id,
+		       COALESCE(raw_payload->'_fingerprint'->>'github_repo', '')               AS github_repo
 		FROM incidents_raw
 		WHERE org_id=$1 AND source IN ('sentry','datadog','pagerduty')
 		      AND level='fatal' AND received_at > $2
@@ -117,7 +182,10 @@ func (r *IncidentsRepo) PollFatalSince(ctx context.Context, orgID string, since 
 		var x domain.IncidentRow
 		if err := rows.Scan(&x.ID, &x.OrgID, &x.Source, &x.SourceEventID,
 			&x.Level, &x.Title, &x.Service, &x.Environment,
-			&x.Stacktrace, &x.Logs, &x.ReceivedAt); err != nil {
+			&x.Stacktrace, &x.Logs, &x.ReceivedAt,
+			&x.SentryOrganizationSlug, &x.SentryProjectSlug,
+			&x.DatadogServiceTag, &x.PagerDutyServiceID, &x.GitHubRepo,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, x)

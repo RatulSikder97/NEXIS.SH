@@ -45,6 +45,7 @@ type Detector struct {
 	workspaces   WorkspacesReader
 	integrations IntegrationsReader
 	audit        domain.AuditWriter
+	router       *Router
 	workflowType string
 	interval     time.Duration
 	logger       *slog.Logger
@@ -67,6 +68,11 @@ type Config struct {
 	Workspaces   WorkspacesReader
 	Integrations IntegrationsReader
 	Audit        domain.AuditWriter
+	// Router resolves a project_id for each emitted trigger. Optional —
+	// when nil the detector skips project routing and every trigger fires
+	// with ProjectID="" (workflow falls back to fixtures). Constructed
+	// alongside the detector in cmd/server/main.go from the projects repo.
+	Router *Router
 	// WorkflowType selects which Temporal workflow type the detector kicks off.
 	// Phase 6 uses recovery.WorkflowType ("RecoveryPipeline").
 	WorkflowType string
@@ -92,6 +98,7 @@ func New(cfg Config) *Detector {
 		workspaces:    cfg.Workspaces,
 		integrations:  cfg.Integrations,
 		audit:         cfg.Audit,
+		router:        cfg.Router,
 		workflowType:  cfg.WorkflowType,
 		interval:      cfg.Interval,
 		logger:        cfg.Logger,
@@ -187,6 +194,15 @@ func (d *Detector) tick(ctx context.Context, now time.Time) {
 
 		triggers := Apply(orgID, wsID, last, lastTrig, fatals, recentCount, now)
 		triggers = d.dedupeTriggers(orgID, triggers, now)
+		// Project routing — resolve a project_id for each trigger so the
+		// recovery workflow has the right repo/app/channel mapping. The
+		// router stamps trigger.ProjectID in place; failures are logged but
+		// don't drop the trigger (workflow falls back to fixtures).
+		if d.router != nil {
+			for i := range triggers {
+				_ = d.router.Route(ctx, &triggers[i])
+			}
+		}
 		for _, t := range triggers {
 			d.fire(ctx, t)
 			// Stamp the dedupe ledger AFTER fire so a concurrent failure
@@ -264,12 +280,16 @@ func (d *Detector) TriggerOne(ctx context.Context, orgID, incidentID string) (do
 // logged at WARN — a Temporal-side failure should not take down the detector.
 func (d *Detector) fire(ctx context.Context, t domain.IncidentTrigger) {
 	princ := domain.Principal{Role: "system", OrgID: t.OrgID, UserID: ""}
-	inputJSON, _ := json.Marshal(map[string]any{
+	input := map[string]any{
 		"triggered_by": "sentinel",
 		"incident_id":  t.IncidentID,
 		"rule":         t.Rule,
 		"detected_at":  t.DetectedAt,
-	})
+	}
+	if t.ProjectID != "" {
+		input["project_id"] = t.ProjectID
+	}
+	inputJSON, _ := json.Marshal(input)
 	run, err := d.workflows.Start(ctx, princ, t.WorkspaceID, d.workflowType, inputJSON)
 	if err != nil {
 		d.logger.Warn("sentinel.detector.workflow_start",

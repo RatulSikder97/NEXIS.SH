@@ -30,6 +30,7 @@ import {
   AlertTriangle,
   Beaker,
   BookOpen,
+  Boxes,
   CheckSquare,
   ChevronsLeft,
   ChevronsRight,
@@ -56,6 +57,7 @@ import { cn } from "@/lib/utils";
 import { pipelines } from "@/lib/pipelines";
 import { approvals } from "@/lib/approvals";
 import { integrations } from "@/lib/integrations";
+import { projects } from "@/lib/projects";
 import { WorkspaceSwitcher } from "@/components/workspaces/WorkspaceSwitcher";
 import { SystemStatusPill } from "@/components/console/SystemStatusPill";
 import { ActivityTicker } from "@/components/console/ActivityTicker";
@@ -74,7 +76,8 @@ type NavItem = {
     | "workflows"
     | "agents"
     | "integrations"
-    | "validator";
+    | "validator"
+    | "projects";
   // Constant badge text (e.g. "9" on Agents) — overrides dynamic counts.
   constantBadge?: string;
   // Optional secondary line shown below the label (expanded mode only).
@@ -85,6 +88,7 @@ const COOKIE_WORKSPACE = "nexis_workspace";
 const INCIDENTS_POLL_MS = 10_000;
 const APPROVALS_POLL_MS = 10_000;
 const INTEGRATIONS_POLL_MS = 60_000;
+const PROJECTS_POLL_MS = 60_000;
 
 function readWorkspaceCookie(): string | null {
   if (typeof document === "undefined") return null;
@@ -158,6 +162,34 @@ function usePendingApprovalsCount(): number {
   return count;
 }
 
+function useProjectsCount(): number {
+  const [count, setCount] = React.useState(0);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function tick() {
+      const wsId = readWorkspaceCookie();
+      if (!wsId) {
+        if (!cancelled) setCount(0);
+        return;
+      }
+      try {
+        const rows = await projects.list(wsId);
+        if (cancelled) return;
+        setCount(rows.length);
+      } catch {
+        // swallow — endpoint may not be live yet.
+      }
+    }
+    void tick();
+    const id = window.setInterval(tick, PROJECTS_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+  return count;
+}
+
 function useIntegrationsConnectedSummary(): { connected: number; total: number } {
   const [s, setS] = React.useState<{ connected: number; total: number }>({
     connected: 0,
@@ -194,6 +226,12 @@ const SECTION_WORKSPACE: { label: string; items: NavItem[] } = {
   label: "Workspace",
   items: [
     { href: "/console", label: "Dashboard", icon: LayoutDashboard },
+    {
+      href: "/console/projects",
+      label: "Projects",
+      icon: Boxes,
+      navKey: "projects",
+    },
     {
       href: "/console/incidents",
       label: "Incidents",
@@ -443,6 +481,7 @@ function badgeFor(
     approvals: number;
     integrationsConnected: number;
     integrationsTotal: number;
+    projects: number;
   },
 ): { count?: string; tone: BadgeTone; label: string } | null {
   switch (navKey) {
@@ -469,6 +508,10 @@ function badgeFor(
               : "info",
         label: "connected",
       };
+    case "projects":
+      return signals.projects > 0
+        ? { count: String(signals.projects), tone: "muted", label: "projects" }
+        : null;
     default:
       return null;
   }
@@ -484,6 +527,7 @@ export function Sidebar() {
   const runningIncidents = useRunningPipelineCount();
   const pendingApprovals = usePendingApprovalsCount();
   const integrationsSummary = useIntegrationsConnectedSummary();
+  const projectsCount = useProjectsCount();
   void tick;
 
   function toggle() {
@@ -509,6 +553,7 @@ export function Sidebar() {
     approvals: pendingApprovals,
     integrationsConnected: integrationsSummary.connected,
     integrationsTotal: integrationsSummary.total,
+    projects: projectsCount,
   };
 
   const sections = [

@@ -81,6 +81,35 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 		prior = in.PriorOutputs
 	}
 
+	// Phase 7 — Projects (self-healing). LoadProject fills in.Project from
+	// the projects repo when ProjectID is set; nil + error are both non-
+	// fatal so the legacy fixture path still works for stub runs.
+	if in.ProjectID != "" {
+		loadCtx := workflow.WithActivityOptions(ctx, stdActivityOpts)
+		var loaded LoadProjectOutput
+		if err := workflow.ExecuteActivity(loadCtx, (*Activities).LoadProject, LoadProjectInput{
+			OrgID:     in.OrgID,
+			ProjectID: in.ProjectID,
+		}).Get(loadCtx, &loaded); err != nil {
+			workflow.GetLogger(ctx).Warn("recovery.load_project_failed",
+				"project_id", in.ProjectID, "err", err)
+		} else if loaded.Project != nil {
+			in.Project = loaded.Project
+			// Kill-switch short-circuit. If the project's policy has the kill
+			// switch engaged, fail closed before any agent fires. Saves token
+			// burn and stops the pipeline at the earliest possible moment.
+			if loaded.Project.Policy.KillSwitchEnabled {
+				recordEvent(ctx, in, domain.AgentPipeline, "Pipeline.KillSwitch", domain.ActFailed,
+					"project kill switch engaged", map[string]interface{}{
+						"project_id": loaded.Project.ID,
+					}, 1)
+				return PipelineOutput{}, temporal.NewNonRetryableApplicationError(
+					"project kill switch engaged", "KillSwitchError", nil,
+				)
+			}
+		}
+	}
+
 	// foldPrior pulls structured payload of a completed activity into the
 	// prior map under its agent name. This is what each L1 agent reads via
 	// AgentInput.PriorOutputs.
@@ -187,14 +216,54 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 	if id, ok := rApprove.Payload["decision_id"].(string); ok {
 		decisionID = id
 	}
+	// Phase 7 — project policy overrides. The ApprovalGateRoute activity
+	// folds these into the payload so the workflow can short-circuit
+	// without re-reading the project here.
+	policyKillSwitch, _ := rApprove.Payload["kill_switch"].(bool)
+	policyAutoApprove, _ := rApprove.Payload["auto_approved"].(bool)
+	policyCountdown := 0
+	if v, ok := rApprove.Payload["countdown_secs"].(int); ok {
+		policyCountdown = v
+	} else if v, ok := rApprove.Payload["countdown_secs"].(int64); ok {
+		policyCountdown = int(v)
+	} else if v, ok := rApprove.Payload["countdown_secs"].(float64); ok {
+		policyCountdown = int(v)
+	}
+
+	// Kill-switch — fail closed regardless of severity.
+	if policyKillSwitch {
+		out := PipelineOutput{
+			DurationMS:         workflow.Now(ctx).Sub(start).Milliseconds(),
+			Results:            results,
+			ApprovalDecisionID: decisionID,
+		}
+		recordEvent(ctx, in, domain.AgentPipeline, "Pipeline.Complete", domain.ActFailed,
+			"project kill switch engaged",
+			map[string]interface{}{
+				"duration_ms": out.DurationMS,
+				"decision":    "kill_switch",
+			}, 1)
+		return out, temporal.NewNonRetryableApplicationError(
+			"project kill switch engaged", "KillSwitchError", nil,
+		)
+	}
 
 	if severityStr != "" {
+		// Policy auto-approval — force LOW path so awaitApprovalDecision
+		// short-circuits without a signal/timer race.
+		if policyAutoApprove {
+			severityStr = string(domain.SeverityLow)
+		}
 		// Signal/timer race. workflow.GetSignalChannel + workflow.NewTimer +
 		// workflow.NewSelector are all replay-safe — running the race inside
 		// the workflow body (rather than an activity) is required to keep
 		// determinism on Temporal history replay.
 		severity := domain.Severity(severityStr)
-		sig, sigErr := awaitApprovalDecision(ctx, severity)
+		mediumTimeout := ApprovalMediumTimeout
+		if policyCountdown > 0 && severity == domain.SeverityMedium {
+			mediumTimeout = time.Duration(policyCountdown) * time.Second
+		}
+		sig, sigErr := awaitApprovalDecisionWithTimeout(ctx, severity, mediumTimeout)
 		if sigErr != nil {
 			recordEvent(ctx, in, domain.AgentApprovalGate, "ApprovalGate.Finalize", domain.ActFailed, sigErr.Error(), nil, 1)
 			return PipelineOutput{}, sigErr
@@ -273,6 +342,14 @@ func clonePrior(m map[string]any) map[string]any {
 // replay-safe. The selector closes over local vars by reference; we never
 // mutate workflow state from outside the selector callbacks.
 func awaitApprovalDecision(ctx workflow.Context, severity domain.Severity) (domain.ApprovalSignal, error) {
+	return awaitApprovalDecisionWithTimeout(ctx, severity, ApprovalMediumTimeout)
+}
+
+// awaitApprovalDecisionWithTimeout accepts a per-call medium countdown so
+// the workflow can honour a project policy's MediumCountdownSeconds. Kept
+// distinct from awaitApprovalDecision so existing call sites + tests that
+// rely on the default 2-min timer don't have to change.
+func awaitApprovalDecisionWithTimeout(ctx workflow.Context, severity domain.Severity, mediumTimeout time.Duration) (domain.ApprovalSignal, error) {
 	if severity == domain.SeverityLow {
 		return domain.ApprovalSignal{
 			Decision:  domain.ApprovalAutoApproved,
@@ -287,8 +364,11 @@ func awaitApprovalDecision(ctx workflow.Context, severity domain.Severity) (doma
 
 	switch severity {
 	case domain.SeverityMedium:
+		if mediumTimeout <= 0 {
+			mediumTimeout = ApprovalMediumTimeout
+		}
 		timerCtx, cancelTimer := workflow.WithCancel(ctx)
-		timerFut := workflow.NewTimer(timerCtx, ApprovalMediumTimeout)
+		timerFut := workflow.NewTimer(timerCtx, mediumTimeout)
 		sel := workflow.NewSelector(ctx)
 		sel.AddReceive(sigCh, func(c workflow.ReceiveChannel, _ bool) {
 			c.Receive(ctx, &sig)

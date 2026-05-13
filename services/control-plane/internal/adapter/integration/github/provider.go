@@ -373,6 +373,9 @@ func (p *Provider) handlePullRequest(ctx context.Context, orgID string, body []b
 			"html_url": ev.PullRequest.HTMLURL,
 			"number":   ev.Number,
 		},
+		// Fingerprint — Sentinel's router keys projects by github_repo
+		// ("owner/repo"); repository.full_name already matches.
+		GitHubRepo: ev.Repository.FullName,
 	}
 	if err := p.sink.Insert(ctx, orgID, raw); err != nil {
 		// Surface but keep best-effort posture: the webhook return value
