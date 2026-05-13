@@ -37,6 +37,11 @@ func main() {
 
 	r.Get("/healthz", httphandler.Healthz("validator"))
 	r.Post("/v1/validate", httphandler.Validate(runner.NewDocker(image, logger), token, logger))
+	// Phase 6: property-based validation via the in-container Hypothesis
+	// sidecar. The client dials HYPOTHESIS_SOCKET (default
+	// /tmp/hypothesis.sock) per request; the sidecar entrypoint script
+	// inside the validator image launches it alongside this server.
+	r.Post("/v1/validate/property", httphandler.ValidateProperty(runner.NewHypothesisClient(), token, logger))
 
 	logger.Info("validator listening", "port", port, "image", image)
 	if err := http.ListenAndServe(":"+port, r); err != nil {

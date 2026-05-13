@@ -36,6 +36,11 @@ export type WorkflowRunStatus =
 // WorkflowRun is the wire shape of one row from the pipelines list / detail
 // endpoints. `current_step`, `completed_at`, `duration_ms`, and `error`
 // are omitted by the server when empty/nil — we use `?:` to match.
+//
+// Phase 6: `severity` may be projected onto the row by the control-plane
+// when the Synthesiser activity has fired — derived from its payload's
+// risk classification. Optional because pre-Phase-6 backends won't set it
+// and the field is also absent on rows where the gate hasn't run yet.
 export type WorkflowRun = {
   id: string;
   org_id: string;
@@ -47,7 +52,16 @@ export type WorkflowRun = {
   completed_at?: string;
   duration_ms?: number;
   error?: string;
+  severity?: IncidentSeverity;
 };
+
+// IncidentSeverity is the row-level severity bucket surfaced on the
+// incidents list. Mirrors approval.Classify on the Go side (low/medium/
+// high) plus an explicit "none" for the pre-classification state. The
+// approvals SDK uses the narrower ApprovalSeverity (low|medium|high) for
+// its own gate; here we carry "none" so the list cell can render an
+// explicit "no severity yet" pill when the Synthesiser hasn't fired.
+export type IncidentSeverity = "none" | "low" | "medium" | "high";
 
 // ActivityEventStatus tracks per-activity lifecycle within a run.
 export type ActivityEventStatus =
@@ -56,6 +70,47 @@ export type ActivityEventStatus =
   | "failed"
   | "retrying"
   | "timed_out";
+
+// Phase 6 — typed payloads for the L2 agents. Each carries the fields the
+// summary cards render in the incident detail header. These are kept as
+// individual exports so callers can do narrow type-guards via field
+// presence (e.g. `"root_cause" in payload` ⇒ PathfinderPayload) without
+// importing a discriminated union.
+//
+// All three are intentionally loose: the backend may evolve the payload
+// shape, and the UI degrades to "—" placeholders when expected fields are
+// missing. The `severity` field on SynthesiserPayload is what feeds the
+// list-row severity pill — backends that don't project it onto the
+// WorkflowRun row can still surface it here.
+export type PathfinderPayload = {
+  root_cause: string;
+  confidence: number;
+  evidence_chain?: string[];
+};
+
+export type SynthesiserPayload = {
+  selected_agents: string[];
+  scenario: string;
+  risk_score: number;
+  // Optional: severity is the bucket derived from risk_score. When the
+  // backend pre-classifies, the list page can read it without parsing the
+  // numeric score itself.
+  severity?: IncidentSeverity;
+};
+
+export type ValidatorPayload = {
+  tests_passed: boolean;
+  hypothesis_failures?: { input: string; counterexample: string }[];
+};
+
+// ActivityPayload is the loose union of payloads we know about. The
+// generic `Record<string, unknown>` fallback is preserved so unknown
+// shapes (Backend.Codegen, Sentinel detections, etc.) still type-check.
+export type ActivityPayload =
+  | PathfinderPayload
+  | SynthesiserPayload
+  | ValidatorPayload
+  | Record<string, unknown>;
 
 // ActivityEvent is the wire shape of one row in activity_events. `payload`
 // is opaque JSON; the timeline UI reads structured fields out of it for
@@ -68,7 +123,7 @@ export type ActivityEvent = {
   status: ActivityEventStatus;
   attempt: number;
   message?: string;
-  payload?: Record<string, unknown>;
+  payload?: ActivityPayload;
   ts: string;
 };
 
@@ -174,6 +229,33 @@ export const pipelines = {
       body: JSON.stringify(input),
     });
     return failOr<WorkflowRun>(r);
+  },
+
+  // latestFinishPayload returns the payload from the highest-seq terminal
+  // (succeeded/failed/timed_out) ActivityEvent matching the given agent
+  // role. Returns undefined when the activity hasn't reached a finish
+  // frame yet — callers should render "—" placeholders in that case.
+  //
+  // Phase 6 detail-page summary cards use this to pull the Pathfinder,
+  // Synthesiser, and Validator payloads off the events array without
+  // each card re-scanning the full list.
+  latestFinishPayload: (
+    events: ActivityEvent[],
+    role: string,
+  ): ActivityPayload | undefined => {
+    let best: ActivityEvent | undefined;
+    for (const e of events) {
+      if (e.agent_role !== role) continue;
+      if (
+        e.status !== "succeeded" &&
+        e.status !== "failed" &&
+        e.status !== "timed_out"
+      ) {
+        continue;
+      }
+      if (!best || e.seq > best.seq) best = e;
+    }
+    return best?.payload;
   },
 
   // events opens an EventSource and parses incoming `data:` frames as

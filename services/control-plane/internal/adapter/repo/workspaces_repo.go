@@ -179,3 +179,24 @@ func (r *WorkspacesRepo) OwnsWorkspace(ctx context.Context, orgID, workspaceID s
 	}
 	return n > 0, nil
 }
+
+// DefaultForOrg returns the org's "default" workspace id — the oldest one
+// created. Used by the Phase 6 Sentinel detector to pick a workspace to bind
+// the auto-triggered RecoveryPipeline run to: the goroutine has no UI
+// principal in ctx so it can't ask the user which workspace to use.
+//
+// Returns domain.ErrNotFound when the org has no workspaces. Uses the admin
+// pool — the goroutine runs on context.Background.
+func (r *WorkspacesRepo) DefaultForOrg(ctx context.Context, orgID string) (string, error) {
+	var id string
+	err := r.adminPool.QueryRow(ctx,
+		`SELECT id FROM workspaces WHERE org_id=$1 ORDER BY created_at ASC LIMIT 1`,
+		orgID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", domain.ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}

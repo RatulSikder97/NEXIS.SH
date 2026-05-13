@@ -614,7 +614,7 @@ Persisted via `next-themes`, default `light`, system-respecting opt-in.
 
 ---
 
-### Phase 6 — Agents L2 + Approval Gate (Weeks 16–18) `← MVP CUT-LINE`
+### Phase 6 — Agents L2 + Approval Gate (Weeks 16–18) `← MVP CUT-LINE` — Completed 2026-05-13
 
 **Scope**
 - **Sentinel** — streaming anomaly detector subscribed to Sentry + OTel metrics; emits `IncidentDetected`.

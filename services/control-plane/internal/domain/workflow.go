@@ -114,3 +114,15 @@ type WorkflowService interface {
 	List(ctx context.Context, p Principal, workspaceID string, limit int, before time.Time) ([]WorkflowRun, error)
 	Subscribe(ctx context.Context, runID string) <-chan ActivityEvent
 }
+
+// SynthesiserPlan is the Phase 6 plan the Synthesiser L2 agent produces.
+// SelectedAgents drives the L1 fan-out the workflow uses; SkippedAgents is
+// surfaced in the timeline so an analyst sees "QA was skipped because the
+// scenario was schema_drift". Rationale carries the human-readable why.
+type SynthesiserPlan struct {
+	Scenario       string      `json:"scenario"`
+	Confidence     float64     `json:"confidence"`
+	SelectedAgents []AgentName `json:"selected_agents"`
+	SkippedAgents  []AgentName `json:"skipped_agents"`
+	Rationale      string      `json:"rationale"`
+}

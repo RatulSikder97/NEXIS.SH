@@ -21,6 +21,7 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/devops"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/qa"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
+	neo4jstore "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/graphstore/neo4j"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/billing"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
@@ -36,9 +37,11 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/cron"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
+	platformneo4j "github.com/nexis-eco/nexis/services/control-plane/internal/platform/neo4j"
 	otelplatform "github.com/nexis-eco/nexis/services/control-plane/internal/platform/otel"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/sse"
 	temporalplatform "github.com/nexis-eco/nexis/services/control-plane/internal/platform/temporal"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/sentinel"
 	httpserver "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
 	recoverywf "github.com/nexis-eco/nexis/services/control-plane/internal/workflow/recovery"
@@ -134,10 +137,16 @@ func main() {
 	// the repos to the application pool so RLS-scoped queries inside the
 	// per-request tx see app.current_org_id; the pool itself is only the
 	// Querier fallback for code paths that don't carry a tx.
+	//
+	// Phase 6 widens the repos to dual-pool — the Sentinel detector goroutine
+	// (below) reads incidents_raw + integrations across every org via the
+	// admin pool, bypassing RLS.
 	var registry *integration.Registry
+	var intRepo *repo.IntegrationsRepo
+	var incRepo *repo.IncidentsRepo
 	if appPool != nil {
-		intRepo := repo.NewIntegrationsRepo(appPool)
-		incRepo := repo.NewIncidentsRepo(appPool)
+		intRepo = repo.NewIntegrationsRepoWithAdmin(appPool, adminPool)
+		incRepo = repo.NewIncidentsRepoWithAdmin(appPool, adminPool)
 		registry = integration.NewRegistry(integration.Deps{
 			Repo:                intRepo,
 			KV:                  kv,
@@ -147,6 +156,32 @@ func main() {
 	} else {
 		logger.Warn("integration registry disabled — DATABASE_URL_APP missing")
 	}
+
+	// Phase 6 — Neo4j codegraph driver. The graphStore variable is consumed by
+	// the Pathfinder L2 agent (Stage 4). A nil graphStore is tolerated — the
+	// Pathfinder activity short-circuits to the canned-evidence path when the
+	// driver is unreachable. We log the init outcome at boot so operators can
+	// tell whether Pathfinder will have real graph evidence.
+	var graphStore domain.Graph
+	if cfg.Neo4jURI != "" {
+		drv, nerr := platformneo4j.New(ctx, platformneo4j.Config{
+			URI: cfg.Neo4jURI, User: cfg.Neo4jUser, Password: cfg.Neo4jPass,
+		})
+		if nerr != nil {
+			logger.Warn("neo4j init failed; pathfinder graph evidence disabled", "err", nerr)
+		} else {
+			defer func() { _ = drv.Close(context.Background()) }()
+			if vErr := platformneo4j.Verify(ctx, drv); vErr != nil {
+				logger.Warn("neo4j verify failed; pathfinder graph evidence disabled", "err", vErr)
+			} else {
+				graphStore = neo4jstore.New(drv)
+				logger.Info("neo4j initialised", "uri", cfg.Neo4jURI)
+			}
+		}
+	} else {
+		logger.Warn("NEO4J_URI unset — pathfinder graph evidence disabled")
+	}
+	_ = graphStore // consumed by Pathfinder agent in Phase 6 Stage 4
 
 	// Phase 3.5 — workspaces + billing.
 	//
@@ -283,6 +318,12 @@ func main() {
 				}
 			}
 			acts := recoverywf.NewActivitiesFull(wfRepo, wfBroker, ps, vc, agentRegistry, ledger, stubSleep)
+			// Phase 6 — Sentinel.Detect ack body needs admin-pool reads of
+			// incidents_raw. Setting it post-construction keeps the existing
+			// NewActivitiesFull signature stable.
+			if incRepo != nil {
+				acts.IncidentsAdmin = incRepo
+			}
 
 			wfService = adapterworkflow.New(adapterworkflow.Config{
 				Repo:       wfRepo,
@@ -386,6 +427,35 @@ func main() {
 			{Name: "invoice_roller", Interval: 24 * time.Hour, Run: invoiceRoller.Run},
 		})
 		logger.Info("cron started", "usage_tick_seconds", cfg.UsageTickSeconds)
+	}
+
+	// Phase 6 — Sentinel detector goroutine. Polls incidents_raw + triggers a
+	// RecoveryPipeline run per detected fatal/spike row. Shares cronCtx so a
+	// SIGTERM cancels it alongside the cron jobs.
+	//
+	// All deps must be available — the dev fallback path (LLM-only boot) has
+	// no workflowService / incidents repo, so the goroutine simply doesn't
+	// start. Toggle via SENTINEL_ENABLED=0 to skip even when deps exist.
+	if cfg.SentinelEnabled && wfService != nil && incRepo != nil && wsRepo != nil && intRepo != nil {
+		det := sentinel.New(sentinel.Config{
+			Incidents:    incRepo,
+			Workflows:    wfService,
+			Workspaces:   wsRepo,
+			Integrations: intRepo,
+			Audit:        auditWriter,
+			WorkflowType: "RecoveryPipeline",
+			Interval:     time.Duration(cfg.SentinelPollIntervalMs) * time.Millisecond,
+			Logger:       logger,
+		})
+		go det.Run(cronCtx)
+		logger.Info("sentinel started", "interval_ms", cfg.SentinelPollIntervalMs)
+	} else if cfg.SentinelEnabled {
+		logger.Warn("sentinel disabled — required deps missing",
+			"wfService", wfService != nil,
+			"incRepo", incRepo != nil,
+			"wsRepo", wsRepo != nil,
+			"intRepo", intRepo != nil,
+		)
 	}
 
 	stop := make(chan os.Signal, 1)

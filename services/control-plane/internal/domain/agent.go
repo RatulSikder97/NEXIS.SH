@@ -14,6 +14,14 @@ const (
 	AgentNameQA           AgentName = "qa"
 	AgentNameDevOps       AgentName = "devops"
 	AgentNameDataEngineer AgentName = "data_engineer"
+
+	// Phase 6 — L2 agents. Sentinel detection lives outside the agent fleet
+	// (it's a goroutine in internal/sentinel/), but the workflow still needs
+	// the AgentName constants for Registry dispatch on the synthesiser /
+	// pathfinder / validator_l2 sides.
+	AgentNamePathfinder  AgentName = "pathfinder"
+	AgentNameSynthesiser AgentName = "synthesiser"
+	AgentNameValidatorL2 AgentName = "validator_l2"
 )
 
 // AllL1Agents lets the eval harness + factory iterate without hard-coding.
@@ -22,6 +30,13 @@ const (
 var AllL1Agents = []AgentName{
 	AgentNameArchitect, AgentNameBackend, AgentNameQA,
 	AgentNameDevOps, AgentNameDataEngineer,
+}
+
+// AllL2Agents lists the Phase 6 L2 agents that go through the Registry.
+// Note: AgentNameSentinel is NOT here because Sentinel.Detect is just an
+// ack inside the workflow — the real detection happens in the goroutine.
+var AllL2Agents = []AgentName{
+	AgentNamePathfinder, AgentNameSynthesiser, AgentNameValidatorL2,
 }
 
 // IncidentPayload is the minimal shape consumed by L1 agents in Phase 5. The

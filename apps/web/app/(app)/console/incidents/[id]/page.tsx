@@ -1,4 +1,6 @@
 // Phase 4 Stage 7 — Pipeline run detail page.
+// Phase 6 Stage 9 — pass-through for the `?live=1` flag so the client can
+// switch into the guided demo UI when the user just clicked an Inject CTA.
 //
 // Server component shell. Reads the run id from the route param (Next 16 hands
 // params as a Promise — we await before reading), resolves the current
@@ -23,11 +25,16 @@ const API =
 
 export default async function PipelineRunPage({
   params,
+  searchParams,
 }: {
-  // Next 16 hands route params as a Promise; await before reading .id.
+  // Next 16 hands route params + searchParams as a Promise; await before reading.
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  const sp = (await searchParams) ?? {};
+  const live = (Array.isArray(sp.live) ? sp.live[0] : sp.live) === "1";
+
   const c = await cookies();
   const session = c.get("nexis_session");
   if (!session) redirect("/sign-in");
@@ -62,6 +69,7 @@ export default async function PipelineRunPage({
       workspaceId={current.id}
       runId={id}
       initial={initial}
+      liveMode={live}
     />
   );
 }

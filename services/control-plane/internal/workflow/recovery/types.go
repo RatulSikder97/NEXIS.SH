@@ -23,13 +23,21 @@ type PipelineInput struct {
 	Incident     *domain.IncidentPayload `json:"incident,omitempty"`
 	RepoSHA      string                  `json:"repo_sha,omitempty"`
 	PriorOutputs map[string]any          `json:"prior_outputs,omitempty"`
+
+	// Phase 6 — populated by Synthesiser activity; consumed by the workflow
+	// to drive L1 ordering. Empty when the workflow starts; filled in mid-run
+	// via foldPrior. Kept as a typed *domain.SynthesiserPlan so the workflow
+	// can branch on Scenario without re-decoding the prior map.
+	SynthesiserPlan *domain.SynthesiserPlan `json:"synthesiser_plan,omitempty"`
 }
 
 // PipelineOutput is the workflow return value. Used by GetRun for the
 // trailing summary in the timeline header.
 type PipelineOutput struct {
-	DurationMS int64                   `json:"duration_ms"`
-	Results    []domain.ActivityResult `json:"results"`
+	DurationMS         int64                   `json:"duration_ms"`
+	Results            []domain.ActivityResult `json:"results"`
+	ApprovalDecisionID string                  `json:"approval_decision_id,omitempty"`
+	PRURL              string                  `json:"pr_url,omitempty"`
 }
 
 // RecordEventInput is the input shape for RecordActivityEvent. We keep it as
@@ -44,4 +52,14 @@ type RecordEventInput struct {
 	Attempt       int                    `json:"attempt"`
 	Message       string                 `json:"message"`
 	Payload       map[string]interface{} `json:"payload,omitempty"`
+}
+
+// ApprovalFinalizeInput is the input shape for the ApprovalGateFinalize
+// activity that runs after the workflow's signal/timer race resolves. It
+// carries the terminal ApprovalSignal so the activity can persist the
+// decision + write the audit row.
+type ApprovalFinalizeInput struct {
+	OrgID         string                  `json:"org_id"`
+	WorkflowRunID string                  `json:"workflow_run_id"`
+	Signal        domain.ApprovalSignal   `json:"signal"`
 }

@@ -105,6 +105,22 @@ services:
       retries: 10
     networks: [nexis]
 
+  causal-inference:
+    build:
+      context: services/causal-inference
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8090"
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import grpc, sys; ch=grpc.insecure_channel('localhost:8090'); grpc.channel_ready_future(ch).result(timeout=2); sys.exit(0)\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks: [nexis]
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.115.1
     command: ["--config=/etc/otel-collector.yaml"]
@@ -244,6 +260,25 @@ services:
       AGENT_MODEL_QA_OLLAMA:        ${AGENT_MODEL_QA_OLLAMA:-llama3.1:8b}
       AGENT_MODEL_DEVOPS_OLLAMA:    ${AGENT_MODEL_DEVOPS_OLLAMA:-llama3.1:8b}
       AGENT_MODEL_DATAENG_OLLAMA:   ${AGENT_MODEL_DATAENG_OLLAMA:-llama3.1:8b}
+      # Phase 6 — Agents L2 + Approval Gate + GitOps + Slack + Neo4j + Causal.
+      SENTINEL_ENABLED: ${SENTINEL_ENABLED:-1}
+      SENTINEL_POLL_INTERVAL_MS: ${SENTINEL_POLL_INTERVAL_MS:-10000}
+      NEO4J_URI:  bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASS: nexis_dev_password
+      CAUSAL_GRPC_ENDPOINT: causal-inference:8090
+      CAUSAL_ENABLED: ${CAUSAL_ENABLED:-1}
+      PATHFINDER_LLM_REFINE: ${PATHFINDER_LLM_REFINE:-0}
+      GITOPS_URL: http://gitops:8082
+      GITOPS_TOKEN: ${GITOPS_TOKEN:-dev-gitops-token-32byte}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-12345}
+      GITHUB_APP_PRIVATE_KEY_PATH: /run/secrets/github-app.pem
+      FIXTURE_REPO_OWNER: ${FIXTURE_REPO_OWNER:-nexis-eco}
+      FIXTURE_REPO_NAME:  ${FIXTURE_REPO_NAME:-fixture-recovery-demo}
+      FIXTURE_REPO_DEFAULT_BRANCH: ${FIXTURE_REPO_DEFAULT_BRANCH:-main}
+      FIXTURE_REPO_INSTALLATION_ID: ${FIXTURE_REPO_INSTALLATION_ID:-98765}
+      SLACK_ENABLED: ${SLACK_ENABLED:-1}
+      APPROVAL_MEDIUM_TIMEOUT_SECONDS: ${APPROVAL_MEDIUM_TIMEOUT_SECONDS:-120}
       OTEL_SERVICE_NAME: nexis-control-plane
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -259,8 +294,14 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      causal-inference:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    secrets:
+      - github-app
     networks: [nexis]
 
   validator:
@@ -284,8 +325,18 @@ services:
       dockerfile: Dockerfile
     environment:
       PORT: "8082"
+      DATABASE_URL: postgres://nexis_gitops:nexis_dev_password@postgres:5432/nexis?sslmode=disable
+      GITOPS_TOKEN: ${GITOPS_TOKEN:-dev-gitops-token-32byte}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-12345}
+      GITHUB_APP_PRIVATE_KEY_PATH: /run/secrets/github-app.pem
+      LOG_LEVEL: info
     ports:
       - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    secrets:
+      - github-app
     networks: [nexis]
 
 networks:
@@ -297,3 +348,7 @@ volumes:
   minio_data:
   neo4j_data:
   grafana_data:
+
+secrets:
+  github-app:
+    file: ./secrets/github-app.pem

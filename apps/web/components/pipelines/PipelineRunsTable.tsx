@@ -1,11 +1,15 @@
 "use client";
 
 // Phase 4 Stage 7 — Pipeline runs table.
+// Phase 6 Stage 9 — added severity column + "awaiting approval" indicator.
 //
-// Five columns:
+// Six columns:
 //   Run ID (mono, last 8 chars, click → detail page)
 //   Started (relative time, "2m ago")
-//   Status  (StatusPill)
+//   Severity (SeverityPill — "none/low/medium/high"; "—" until classified)
+//   Status  (StatusPill, optional "Awaiting approval" amber dot when the
+//            run is running with medium|high severity — a hint the approval
+//            gate is blocked on a human signal)
 //   Current step (AgentIcon + label)
 //   Duration (server-provided duration_ms or live elapsed for running rows)
 //
@@ -19,6 +23,7 @@ import type { Route } from "next";
 
 import { AgentIcon } from "@/components/pipelines/AgentIcon";
 import { StatusPill } from "@/components/pipelines/StatusPill";
+import { SeverityPill } from "@/components/incidents/SeverityPill";
 import { AGENT_LABELS, type WorkflowRun } from "@/lib/pipelines";
 
 // formatDuration turns milliseconds into a short human label. Inputs are
@@ -86,6 +91,7 @@ export function PipelineRunsTable({
           <tr>
             <th className="px-4 py-2 font-medium">Run</th>
             <th className="px-4 py-2 font-medium">Started</th>
+            <th className="px-4 py-2 font-medium">Severity</th>
             <th className="px-4 py-2 font-medium">Status</th>
             <th className="px-4 py-2 font-medium">Current step</th>
             <th className="px-4 py-2 font-medium">Duration</th>
@@ -96,7 +102,7 @@ export function PipelineRunsTable({
           {runs.length === 0 ? (
             <tr>
               <td
-                colSpan={6}
+                colSpan={7}
                 className="px-4 py-8 text-center text-sm text-[var(--color-muted-foreground)]"
               >
                 No pipeline runs yet.
@@ -107,6 +113,14 @@ export function PipelineRunsTable({
               const short = run.id.slice(0, 8);
               const dur = runDurationMs(run, now);
               const stepRole = run.current_step?.trim() ?? "";
+              // "Awaiting approval" surfaces only while the run is still
+              // in motion AND severity is medium|high — i.e. the approval
+              // gate likely fired and is waiting on a human. Once the run
+              // terminates we drop the indicator (the final StatusPill
+              // colour carries the outcome on its own).
+              const awaitingApproval =
+                run.status === "running" &&
+                (run.severity === "medium" || run.severity === "high");
               return (
                 <tr
                   key={run.id}
@@ -124,7 +138,24 @@ export function PipelineRunsTable({
                     {formatRelative(run.started_at)}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusPill status={run.status} />
+                    <SeverityPill severity={run.severity} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-2">
+                      <StatusPill status={run.status} />
+                      {awaitingApproval && (
+                        <span
+                          className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+                          title="Approval gate is blocked on a human signal"
+                        >
+                          <span
+                            className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"
+                            aria-hidden
+                          />
+                          Awaiting approval
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     {stepRole ? (

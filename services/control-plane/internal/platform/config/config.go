@@ -86,6 +86,26 @@ type Config struct {
 	// FixtureSHA is the resolved repo SHA used as `fixture-<sha>` for retrieval.
 	// Filled at server start by the seed CLI / pipeline_demo; empty is OK.
 	FixtureSHA string
+
+	// Phase 6 — Agents L2 + Approval Gate + GitOps + Slack + Neo4j + Causal.
+	SentinelEnabled              bool
+	SentinelPollIntervalMs       int
+	Neo4jURI                     string
+	Neo4jUser                    string
+	Neo4jPass                    string
+	CausalGRPCEndpoint           string
+	CausalEnabled                bool
+	PathfinderLLMRefine          bool
+	GitOpsURL                    string
+	GitOpsToken                  string
+	GitHubAppID                  int64
+	GitHubAppPrivateKeyPath      string
+	FixtureRepoOwner             string
+	FixtureRepoName              string
+	FixtureRepoDefaultBranch     string
+	FixtureRepoInstallationID    int64
+	SlackEnabled                 bool
+	ApprovalMediumTimeoutSeconds int
 }
 
 func Load() Config {
@@ -156,6 +176,26 @@ func Load() Config {
 		AgentModelQAOllama:        env("AGENT_MODEL_QA_OLLAMA", "llama3.1:8b"),
 		AgentModelDevOpsOllama:    env("AGENT_MODEL_DEVOPS_OLLAMA", "llama3.1:8b"),
 		AgentModelDataEngOllama:   env("AGENT_MODEL_DATAENG_OLLAMA", "llama3.1:8b"),
+
+		// Phase 6 — Agents L2 + Approval Gate + GitOps + Slack + Neo4j + Causal.
+		SentinelEnabled:              parseBool(env("SENTINEL_ENABLED", "1")),
+		SentinelPollIntervalMs:       envInt("SENTINEL_POLL_INTERVAL_MS", 10000),
+		Neo4jURI:                     env("NEO4J_URI", "bolt://neo4j:7687"),
+		Neo4jUser:                    env("NEO4J_USER", "neo4j"),
+		Neo4jPass:                    env("NEO4J_PASS", "nexis_dev_password"),
+		CausalGRPCEndpoint:           env("CAUSAL_GRPC_ENDPOINT", "causal-inference:8090"),
+		CausalEnabled:                parseBool(env("CAUSAL_ENABLED", "1")),
+		PathfinderLLMRefine:          parseBool(env("PATHFINDER_LLM_REFINE", "0")),
+		GitOpsURL:                    env("GITOPS_URL", "http://gitops:8082"),
+		GitOpsToken:                  env("GITOPS_TOKEN", "dev-gitops-token-32byte"),
+		GitHubAppID:                  int64(envInt("GITHUB_APP_ID", 12345)),
+		GitHubAppPrivateKeyPath:      env("GITHUB_APP_PRIVATE_KEY_PATH", "/run/secrets/github-app.pem"),
+		FixtureRepoOwner:             env("FIXTURE_REPO_OWNER", "nexis-eco"),
+		FixtureRepoName:              env("FIXTURE_REPO_NAME", "fixture-recovery-demo"),
+		FixtureRepoDefaultBranch:     env("FIXTURE_REPO_DEFAULT_BRANCH", "main"),
+		FixtureRepoInstallationID:    int64(envInt("FIXTURE_REPO_INSTALLATION_ID", 98765)),
+		SlackEnabled:                 parseBool(env("SLACK_ENABLED", "1")),
+		ApprovalMediumTimeoutSeconds: envInt("APPROVAL_MEDIUM_TIMEOUT_SECONDS", 120),
 	}
 }
 

@@ -33,6 +33,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { pipelines } from "@/lib/pipelines";
+import { approvals } from "@/lib/approvals";
 import { WorkspaceSwitcher } from "@/components/workspaces/WorkspaceSwitcher";
 
 type NavItem = {
@@ -42,7 +43,7 @@ type NavItem = {
   // navKey lets a NavLink consumer correlate this row with side-channel
   // state (e.g. a running-count badge on Incidents) without leaking that
   // logic into the static config table.
-  navKey?: "incidents";
+  navKey?: "incidents" | "approvals";
 };
 
 const WORKSPACE: NavItem[] = [
@@ -53,7 +54,12 @@ const WORKSPACE: NavItem[] = [
     icon: AlertTriangle,
     navKey: "incidents",
   },
-  { href: "/console/approvals", label: "Approvals", icon: CheckSquare },
+  {
+    href: "/console/approvals",
+    label: "Approvals",
+    icon: CheckSquare,
+    navKey: "approvals",
+  },
   { href: "/console/audit", label: "Audit", icon: FileText },
 ];
 
@@ -62,6 +68,11 @@ const WORKSPACE: NavItem[] = [
 // the console is scoped to.
 const COOKIE_WORKSPACE = "nexis_workspace";
 const INCIDENTS_POLL_MS = 10_000;
+// Phase 6 Stage 9 — pending-approvals badge polls at the same cadence as
+// running-incidents. The two badges live next to each other in the sidebar
+// so a single 10s heartbeat keeps the operator's "what needs my attention?"
+// surface fresh without spamming the control-plane.
+const APPROVALS_POLL_MS = 10_000;
 
 function readWorkspaceCookie(): string | null {
   if (typeof document === "undefined") return null;
@@ -111,6 +122,41 @@ function useRunningPipelineCount(): number {
   return count;
 }
 
+// usePendingApprovalsCount polls /v1/workspaces/{ws}/approvals/pending every
+// 10s and returns the row count. The endpoint is owner|admin only — for
+// regular members the call returns 403 and we degrade to 0 silently so the
+// badge simply never appears for non-privileged viewers. We do NOT push the
+// 403 through the standard error path because the sidebar mounts on every
+// console page and surfacing a perpetual "forbidden" toast would be noisy.
+function usePendingApprovalsCount(): number {
+  const [count, setCount] = React.useState(0);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function tick() {
+      const wsId = readWorkspaceCookie();
+      if (!wsId) {
+        if (!cancelled) setCount(0);
+        return;
+      }
+      try {
+        const rows = await approvals.pending(wsId);
+        if (cancelled) return;
+        setCount(rows.length);
+      } catch {
+        // 403 (member role) and transient errors both land here. The next
+        // tick will retry; in the 403 case it keeps failing harmlessly.
+      }
+    }
+    void tick();
+    const id = window.setInterval(tick, APPROVALS_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+  return count;
+}
+
 const PLATFORM: NavItem[] = [
   { href: "/console/agents", label: "Agents", icon: Activity },
   // Phase 5 Stage 8 — Eval surface compares OpenAI vs Ollama for the
@@ -128,6 +174,10 @@ function NavLink({
   collapsed,
   active,
   badge,
+  // badgeTone toggles the colour family: "info" (blue) for running counts,
+  // "warn" (amber) for "action required" counts like pending approvals.
+  badgeTone = "info",
+  badgeLabel,
 }: {
   item: NavItem;
   collapsed: boolean;
@@ -135,9 +185,19 @@ function NavLink({
   // Optional positive integer rendered as a pill next to the label (or as
   // a small superscript dot when the sidebar is collapsed).
   badge?: number;
+  badgeTone?: "info" | "warn";
+  // badgeLabel overrides the aria-label suffix. Defaults to "running" to
+  // preserve the Phase 4 behaviour for the Incidents row.
+  badgeLabel?: string;
 }) {
   const Icon = item.icon;
   const showBadge = typeof badge === "number" && badge > 0;
+  const badgeClasses =
+    badgeTone === "warn"
+      ? "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300"
+      : "bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300";
+  const dotClass = badgeTone === "warn" ? "bg-amber-500" : "bg-blue-500";
+  const labelSuffix = badgeLabel ?? "running";
   return (
     <Link
       // typedRoutes treats the href as Route; cast through unknown for the
@@ -156,16 +216,22 @@ function NavLink({
       {!collapsed && <span className="truncate">{item.label}</span>}
       {!collapsed && showBadge && (
         <span
-          aria-label={`${badge} running`}
-          className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 ring-1 ring-blue-500/30 dark:text-blue-300"
+          aria-label={`${badge} ${labelSuffix}`}
+          className={cn(
+            "ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
+            badgeClasses,
+          )}
         >
           {badge}
         </span>
       )}
       {collapsed && showBadge && (
         <span
-          aria-label={`${badge} running`}
-          className="absolute right-1 top-1 inline-block h-1.5 w-1.5 rounded-full bg-blue-500"
+          aria-label={`${badge} ${labelSuffix}`}
+          className={cn(
+            "absolute right-1 top-1 inline-block h-1.5 w-1.5 rounded-full",
+            dotClass,
+          )}
         />
       )}
     </Link>
@@ -220,6 +286,9 @@ export function Sidebar() {
   // Running-pipelines count is hoisted out of the per-NavLink render so the
   // 10s poll runs exactly once for the whole sidebar.
   const runningIncidents = useRunningPipelineCount();
+  // Pending-approvals count drives an amber badge on the Approvals row.
+  // Owner|admin only — degrades silently to 0 for other roles.
+  const pendingApprovals = usePendingApprovalsCount();
   // Force-read `tick` so the IDE doesn't strip the unused import; the
   // subscribe callback already triggers re-renders.
   void tick;

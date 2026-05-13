@@ -13,18 +13,34 @@ import (
 )
 
 // IntegrationsRepo persists per-org integration connections + their encrypted
-// secret blob. Every method routes through db.FromCtx(ctx, pool) so the
-// per-request RLS tx (with SET LOCAL app.current_org_id) is used when
+// secret blob. Every tenant-scoped method routes through db.FromCtx(ctx, pool)
+// so the per-request RLS tx (with SET LOCAL app.current_org_id) is used when
 // available; the pool fallback is exercised only by adapters that explicitly
-// run outside the request lifecycle (none in Phase 3 — webhook handlers attach
-// an RLS tx after they resolve org_id).
-type IntegrationsRepo struct{ pool *pgxpool.Pool }
+// run outside the request lifecycle (none in Phase 3 — webhook handlers
+// attach an RLS tx after they resolve org_id).
+//
+// adminPool (optional) is used by Phase 6 system-job paths — the Sentinel
+// detector's cross-org sweep (ConnectedSentryOrgs). When nil the cross-org
+// methods return ErrUnknown so a misconfigured boot fails loud.
+type IntegrationsRepo struct {
+	pool      *pgxpool.Pool
+	adminPool *pgxpool.Pool
+}
 
 // NewIntegrationsRepo builds an IntegrationsRepo against the supplied pool.
 // The pool is used only as the Querier fallback; production routes always
 // carry a tx in ctx.
 func NewIntegrationsRepo(pool *pgxpool.Pool) *IntegrationsRepo {
 	return &IntegrationsRepo{pool: pool}
+}
+
+// NewIntegrationsRepoWithAdmin wires both pools. The admin pool drives
+// cross-org sweeps used by the Sentinel detector goroutine.
+func NewIntegrationsRepoWithAdmin(pool, adminPool *pgxpool.Pool) *IntegrationsRepo {
+	if adminPool == nil {
+		adminPool = pool
+	}
+	return &IntegrationsRepo{pool: pool, adminPool: adminPool}
 }
 
 // Upsert inserts a new integration row or updates the existing one on the
@@ -112,4 +128,38 @@ func (r *IntegrationsRepo) Delete(ctx context.Context, orgID string, provider do
 	q := db.FromCtx(ctx, r.pool)
 	_, err := q.Exec(ctx, `DELETE FROM integrations WHERE org_id=$1 AND provider=$2`, orgID, string(provider))
 	return err
+}
+
+// ConnectedSentryOrgs returns the org ids that have a connected Sentry
+// integration. Used by the Phase 6 Sentinel detector to enumerate the orgs it
+// must poll each tick.
+//
+// Runs on the admin pool — the detector goroutine has no principal in ctx, so
+// the per-request RLS path would filter every row out. The query is also
+// inherently cross-tenant by design (the detector serves every org on this
+// control plane), so RLS bypass is the right answer.
+//
+// Returns domain.ErrUnknown when adminPool is unwired.
+func (r *IntegrationsRepo) ConnectedSentryOrgs(ctx context.Context) ([]string, error) {
+	if r.adminPool == nil {
+		return nil, domain.ErrUnknown
+	}
+	rows, err := r.adminPool.Query(ctx, `
+		SELECT org_id FROM integrations
+		WHERE provider='sentry' AND status='connected'
+		ORDER BY org_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }

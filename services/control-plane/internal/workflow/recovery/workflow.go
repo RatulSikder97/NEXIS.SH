@@ -10,6 +10,18 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 )
 
+// ApprovalSignalName is the channel the workflow listens on for the human
+// approve/reject signal. Mirrors approval.SignalName — we duplicate the
+// constant here (rather than importing the approval package) because the
+// arch lint rule allows workflow→adapter but cycle-avoidance keeps this
+// package import-cycle-free relative to the approval shard.
+const ApprovalSignalName = "approval.decision"
+
+// ApprovalMediumTimeout is the auto-timeout for MEDIUM severity decisions.
+// Matches the value passed into approval.WaitForDecision; lifted to package
+// scope so tests can shorten it via build-tag overrides if needed in future.
+const ApprovalMediumTimeout = 2 * time.Minute
+
 // stdActivityOpts is the default retry + timeout policy applied to every
 // stub activity in Phase 4. Phase 5's LLM-bound activities override
 // StartToCloseTimeout to 5 minutes via a per-call ActivityOptions context.
@@ -163,9 +175,69 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 	}
 	results = append(results, rApprove)
 
+	// Resolve severity from the ApprovalGate activity payload. The activity
+	// emits "low" | "medium" | "high" only on the Phase 6 production path;
+	// the Phase 4 stub path returns no payload, which we treat as "skip the
+	// signal race" so the existing test suite + dev environment still works.
+	severityStr := ""
+	if sev, ok := rApprove.Payload["severity"].(string); ok {
+		severityStr = sev
+	}
+	decisionID := ""
+	if id, ok := rApprove.Payload["decision_id"].(string); ok {
+		decisionID = id
+	}
+
+	if severityStr != "" {
+		// Signal/timer race. workflow.GetSignalChannel + workflow.NewTimer +
+		// workflow.NewSelector are all replay-safe — running the race inside
+		// the workflow body (rather than an activity) is required to keep
+		// determinism on Temporal history replay.
+		severity := domain.Severity(severityStr)
+		sig, sigErr := awaitApprovalDecision(ctx, severity)
+		if sigErr != nil {
+			recordEvent(ctx, in, domain.AgentApprovalGate, "ApprovalGate.Finalize", domain.ActFailed, sigErr.Error(), nil, 1)
+			return PipelineOutput{}, sigErr
+		}
+
+		// Finalise activity persists the decision + audit. Runs even on
+		// rejection so the row is up-to-date when the UI re-reads it.
+		finIn := ApprovalFinalizeInput{
+			OrgID:         in.OrgID,
+			WorkflowRunID: in.RunID,
+			Signal:        sig,
+		}
+		finCtx := workflow.WithActivityOptions(ctx, stdActivityOpts)
+		recordEvent(ctx, in, domain.AgentApprovalGate, "ApprovalGate.Finalize", domain.ActStarted, "", nil, 1)
+		var rFinal domain.ActivityResult
+		if err := workflow.ExecuteActivity(finCtx, (*Activities).ApprovalGateFinalize, finIn).Get(finCtx, &rFinal); err != nil {
+			recordEvent(ctx, in, domain.AgentApprovalGate, "ApprovalGate.Finalize", domain.ActFailed, err.Error(), nil, 1)
+			return PipelineOutput{}, err
+		}
+		recordEvent(ctx, in, domain.AgentApprovalGate, "ApprovalGate.Finalize", domain.ActSucceeded, rFinal.Message, rFinal.Payload, 1)
+		results = append(results, rFinal)
+
+		// Rejected / timed out terminates the workflow with a non-retryable
+		// application error so workflow_runs.status flips to failed.
+		if sig.Decision == domain.ApprovalRejected || sig.Decision == domain.ApprovalTimeoutRejected {
+			out := PipelineOutput{
+				DurationMS:         workflow.Now(ctx).Sub(start).Milliseconds(),
+				Results:            results,
+				ApprovalDecisionID: decisionID,
+			}
+			recordEvent(ctx, in, domain.AgentPipeline, "Pipeline.Complete", domain.ActFailed,
+				fmt.Sprintf("rejected: %s", sig.Decision),
+				map[string]interface{}{"duration_ms": out.DurationMS, "decision": string(sig.Decision)}, 1)
+			return out, temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("approval %s", sig.Decision), "ApprovalRejectedError", nil,
+			)
+		}
+	}
+
 	out := PipelineOutput{
-		DurationMS: workflow.Now(ctx).Sub(start).Milliseconds(),
-		Results:    results,
+		DurationMS:         workflow.Now(ctx).Sub(start).Milliseconds(),
+		Results:            results,
+		ApprovalDecisionID: decisionID,
 	}
 	// Terminal pipeline event — UI uses this to close EventSource.
 	recordEvent(ctx, in, domain.AgentPipeline, "Pipeline.Complete", domain.ActSucceeded,
@@ -187,6 +259,65 @@ func clonePrior(m map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+// awaitApprovalDecision is the workflow-side implementation of the
+// signal/timer race spec'd in §9.2:
+//
+//   - LOW    → return ApprovalAutoApproved immediately (no signal/timer wait).
+//   - MEDIUM → race the ApprovalSignalName channel against a 2-minute timer.
+//   - HIGH   → block on the signal channel until it lands (or the workflow
+//     timeout — 10m — fires upstream).
+//
+// All primitives used here (GetSignalChannel, NewTimer, NewSelector) are
+// replay-safe. The selector closes over local vars by reference; we never
+// mutate workflow state from outside the selector callbacks.
+func awaitApprovalDecision(ctx workflow.Context, severity domain.Severity) (domain.ApprovalSignal, error) {
+	if severity == domain.SeverityLow {
+		return domain.ApprovalSignal{
+			Decision:  domain.ApprovalAutoApproved,
+			DecidedBy: "",
+			Notes:     "auto-approved (low severity)",
+		}, nil
+	}
+
+	sigCh := workflow.GetSignalChannel(ctx, ApprovalSignalName)
+	var sig domain.ApprovalSignal
+	var ok bool
+
+	switch severity {
+	case domain.SeverityMedium:
+		timerCtx, cancelTimer := workflow.WithCancel(ctx)
+		timerFut := workflow.NewTimer(timerCtx, ApprovalMediumTimeout)
+		sel := workflow.NewSelector(ctx)
+		sel.AddReceive(sigCh, func(c workflow.ReceiveChannel, _ bool) {
+			c.Receive(ctx, &sig)
+			cancelTimer() // stop the timer — selector returns once any branch fires
+			ok = true
+		})
+		sel.AddFuture(timerFut, func(f workflow.Future) {
+			// Drain any timer error (timer cancellation reports an error
+			// when cancelled before firing — ignored here).
+			_ = f.Get(ctx, nil)
+			if !ok {
+				sig = domain.ApprovalSignal{
+					Decision:  domain.ApprovalTimeoutRejected,
+					DecidedBy: "",
+					Notes:     "timer fired before signal",
+				}
+				ok = true
+			}
+		})
+		sel.Select(ctx)
+		return sig, nil
+
+	case domain.SeverityHigh:
+		sigCh.Receive(ctx, &sig)
+		return sig, nil
+	}
+
+	// Unknown severity — fail closed so the gate doesn't silently approve.
+	return domain.ApprovalSignal{}, fmt.Errorf("approval: unknown severity %q", severity)
 }
 
 // recordEvent is the workflow-side helper that calls RecordActivityEvent as

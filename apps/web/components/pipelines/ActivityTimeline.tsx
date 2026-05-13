@@ -171,9 +171,13 @@ function renderCodegenBadge(payload: Record<string, unknown>): React.ReactNode {
 function StateIcon({
   state,
   reduced,
+  // `live` brightens the running pulse for the Phase 6 guided-demo flow.
+  // Default false keeps the standard timeline visually unchanged.
+  live = false,
 }: {
   state: RowState;
   reduced: boolean;
+  live?: boolean;
 }) {
   switch (state) {
     case "pending":
@@ -184,7 +188,15 @@ function StateIcon({
       );
     case "running":
       return (
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-blue-500/15 ring-1 ring-blue-500/40">
+        <span
+          className={cn(
+            "grid h-6 w-6 place-items-center rounded-full ring-1",
+            live
+              ? "bg-blue-500/30 ring-blue-500/70 shadow-[0_0_0_4px_rgba(59,130,246,0.18)]"
+              : "bg-blue-500/15 ring-blue-500/40",
+            live && !reduced && "animate-pulse",
+          )}
+        >
           <Loader2
             className={cn(
               "h-3.5 w-3.5 text-blue-600 dark:text-blue-300",
@@ -263,9 +275,15 @@ export function ActivityTimeline({
   // The detail-page heartbeat (1s) lets running rows show a live elapsed
   // duration without each row owning a ticker.
   now,
+  // `liveMode` is true when the user got here from /console/live-demo via
+  // ?live=1. Each row carries `data-role` + `data-state` so the parent can
+  // scroll the most-recent running row into view. The active-row pulse
+  // is also brighter when this flag is on.
+  liveMode = false,
 }: {
   events: ActivityEvent[];
   now: number;
+  liveMode?: boolean;
 }) {
   const reduced = usePrefersReducedMotion();
   const order = React.useMemo(
@@ -294,7 +312,12 @@ export function ActivityTimeline({
             ? row.finishedAt - row.startedAt
             : null;
         return (
-          <li key={row.role} className="relative pb-4 pl-9">
+          <li
+            key={row.role}
+            data-role={row.role}
+            data-state={row.state}
+            className="relative pb-4 pl-9"
+          >
             {/* connector line into this row */}
             {i > 0 && (
               <span
@@ -320,7 +343,7 @@ export function ActivityTimeline({
               />
             )}
             <span className="absolute left-0 top-0">
-              <StateIcon state={row.state} reduced={reduced} />
+              <StateIcon state={row.state} reduced={reduced} live={liveMode} />
             </span>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">

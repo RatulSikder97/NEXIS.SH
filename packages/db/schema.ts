@@ -102,7 +102,7 @@ export const apiKeys = pgTable("api_keys", {
 export const integrations = pgTable("integrations", {
   id:                uuid("id").primaryKey().defaultRandom(),
   orgId:             uuid("org_id").notNull().references(() => organizations.id),
-  provider:          text("provider", { enum: ["github", "sentry", "argocd"] }).notNull(),
+  provider:          text("provider", { enum: ["github", "sentry", "argocd", "slack"] }).notNull(),
   status:            text("status", { enum: ["connected", "pending", "error", "disconnected"] }).notNull(),
   installationId:    text("installation_id"),
   secretCiphertext:  bytea("secret_ciphertext"),
@@ -357,4 +357,40 @@ export const evalTranscripts = pgTable("eval_transcripts", {
 }, t => ({
   uniqEvalProviderAgent: uniqueIndex("eval_transcripts_eval_provider_agent_uniq").on(t.evalRunId, t.provider, t.agent),
   runStartedIdx:         index("eval_transcripts_run_started_idx").on(t.evalRunId, t.startedAtNew),
+}));
+
+// ---------------------------------------------------------------------------
+// Phase 6 — Approval Gate + Slack notifier ledger.
+// ---------------------------------------------------------------------------
+
+export const approvalDecisions = pgTable("approval_decisions", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  orgId:           uuid("org_id").notNull().references(() => organizations.id),
+  workspaceId:     uuid("workspace_id").notNull().references(() => workspaces.id),
+  workflowRunId:   uuid("workflow_run_id").notNull().references(() => workflowRuns.id, { onDelete: "cascade" }),
+  severity:        text("severity",  { enum: ["low", "medium", "high"] }).notNull(),
+  decision:        text("decision",  { enum: ["pending", "approved", "rejected", "auto_approved", "timeout_rejected"] }).notNull(),
+  decidedBy:       uuid("decided_by").references(() => users.id),
+  decidedAt:       timestamp("decided_at", { withTimezone: true }),
+  notes:           text("notes"),
+  scenario:        text("scenario"),
+  riskScore:       numeric("risk_score", { precision: 5, scale: 2 }),
+  createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  uniqRun:          uniqueIndex("approval_decisions_run_uniq").on(t.workflowRunId),
+  pendingListIdx:   index("approval_decisions_pending_idx").on(t.orgId, t.workspaceId, t.decision, t.createdAt),
+}));
+
+export const slackNotifications = pgTable("slack_notifications", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  orgId:           uuid("org_id").notNull().references(() => organizations.id),
+  workflowRunId:   uuid("workflow_run_id").references(() => workflowRuns.id, { onDelete: "set null" }),
+  channel:         text("channel"),
+  kind:            text("kind").notNull(),
+  status:          text("status", { enum: ["queued", "sent", "failed"] }).notNull(),
+  httpStatus:      integer("http_status"),
+  attemptedAt:     timestamp("attempted_at", { withTimezone: true }).notNull().defaultNow(),
+  error:           text("error"),
+}, t => ({
+  orgRunIdx: index("slack_notifications_org_run_idx").on(t.orgId, t.workflowRunId),
 }));

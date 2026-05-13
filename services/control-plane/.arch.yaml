@@ -27,13 +27,23 @@ components:
     in: internal/platform/**
   workflow:
     in: internal/workflow/**
+  sentinel:
+    in: internal/sentinel/**
+  graphstore:
+    in: internal/adapter/graphstore/**
+  causal:
+    in: internal/adapter/causal/**
+  approval:
+    in: internal/adapter/approval/**
+  notifier:
+    in: internal/adapter/notifier/**
 
 deps:
 
   main:
-    mayDependOn: [domain, usecase, adapter, transport, platform, workflow]
+    mayDependOn: [domain, usecase, adapter, transport, platform, workflow, sentinel, graphstore]
   tests:
-    mayDependOn: [domain, usecase, adapter, transport, platform, workflow]
+    mayDependOn: [domain, usecase, adapter, transport, platform, workflow, sentinel, graphstore]
   domain:
     anyVendorDeps: true
   usecase:
@@ -60,5 +70,15 @@ deps:
     mayDependOn: [usecase, domain, platform, transport, adapter]
   workflow:
     mayDependOn: [usecase, domain, adapter, platform]
+  sentinel:
+    mayDependOn: [domain, platform, usecase, adapter]
+  graphstore:
+    mayDependOn: [domain, platform]
+  causal:
+    mayDependOn: [domain, platform]
+  approval:
+    mayDependOn: [domain, platform, adapter]
+  notifier:
+    mayDependOn: [domain, platform, adapter]
   platform:
     anyVendorDeps: true
