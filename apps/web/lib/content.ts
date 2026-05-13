@@ -1,15 +1,25 @@
+// Marketing copy + nav graph for the public surface. Every internal route
+// here is a real, typed Next.js route. In-page anchors (#features, #how-it-
+// works, #agents) remain inside `/` because those sections live on the
+// landing.
+//
+// Internal hrefs that start with "/" are passed to <Link href={...} /> after
+// being cast as `Route` at the call site — typedRoutes:true is on.
+// External hrefs (github, x, linkedin) are passed to <a>.
+
 export const content = {
   navbar: {
     links: [
-      { label: "Features", href: "#features" },
-      { label: "How it works", href: "#how-it-works" },
-      { label: "Agents", href: "#agents" },
-      { label: "Pricing", href: "#pricing" },
-      { label: "Docs", href: "#docs" },
+      { label: "Product", href: "/product" },
+      { label: "Agents", href: "/agents" },
+      { label: "Integrations", href: "/integrations" },
+      { label: "Pricing", href: "/pricing" },
+      { label: "Docs", href: "/docs" },
     ],
     cta: "Get started",
   },
   hero: {
+    statusPill: { label: "Public beta — invite-only", href: "/status" },
     preHeading: "AUTONOMOUS ENGINEERING, SUPERVISED BY YOU.",
     heading:
       "Nine AI agents. One engineering team that ships fixes while you sleep.",
@@ -197,42 +207,42 @@ export const content = {
       {
         title: "Product",
         links: [
-          { label: "Features", href: "#features" },
-          { label: "How it works", href: "#how-it-works" },
-          { label: "Agents", href: "#agents" },
-          { label: "Pricing", href: "#pricing" },
+          { label: "Overview", href: "/product" },
+          { label: "Agents", href: "/agents" },
+          { label: "Integrations", href: "/integrations" },
+          { label: "Pricing", href: "/pricing" },
         ],
       },
       {
         title: "Resources",
         links: [
-          { label: "Docs", href: "#docs" },
-          { label: "Changelog", href: "#changelog" },
-          { label: "Status", href: "#status" },
+          { label: "Docs", href: "/docs" },
+          { label: "Changelog", href: "/changelog" },
+          { label: "Status", href: "/status" },
         ],
       },
       {
         title: "Company",
         links: [
-          { label: "About", href: "#about" },
-          { label: "Careers", href: "#careers" },
-          { label: "Contact", href: "#contact" },
+          { label: "About", href: "/about" },
+          { label: "Careers", href: "/careers" },
+          { label: "Contact", href: "/contact" },
         ],
       },
       {
         title: "Legal",
         links: [
-          { label: "Privacy", href: "#privacy" },
-          { label: "Terms", href: "#terms" },
-          { label: "Security", href: "#security" },
+          { label: "Privacy", href: "/privacy" },
+          { label: "Terms", href: "/terms" },
+          { label: "Security", href: "/security" },
         ],
       },
       {
         title: "Connect",
         links: [
-          { label: "GitHub", href: "https://github.com" },
-          { label: "X", href: "https://x.com" },
-          { label: "LinkedIn", href: "https://linkedin.com" },
+          { label: "GitHub", href: "https://github.com/nexis-eco" },
+          { label: "X", href: "https://x.com/nexis_eco" },
+          { label: "LinkedIn", href: "https://www.linkedin.com/company/nexis-eco" },
         ],
       },
     ],

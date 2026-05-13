@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import type { Route } from "next";
+
 import { content } from "@/lib/content";
 import { Button } from "@/components/ui/Button";
 import { FadeUp } from "@/components/animations/FadeUp";
@@ -33,7 +36,7 @@ export default function CTA() {
 
               <FadeUp useWhileInView={false} className="mt-10">
                 <Button size="lg" asChild>
-                  <a href="#waitlist">{content.cta.button}</a>
+                  <Link href={"/sign-up" as Route}>{content.cta.button}</Link>
                 </Button>
               </FadeUp>
             </StaggerGroup>
