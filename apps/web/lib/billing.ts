@@ -39,8 +39,9 @@ export type Invoice = {
 
 export type UsageBreakdown = {
   total_cents: number;
-  by_workspace: { key: string; total_cents: number }[];
-  by_kind: { key: string; total_cents: number }[];
+  total_cents_exact?: number;
+  by_workspace: { key: string; total_cents: number; total_cents_exact?: number }[];
+  by_kind: { key: string; total_cents: number; total_cents_exact?: number }[];
 };
 
 export const billing = {
@@ -83,7 +84,7 @@ export const billing = {
     if (since) u.searchParams.set("since", since);
     if (until) u.searchParams.set("until", until);
     const r = await fetch(u.toString(), { credentials: "include" });
-    if (!r.ok) return { total_cents: 0, by_workspace: [], by_kind: [] };
+    if (!r.ok) return { total_cents: 0, total_cents_exact: 0, by_workspace: [], by_kind: [] };
     return r.json();
   },
 };

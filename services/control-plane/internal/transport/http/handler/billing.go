@@ -181,11 +181,12 @@ func BillingUsage(billingRepo *repo.BillingRepo) http.HandlerFunc {
 			return
 		}
 		httpJSON(w, http.StatusOK, map[string]any{
-			"since":        since.Format(time.RFC3339),
-			"until":        until.Format(time.RFC3339),
-			"total_cents":  breakdown.TotalCents,
-			"by_workspace": breakdown.ByWorkspace,
-			"by_kind":      breakdown.ByKind,
+			"since":              since.Format(time.RFC3339),
+			"until":              until.Format(time.RFC3339),
+			"total_cents":        breakdown.TotalCents,
+			"total_cents_exact":  breakdown.TotalCentsExact,
+			"by_workspace":       breakdown.ByWorkspace,
+			"by_kind":            breakdown.ByKind,
 		})
 	}
 }

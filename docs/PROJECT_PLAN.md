@@ -545,7 +545,7 @@ Persisted via `next-themes`, default `light`, system-respecting opt-in.
 
 ---
 
-### Phase 3.5 — Workspaces + Billing (Week 9.5)
+### Phase 3.5 — Workspaces + Billing (Week 9.5) — Completed 2026-05-13
 
 **Scope**
 - Workspace as the compute unit inside an org. After signup, owner is redirected to onboarding to create their first workspace (name + region from 6 fake datacenters).

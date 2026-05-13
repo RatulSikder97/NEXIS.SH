@@ -66,17 +66,23 @@ type UsageRecord struct {
 
 // UsageBreakdown is the response shape for GET /v1/billing/usage. ByWorkspace
 // + ByKind are independent groupings of the same time window.
+//
+// TotalCents is the floor()-ed whole-cent figure for invoice line items.
+// TotalCentsExact preserves sub-cent precision so a few minutes of $0.10/hr
+// metering still renders as $0.0021 instead of $0.00.
 type UsageBreakdown struct {
-	TotalCents  int64        `json:"total_cents"`
-	ByWorkspace []UsageGroup `json:"by_workspace"`
-	ByKind      []UsageGroup `json:"by_kind"`
+	TotalCents      int64        `json:"total_cents"`
+	TotalCentsExact float64      `json:"total_cents_exact"`
+	ByWorkspace     []UsageGroup `json:"by_workspace"`
+	ByKind          []UsageGroup `json:"by_kind"`
 }
 
 // UsageGroup is one bucket inside a UsageBreakdown. Key is the workspace id
 // or the kind name depending on which slice it lives in.
 type UsageGroup struct {
-	Key        string `json:"key"`
-	TotalCents int64  `json:"total_cents"`
+	Key             string  `json:"key"`
+	TotalCents      int64   `json:"total_cents"`
+	TotalCentsExact float64 `json:"total_cents_exact"`
 }
 
 // BillingProvider is the port the HTTP billing handlers depend on. Two

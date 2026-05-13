@@ -160,6 +160,7 @@ func (r *BillingRepo) UsageSum(ctx context.Context, orgID string, since, until t
 		return out, err
 	}
 	out.TotalCents = int64(totalF)
+	out.TotalCentsExact = totalF
 
 	rows, err := q.Query(ctx, `
         SELECT workspace_id::text, COALESCE(SUM(amount_cents), 0)::float8
@@ -176,7 +177,7 @@ func (r *BillingRepo) UsageSum(ctx context.Context, orgID string, since, until t
 			rows.Close()
 			return out, err
 		}
-		out.ByWorkspace = append(out.ByWorkspace, domain.UsageGroup{Key: key, TotalCents: int64(amount)})
+		out.ByWorkspace = append(out.ByWorkspace, domain.UsageGroup{Key: key, TotalCents: int64(amount), TotalCentsExact: amount})
 	}
 	rows.Close()
 
@@ -195,7 +196,7 @@ func (r *BillingRepo) UsageSum(ctx context.Context, orgID string, since, until t
 		if err := rows.Scan(&key, &amount); err != nil {
 			return out, err
 		}
-		out.ByKind = append(out.ByKind, domain.UsageGroup{Key: key, TotalCents: int64(amount)})
+		out.ByKind = append(out.ByKind, domain.UsageGroup{Key: key, TotalCents: int64(amount), TotalCentsExact: amount})
 	}
 	return out, rows.Err()
 }

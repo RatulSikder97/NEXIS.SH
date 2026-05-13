@@ -6,18 +6,29 @@
 
 import type { UsageBreakdown } from "@/lib/billing";
 
+// Render USD with adaptive precision: ≥$0.01 shows 2 decimals; sub-cent
+// shows up to 4 so a few minutes of $0.10/hr metering surfaces as
+// "$0.0021" rather than "$0.00".
 function formatUSD(cents: number): string {
+  const dollars = cents / 100;
+  const decimals = Math.abs(dollars) >= 0.01 || dollars === 0 ? 2 : 4;
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: "USD",
-  }).format(cents / 100);
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(dollars);
+}
+
+function valueOf(r: { total_cents: number; total_cents_exact?: number }): number {
+  return r.total_cents_exact ?? r.total_cents;
 }
 
 function Bars({
   rows,
   emptyLabel,
 }: {
-  rows: { key: string; total_cents: number }[];
+  rows: { key: string; total_cents: number; total_cents_exact?: number }[];
   emptyLabel: string;
 }) {
   if (rows.length === 0) {
@@ -25,11 +36,12 @@ function Bars({
       <p className="text-xs text-[var(--color-muted-foreground)]">{emptyLabel}</p>
     );
   }
-  const max = Math.max(...rows.map((r) => r.total_cents), 1);
+  const max = Math.max(...rows.map(valueOf), 1);
   return (
     <ul className="space-y-2">
       {rows.map((r) => {
-        const pct = Math.round((r.total_cents / max) * 100);
+        const v = valueOf(r);
+        const pct = Math.round((v / max) * 100);
         return (
           <li key={r.key} className="space-y-1">
             <div className="flex items-baseline justify-between text-xs">
@@ -37,7 +49,7 @@ function Bars({
                 {r.key}
               </span>
               <span className="text-[var(--color-muted-foreground)]">
-                {formatUSD(r.total_cents)}
+                {formatUSD(v)}
               </span>
             </div>
             <div
@@ -63,7 +75,7 @@ export function UsageSummary({ usage }: { usage: UsageBreakdown }) {
         Usage this period
       </p>
       <p className="mt-1 text-3xl font-semibold text-[var(--color-foreground)]">
-        {formatUSD(usage.total_cents)}
+        {formatUSD(usage.total_cents_exact ?? usage.total_cents)}
       </p>
 
       <div className="mt-5 space-y-5">
