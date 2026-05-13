@@ -17,9 +17,10 @@
 // allow it; in localhost dev they collide so it just works.
 
 import * as React from "react";
-import { Download, Loader2, RefreshCw } from "lucide-react";
+import { Download, FileText, Loader2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/empty-state/EmptyState";
 import { InspectorDrawer } from "@/components/console/InspectorDrawer";
 import { AuditTable } from "@/components/console/AuditTable";
 import {
@@ -245,7 +246,15 @@ export function AuditClient({
         </div>
       )}
 
-      <AuditTable rows={data.rows} onInspect={setInspectorRow} />
+      {data.rows.length === 0 && data.total === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title="No audit events yet"
+          description="Every action taken in this organization is recorded here. The first sign-in seeds the log."
+        />
+      ) : (
+        <AuditTable rows={data.rows} onInspect={setInspectorRow} />
+      )}
 
       <div className="flex items-center justify-between text-xs text-[var(--color-muted-foreground)]">
         <span>

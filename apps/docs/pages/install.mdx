@@ -1,0 +1,43 @@
+---
+title: Install
+---
+
+# Install
+
+The five-minute happy path from invite code → first recovered incident.
+
+## 1. Sign up with an invite code
+
+Visit `https://app.nexis.dev/sign-up?invite=NX-XXXXX`. The invite code is
+single-use and time-limited. If you don't have one yet, drop your email on
+the [waitlist](https://nexis.dev/waitlist) — the team mints codes daily.
+
+## 2. Create your workspace
+
+The onboarding wizard prompts you for a workspace name and a region. Pick
+the region closest to your team. Provisioning takes about a minute.
+
+## 3. Try the synthetic fixture
+
+After provisioning, the wizard offers two onramps:
+
+- **Try the synthetic fixture.** NEXIS seeds a deterministic incident and
+  fires the full recovery loop. You'll see every agent activate in turn
+  and a patched PR open on a fork of `nexis-eco/sample-app`.
+- **Connect your own GitHub repo.** Wire up the GitHub App so future
+  incidents from Sentry can land in your repo as PRs.
+
+We recommend starting with the synthetic fixture so you can see the
+recovery loop end-to-end before wiring real infrastructure.
+
+## 4. Connect Sentry
+
+In the console go to **Integrations → Sentry**. Paste your DSN and the
+project name. NEXIS will create a webhook in Sentry pointed at our
+ingest URL. New incidents in Sentry will fan out into recovery pipelines.
+
+## 5. Watch the timeline
+
+Every recovery pipeline run lives under **Incidents** in the sidebar.
+Click a row to watch the agent timeline live; the SSE stream tails every
+state transition as it happens.

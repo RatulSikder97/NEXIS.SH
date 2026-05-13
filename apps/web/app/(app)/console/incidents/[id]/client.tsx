@@ -46,6 +46,7 @@ import {
   AgentSummaryCard,
   ConfidencePill,
 } from "@/components/incidents/AgentSummaryCard";
+import { NasaTlxModal } from "@/components/incidents/NasaTlxModal";
 import {
   pipelines,
   type ActivityEvent,
@@ -59,6 +60,7 @@ import {
   approvals,
   type ApprovalDecision,
 } from "@/lib/approvals";
+import { nasaTlx } from "@/lib/nasa-tlx";
 import { cn } from "@/lib/utils";
 
 const TICK_MS = 1000;
@@ -229,6 +231,12 @@ export function TimelineClient({
   });
   const [streamError, setStreamError] = React.useState<string | null>(null);
   const [decision, setDecision] = React.useState<ApprovalDecision | null>(null);
+  // Phase 8 — NASA-TLX modal opens once on the user's 3rd successful
+  // high-severity recovery. The check is debounced via a ref so a re-
+  // render of the same finished+succeeded state doesn't re-fire the
+  // org-stats GET.
+  const [tlxOpen, setTlxOpen] = React.useState(false);
+  const tlxCheckedRef = React.useRef(false);
   // bannerStartedAt is frozen on mount so the live banner shows the user's
   // own click time even if the workflow row's started_at drifts forward.
   const bannerStartedAtRef = React.useRef<number>(Date.now());
@@ -371,6 +379,38 @@ export function TimelineClient({
   const decisionLabel =
     decision?.decision &&
     (DECISION_LABEL[decision.decision] ?? decision.decision);
+
+  // Phase 8 — NASA-TLX trigger.
+  //
+  // Fires after a high-severity run that finished with status=succeeded.
+  // We hit /v1/me/org-stats once; if the org just landed its 3rd
+  // successful recovery the modal opens. The ref guard prevents the
+  // effect from re-firing while the user idles on this page (the
+  // dependencies legitimately stay stable past the first trigger).
+  React.useEffect(() => {
+    if (tlxCheckedRef.current) return;
+    if (!finished) return;
+    if (run?.status !== "succeeded") return;
+    if (decision?.severity !== "high") return;
+    tlxCheckedRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const stats = await nasaTlx.orgStats();
+        if (cancelled) return;
+        if (stats.successful_recoveries_count === 3) {
+          setTlxOpen(true);
+        }
+      } catch {
+        // Non-fatal — the modal just doesn't open this time. The next
+        // recovery's effect will retry. We don't surface the error
+        // because the modal is opportunistic, not load-bearing.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [finished, run?.status, decision?.severity]);
   // The approval-required callout fires only when the run is over, the
   // gate fired with `high`, and the decision is still pending — i.e. the
   // workflow timed out the human-decision wait and we want to nudge the
@@ -600,6 +640,12 @@ export function TimelineClient({
       >
         <ActivityTimeline events={events} now={now} liveMode={liveMode} />
       </section>
+
+      <NasaTlxModal
+        open={tlxOpen}
+        onOpenChange={setTlxOpen}
+        recoveryRunId={runId}
+      />
     </div>
   );
 }

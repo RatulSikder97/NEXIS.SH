@@ -1,0 +1,32 @@
+---
+title: NEXIS — autonomous incident recovery
+---
+
+# NEXIS
+
+NEXIS is an autonomous incident recovery platform. When an incident lands,
+NEXIS spins up a multi-agent recovery loop — root-cause analysis, fix
+synthesis, validation, GitOps PR — and hands back a verified patch in
+under a minute.
+
+This site is the operator + developer reference. It assumes you have an
+invite code and an account at [app.nexis.dev](https://app.nexis.dev).
+
+## Start here
+
+- **[Install](/install)** — sign up with an invite, connect GitHub, run the
+  sample fixture end-to-end.
+- **[Integrations](/integrations)** — wire NEXIS into Sentry, GitHub,
+  ArgoCD. Each integration ships with a short happy-path checklist.
+- **[Agent reference](/agent-reference)** — what each agent owns, what it
+  doesn't, the model behind it.
+- **[Runbook](/runbook)** — the ten failures we've seen most often in beta
+  and the deterministic fix for each.
+- **[Architecture](/architecture)** — port + adapter layout, recovery
+  pipeline state machine, evaluation methodology.
+
+## Status
+
+The public status page lives at
+[status.nexis.dev](https://status.nexis.dev). Subscribe there to get
+notified about ingest-path or worker outages.

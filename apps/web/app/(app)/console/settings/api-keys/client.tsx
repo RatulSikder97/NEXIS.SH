@@ -12,10 +12,11 @@
 
 import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Copy, Loader2, X } from "lucide-react";
+import { Copy, KeyRound, Loader2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/empty-state/EmptyState";
 import { apikeys, type APIKey, type APIKeyCreated } from "@/lib/apikeys";
 
 const SCOPES = [{ id: "read", label: "Read", description: "Read-only access." }];
@@ -130,12 +131,19 @@ export function APIKeysClient({ initial }: { initial: APIKey[] }) {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-        {initial.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-[var(--color-muted-foreground)]">
-            No API keys yet. Create one to get started.
-          </p>
-        ) : (
+      {initial.length === 0 ? (
+        <EmptyState
+          icon={KeyRound}
+          title="No API keys yet"
+          description="Use API keys from CI or scripts to call the NEXIS API on behalf of your account."
+          cta={
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              Create API key
+            </Button>
+          }
+        />
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
           <table className="w-full text-sm">
             <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
               <tr>
@@ -182,8 +190,8 @@ export function APIKeysClient({ initial }: { initial: APIKey[] }) {
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
 
       <Dialog.Root open={createOpen} onOpenChange={setCreateOpen}>
         <Dialog.Portal>

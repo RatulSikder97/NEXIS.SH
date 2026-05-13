@@ -109,6 +109,66 @@ func BillingAddPaymentMethod(provider domain.BillingProvider, aud domain.AuditWr
 	}
 }
 
+// BillingCreateSetupIntent wires POST /v1/billing/payment-method/intent. The
+// browser calls this before mounting Stripe Elements to obtain a
+// client_secret it can pass to stripe.confirmCardSetup. Owner-only via the
+// route registration in server.go.
+func BillingCreateSetupIntent(provider domain.BillingProvider, aud domain.AuditWriter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		princ, _ := appmw.PrincipalFrom(r.Context())
+		secret, err := provider.CreateSetupIntent(r.Context(), princ)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotImplemented) {
+				writeError(w, http.StatusNotImplemented, "not implemented")
+				return
+			}
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		// Audit only the intent creation — no payment method exists yet.
+		// Confirmation produces a second audit row in BillingConfirmSetupIntent.
+		auditWrite(r, aud, princ, "billing.setup_intent_created", princ.OrgID, map[string]any{
+			"provider": provider.Name(),
+		})
+		writeJSON(w, http.StatusCreated, dto.SetupIntentResp{ClientSecret: secret})
+	}
+}
+
+// BillingConfirmSetupIntent wires POST /v1/billing/payment-method/confirm. The
+// browser calls this after a successful SetupIntent confirmation with the
+// resulting pm_... id; the handler attaches the PM to the org's Stripe
+// customer, sets it as the default, and persists the brand/last4 projection.
+// Owner-only via the route registration in server.go.
+func BillingConfirmSetupIntent(provider domain.BillingProvider, aud domain.AuditWriter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req dto.ConfirmSetupIntentReq
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		if req.PaymentMethod == "" {
+			writeError(w, http.StatusBadRequest, "payment_method required")
+			return
+		}
+		princ, _ := appmw.PrincipalFrom(r.Context())
+		pm, err := provider.AttachPaymentMethod(r.Context(), princ, req.PaymentMethod, req.BillingEmail)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotImplemented) {
+				writeError(w, http.StatusNotImplemented, "not implemented")
+				return
+			}
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		auditWrite(r, aud, princ, "billing.payment_method_attached", pm.ID, map[string]any{
+			"provider": pm.Provider,
+			"brand":    pm.Brand,
+			"last4":    pm.Last4,
+			"flow":     "setup_intent",
+		})
+		writeJSON(w, http.StatusCreated, toPaymentMethodResp(pm))
+	}
+}
+
 // BillingDeletePaymentMethod wires DELETE /v1/billing/payment-method.
 func BillingDeletePaymentMethod(provider domain.BillingProvider, aud domain.AuditWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

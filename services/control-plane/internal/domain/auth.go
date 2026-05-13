@@ -145,6 +145,18 @@ type AuthProvider interface {
 	IssueMagicLink(ctx context.Context, email, purpose string) error
 	ConsumeMagicLink(ctx context.Context, token string) (SessionToken, error)
 
+	// ConsumeOAuthCode exchanges an OAuth authorization code (today: WorkOS
+	// AuthKit) for the identity provider's user record, upserts the user +
+	// org locally, and mints a fresh session. The browser arrives at our
+	// /v1/auth/workos/callback handler after a successful sign-in at the
+	// hosted UI; this method is the server-side half of that handshake.
+	//
+	// Local-provider impl returns a canned user so the dev path can exercise
+	// the same handler/cookie code without a WorkOS account. The state
+	// (CSRF) parameter validation is the handler's responsibility — by the
+	// time we get here the state has already been confirmed.
+	ConsumeOAuthCode(ctx context.Context, code string) (SignupResult, error)
+
 	EnrollMFA(ctx context.Context, userID string) (qrPNG []byte, secret string, err error)
 	VerifyMFA(ctx context.Context, userID, code string) error
 	DisableMFA(ctx context.Context, userID string) error

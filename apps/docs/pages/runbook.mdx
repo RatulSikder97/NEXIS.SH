@@ -1,0 +1,96 @@
+---
+title: Runbook
+---
+
+# Runbook
+
+Common operational issues we've seen in beta and the deterministic fix
+for each. Most of these are self-healing — NEXIS retries and recovers
+without intervention — but the runbook covers the cases where a human
+signal is needed.
+
+## 1. Pipeline stalled in `queued`
+
+Symptom: a `RecoveryPipeline` row stays in `queued` for more than 60 s.
+
+Most likely cause: the Temporal worker for the workspace's region is
+unreachable.
+
+Fix:
+
+1. Check **status.nexis.dev** for a `temporal-worker` outage.
+2. If the public status page is green: refresh the page; the worker
+   typically recovers within 30 s.
+3. If the row stays queued for > 5 min: contact `support@nexis.dev` with
+   the run id.
+
+## 2. Approval gate timed out
+
+Symptom: a high-severity incident finished with `status=failed` and the
+header pill says **Timed out**.
+
+Fix: re-trigger the incident from **Incidents → Re-run** once the
+underlying issue is understood. NEXIS only auto-approves Phase-6-policy
+matches; everything else needs a human.
+
+## 3. Sentry webhook returns 401
+
+Symptom: incidents stop appearing in NEXIS after a Sentry org change.
+
+Fix: rotate the Sentry integration — **Integrations → Sentry →
+Disconnect**, then re-configure with a fresh DSN.
+
+## 4. GitHub PR fails to open
+
+Symptom: the recovery loop ends with `status=succeeded` but no PR shows
+up.
+
+Fix: re-install the GitHub App. The most common cause is the app being
+removed from the target repository in GitHub's admin.
+
+## 5. Validator never returns
+
+Symptom: the Validator step shows a running spinner for more than 5 min.
+
+Fix: re-trigger the run. The Validator has an internal 4-minute timeout;
+if it's been longer than that something is wrong upstream (usually a
+Pathfinder hypothesis loop).
+
+## 6. Workspace stuck in `provisioning`
+
+Symptom: a fresh workspace doesn't transition to `ready` within 3 min.
+
+Fix: suspend the workspace (Settings → Workspaces → Suspend) and create
+a new one with a different name. The bad row gets cleaned up by the
+nightly reaper.
+
+## 7. ArgoCD rollback didn't fire
+
+Symptom: a patch was deployed but the Validator later failed and
+ArgoCD didn't roll back.
+
+Fix: check the ArgoCD integration's auth scopes — `sync` plus
+`applications/rollback` are both required.
+
+## 8. Sidebar badge count is stuck
+
+Symptom: the running-incidents or pending-approvals badge shows a stale
+number.
+
+Fix: refresh the page. The badge polls every 10 s; if it's stuck after a
+refresh, the workspace cookie is pointing at a deleted workspace —
+switch via the workspace picker.
+
+## 9. Sign-in says "invalid invite"
+
+Symptom: `?invite=` query param worked yesterday and doesn't today.
+
+Fix: invite codes are single-use by default. Request a new one from the
+waitlist; the operator turns them around daily.
+
+## 10. NASA-TLX modal re-appears
+
+Symptom: the subjective-survey modal appears more than once.
+
+Fix: open the modal, scroll to the bottom, hit **Skip**. The
+"tlx_prompted_at" preference flips and the modal stays away.

@@ -18,9 +18,10 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { Loader2, PlayCircle, RefreshCw } from "lucide-react";
+import { AlertTriangle, Loader2, PlayCircle, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/empty-state/EmptyState";
 import { PipelineRunsTable } from "@/components/pipelines/PipelineRunsTable";
 import { pipelines, type WorkflowRun } from "@/lib/pipelines";
 
@@ -165,15 +166,11 @@ export function IncidentsClient({
       )}
 
       {runs.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-card)] p-10 text-center">
-          <p className="text-base font-medium text-[var(--color-foreground)]">
-            No incidents yet
-          </p>
-          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-            Trigger a synthetic incident to walk through the recovery loop
-            end-to-end.
-          </p>
-          <div className="mt-4 flex justify-center">
+        <EmptyState
+          icon={AlertTriangle}
+          title="No incidents yet"
+          description="Trigger a synthetic incident to walk through the recovery loop end-to-end."
+          cta={
             <Button
               size="sm"
               onClick={runDemo}
@@ -186,8 +183,8 @@ export function IncidentsClient({
               )}
               Run synthetic incident
             </Button>
-          </div>
-        </div>
+          }
+        />
       ) : (
         <PipelineRunsTable runs={runs} now={now} />
       )}

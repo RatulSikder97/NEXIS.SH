@@ -7,6 +7,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { auth, AuthError } from "@/lib/auth";
 
+// Phase 7 — Cloud cutover. When NEXT_PUBLIC_AUTH_PROVIDER=workos we hand the
+// sign-in flow off to the WorkOS hosted UI (AuthKit) and the backend exchange
+// at /v1/auth/workos/callback. Otherwise we keep the Phase 2 password form.
+const AUTH_PROVIDER = process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? "local";
+const AUTH_PROVIDER_URL = process.env.NEXT_PUBLIC_AUTH_PROVIDER_URL ?? "";
+
 export default function SignInPage() {
   // `useSearchParams()` opts the page out of static prerendering, so Next 16
   // requires it to live inside a Suspense boundary. The wrapper renders the
@@ -32,6 +38,111 @@ function SignInChrome() {
 }
 
 function SignInForm() {
+  if (AUTH_PROVIDER === "workos") {
+    return <WorkOSSignIn />;
+  }
+  return <PasswordSignIn />;
+}
+
+// Cryptographically random opaque token used for OAuth state. We round-trip
+// it via a same-site cookie so the callback route handler can compare against
+// the `state` query param WorkOS echoes back.
+function generateCsrfState(): string {
+  if (typeof window === "undefined") return "";
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function setOAuthStateCookie(state: string): void {
+  // 5-minute TTL — long enough for the hosted UI round-trip, short enough to
+  // limit the replay window if the cookie leaks. SameSite=Lax so the cookie
+  // rides along on the top-level navigation back from WorkOS.
+  const maxAge = 60 * 5;
+  const secure = typeof window !== "undefined" && window.location.protocol === "https:";
+  document.cookie = [
+    `nexis_oauth_state=${state}`,
+    "Path=/",
+    `Max-Age=${maxAge}`,
+    "SameSite=Lax",
+    ...(secure ? ["Secure"] : []),
+  ].join("; ");
+}
+
+function WorkOSSignIn() {
+  const searchParams = useSearchParams();
+  const rawNext = searchParams.get("next") ?? "/dashboard";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//")
+    ? rawNext
+    : "/dashboard";
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  function onContinue() {
+    if (!AUTH_PROVIDER_URL) {
+      setErr("WorkOS provider URL is not configured.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const state = generateCsrfState();
+      setOAuthStateCookie(state);
+      const origin = window.location.origin;
+      const redirectUri = `${origin}/v1/auth/workos/callback`;
+      const url = new URL(`${AUTH_PROVIDER_URL.replace(/\/+$/, "")}/sign-in`);
+      url.searchParams.set("redirect_uri", redirectUri);
+      url.searchParams.set("state", state);
+      // Round-trip the post-auth destination via state-adjacent param so the
+      // callback handler can hand the user back to where they came from.
+      if (next && next !== "/dashboard") {
+        url.searchParams.set("return_to", next);
+      }
+      window.location.assign(url.toString());
+    } catch (e) {
+      setBusy(false);
+      setErr(e instanceof Error ? e.message : "Failed to start sign-in.");
+    }
+  }
+
+  return (
+    <>
+      <h1 className="text-2xl font-semibold mb-2 text-[var(--color-foreground)]">
+        Sign in to NEXIS
+      </h1>
+      <p className="text-sm text-[var(--color-muted-foreground)] mb-6">
+        Continue with your organisation&apos;s single sign-on. We&apos;ll hand
+        you off to NEXIS&apos;s hosted login.
+      </p>
+      {err && (
+        <p
+          className="text-sm text-[var(--color-destructive)] mb-4"
+          role="alert"
+        >
+          {err}
+        </p>
+      )}
+      <Button
+        type="button"
+        disabled={busy}
+        onClick={onContinue}
+        className="w-full"
+      >
+        {busy ? "Redirecting…" : "Continue with NEXIS"}
+      </Button>
+      <p className="mt-4 text-sm text-[var(--color-muted-foreground)] text-center">
+        Don&apos;t have an account?{" "}
+        <a
+          href="/sign-up"
+          className="text-[var(--color-primary)] hover:underline"
+        >
+          Sign up
+        </a>
+      </p>
+    </>
+  );
+}
+
+function PasswordSignIn() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // The ?next= param is user-controlled and arbitrary; cast through Route

@@ -1,0 +1,62 @@
+---
+title: Agent reference
+---
+
+# Agent reference
+
+The NEXIS recovery pipeline is a Temporal workflow that orchestrates nine
+agents. Each agent has a tightly-bounded responsibility, a single model,
+and is independently observable on the incident timeline.
+
+## Sentinel — incident classifier
+
+- **Owns:** receiving the raw webhook from Sentry / GitHub Actions
+  failures / Prometheus alerts and producing a normalised `Incident` row.
+- **Does not own:** root-cause analysis. Sentinel only decides "is this
+  recoverable" + "which scenario family does it belong to".
+- **Model:** rule-based + a 2-shot classifier, no LLM in the hot path.
+
+## Pathfinder — root-cause analyst
+
+- **Owns:** reading stack traces, recent deploys, log snippets; emits a
+  ranked list of suspected root causes with confidence scores.
+- **Does not own:** writing the fix. Pathfinder only points the finger.
+- **Model:** Claude Sonnet (with OpenAI mirror for the eval surface).
+
+## Synthesiser — plan composer
+
+- **Owns:** turning Pathfinder's output into a list of L1 agents to run
+  next + the scenario classification + a risk score.
+- **Model:** Claude Sonnet.
+
+## Architect — change designer
+
+- **Owns:** designing the code change at a function-level + drafting the
+  PR description.
+
+## Backend / DataEngineer — code authors
+
+- **Backend** writes the patch when the diagnosis is application code.
+- **DataEngineer** writes the patch when the diagnosis is schema or
+  query plan.
+- **Model:** Claude Sonnet (per-agent system prompt).
+
+## QA / Validator — change verifier
+
+- **Owns:** running hypothesis-driven property tests against the patch.
+  Refuses to advance the pipeline if any property test fails.
+- **Model:** rule-based test scaffolding + LLM-authored hypotheses.
+
+## DevOps — deploy orchestrator
+
+- **Owns:** opening the GitOps PR, optionally calling ArgoCD to roll out
+  the patch + roll back on failure.
+
+## Approval Gate — human-in-the-loop
+
+- **Owns:** pausing the workflow when severity is `high` and no
+  auto-approval policy matches. Pauses for up to 60 minutes; if no human
+  signals approval, the workflow times out and rejects the patch.
+
+For each agent you can drill into its per-step transcript on the Incident
+detail page — click the agent row in the activity timeline.

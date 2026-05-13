@@ -25,9 +25,10 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { Loader2, PlayCircle, RefreshCw } from "lucide-react";
+import { CheckSquare, Loader2, PlayCircle, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/empty-state/EmptyState";
 import { DecisionDialog } from "@/components/approvals/DecisionDialog";
 import { PendingApprovalsTable } from "@/components/approvals/PendingApprovalsTable";
 import {
@@ -186,23 +187,19 @@ export function ApprovalsClient({
       )}
 
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-card)] p-10 text-center">
-          <p className="text-base font-medium text-[var(--color-foreground)]">
-            No pending approvals — all incidents auto-resolved.
-          </p>
-          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-            High-severity incidents and timed-out medium ones surface here for
-            a human signal. Trigger a synthetic incident to see the flow.
-          </p>
-          <div className="mt-4 flex justify-center">
+        <EmptyState
+          icon={CheckSquare}
+          title="All caught up"
+          description="High-severity incidents and timed-out medium ones surface here for a human signal. Trigger a synthetic incident to see the flow."
+          cta={
             <Link href={"/console/live-demo" as Route}>
               <Button size="sm" disabled={!workspaceId}>
                 <PlayCircle className="h-4 w-4" />
                 Run synthetic incident
               </Button>
             </Link>
-          </div>
-        </div>
+          }
+        />
       ) : (
         <PendingApprovalsTable
           rows={rows}

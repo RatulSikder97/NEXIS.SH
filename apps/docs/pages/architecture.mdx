@@ -1,0 +1,68 @@
+---
+title: Architecture
+---
+
+# Architecture
+
+The NEXIS platform is split into three deployable units:
+
+1. **`apps/web`** — the Next.js console.
+2. **`services/control-plane`** — the Go HTTP API and Temporal worker.
+3. **`apps/docs`** — this docs site.
+
+A fourth piece, the public status page, is hosted on BetterStack.
+
+## Port + adapter pattern
+
+Each domain (auth, billing, integrations, pipelines, …) lives behind a
+port interface in the control-plane:
+
+- **Port** — the Go interface every adapter has to satisfy.
+- **Adapter** — the concrete implementation (e.g. WorkOS for auth,
+  Stripe for billing, Temporal for workflows).
+- **Repo** — the PostgreSQL layer with row-level security on `org_id`.
+- **Service** — the orchestration logic between repo, adapter, and the
+  HTTP handler.
+
+This split means every external dependency is mockable in tests and
+swap­pable in production.
+
+## Recovery pipeline state machine
+
+```
+Sentinel → Pathfinder → Synthesiser → Architect → (Backend | DataEngineer)
+       → QA / Validator → DevOps → ApprovalGate? → done
+```
+
+Implemented as a Temporal workflow. Each agent is a Temporal activity
+with retries + a timeout per agent. The workflow can pause at the
+ApprovalGate for up to 60 minutes waiting on a human signal.
+
+## Data plane
+
+- **PostgreSQL** — every tenant's data lives in a single PG cluster with
+  RLS keyed on `org_id`. Per-workspace tables are filtered by both
+  `org_id` and `workspace_id` via the same RLS policy.
+- **Temporal** — workflow state, persistent across worker restarts.
+- **Redis** — short-lived cache for SSE fan-out and rate-limiter state.
+
+## Observability
+
+- **OpenTelemetry** SDK in both the web app and control-plane.
+- **Sentry** for unhandled exceptions in the web app.
+- **BetterStack** for the public status page and the on-call dashboard.
+
+## Evaluation methodology
+
+Phase 5 froze a 30-incident, 5-seed evaluation harness. We compare:
+
+- **NEXIS** (full pipeline)
+- **OpenAI-only** (single-shot synthesis, no validator)
+- **Ollama-only** (single-shot, no validator)
+- **Human-only** (control)
+
+Per-cell metrics: MTTR (s), patch-acceptance rate, human-intervention
+rate, cost ($ / incident), token count.
+
+Results are committed to `docs/eval-results-v1.json` and rendered in a
+table on the Phase 8 evaluation page (in-progress).

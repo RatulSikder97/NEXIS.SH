@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth/local"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth/workos"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 )
@@ -28,11 +29,22 @@ func NewFromConfig(cfg config.Config, pool *pgxpool.Pool) (domain.AuthProvider, 
 	case "local", "":
 		return buildLocal(cfg, pool), nil
 	case "workos":
+		// Real WorkOS path: requires WORKOS_API_KEY + WORKOS_CLIENT_ID. The
+		// inner Local provider owns the user/session store so /v1/me and
+		// VerifyToken keep working after the OAuth callback mints a session.
+		if cfg.WorkOSAPIKey != "" && cfg.WorkOSClientID != "" {
+			inner := buildLocal(cfg, pool)
+			return workos.New(workos.Config{
+				APIKey:   cfg.WorkOSAPIKey,
+				ClientID: cfg.WorkOSClientID,
+				Local:    inner,
+			}), nil
+		}
 		if cfg.AllowStubWorkOS {
 			slog.Warn("auth: AUTH_PROVIDER=workos with ALLOW_STUB_WORKOS=1 — substituting local provider")
 			return buildLocal(cfg, pool), nil
 		}
-		return nil, fmt.Errorf("AUTH_PROVIDER=workos requires ALLOW_STUB_WORKOS=1 in this build (real WorkOS provider not yet wired); refuse to boot rather than silently fall back to local")
+		return nil, fmt.Errorf("AUTH_PROVIDER=workos requires WORKOS_API_KEY + WORKOS_CLIENT_ID (or ALLOW_STUB_WORKOS=1 for dev); refuse to boot rather than silently fall back to local")
 	default:
 		return nil, fmt.Errorf("unknown AUTH_PROVIDER %q (want local|workos)", cfg.AuthProvider)
 	}

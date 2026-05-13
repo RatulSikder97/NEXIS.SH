@@ -1,0 +1,51 @@
+---
+title: Integrations
+---
+
+# Integrations
+
+NEXIS connects to three third-party tools in Phase 8. Each one is a
+self-contained adapter under the control-plane, encrypted-at-rest credential
+storage, and a one-shot **Configure** dialog in the console.
+
+## GitHub
+
+| What it does | Adapter path | Owner role |
+|---|---|---|
+| Open recovery PRs against your repo | GitHub App (org-scoped install) | Owner |
+
+1. In the console: **Integrations → GitHub → Configure**.
+2. Click **Install on GitHub** — you'll be sent through the GitHub App
+   install flow. Pick the repo(s) NEXIS may open PRs against.
+3. Return to the console; the integration row flips to **Connected**.
+
+## Sentry
+
+| What it does | Adapter path | Owner role |
+|---|---|---|
+| Ingest incidents via webhook | Webhook + DSN | Owner / Admin |
+
+1. **Integrations → Sentry → Configure**.
+2. Paste your project DSN and project slug.
+3. NEXIS creates a webhook in Sentry pointed at
+   `https://api.nexis.dev/v1/integrations/sentry/{org_id}/webhook`.
+
+Each Sentry issue that crosses your alert rule produces one
+`RecoveryPipeline` workflow.
+
+## ArgoCD
+
+| What it does | Adapter path | Owner role |
+|---|---|---|
+| Orchestrate deploys + rollbacks | Server token | Owner / Admin |
+
+1. **Integrations → ArgoCD → Configure**.
+2. Paste your ArgoCD server URL + API token (read+sync scopes).
+3. After the green test, NEXIS can mark `Architect` plans as
+   ArgoCD-deployable and roll back on `Validator` failure.
+
+## API keys
+
+For CI scripts and CLI use, mint a long-lived API key from
+**Settings → API Keys**. Keys are scope-limited (`read` only in Phase 8)
+and rotated by deleting and re-creating.

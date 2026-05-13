@@ -11,10 +11,11 @@
 
 import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Loader2, X } from "lucide-react";
+import { Boxes, Loader2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/empty-state/EmptyState";
 import { RegionPicker } from "@/components/onboarding/RegionPicker";
 import { ProvisioningAnimation } from "@/components/onboarding/ProvisioningAnimation";
 import {
@@ -156,12 +157,28 @@ export function WorkspacesSettingsClient({
         )}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-        {initial.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-[var(--color-muted-foreground)]">
-            No workspaces yet.
-          </p>
-        ) : (
+      {initial.length === 0 ? (
+        <EmptyState
+          icon={Boxes}
+          title="No workspaces yet"
+          description="Provision an isolated environment for each team or stage. Each workspace is regionally pinned."
+          cta={
+            canCreate && (
+              <Button
+                size="sm"
+                type="button"
+                onClick={() => {
+                  resetDialog();
+                  setOpen(true);
+                }}
+              >
+                Create workspace
+              </Button>
+            )
+          }
+        />
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
           <table className="w-full text-sm">
             <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
               <tr>
@@ -214,8 +231,8 @@ export function WorkspacesSettingsClient({
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
 
       <Dialog.Root
         open={open}

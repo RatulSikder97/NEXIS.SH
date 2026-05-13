@@ -120,6 +120,58 @@ func (p *Provider) DetachCard(ctx context.Context, princ domain.Principal) error
 	return p.repo.DeletePaymentMethod(ctx, princ.OrgID)
 }
 
+// CreateSetupIntent returns a synthetic "seti_local_<random>" client_secret.
+// The Phase 7 frontend Stripe Elements form treats this opaque value the same
+// way it treats a real SetupIntent client_secret — for the local provider the
+// browser never actually contacts Stripe, but the wire shape stays identical
+// so a single dashboard build can target either provider.
+func (p *Provider) CreateSetupIntent(_ context.Context, _ domain.Principal) (string, error) {
+	return genSyntheticID("seti_local_")
+}
+
+// AttachPaymentMethod accepts any pmID and persists a synthetic PaymentMethod
+// row using the same shape AttachCard produces. The local provider has no
+// real card details for the supplied pmID so brand defaults to "card" and
+// last4 is the last 4 chars of pmID — enough for the dashboard to render
+// something stable without revealing made-up card numbers.
+func (p *Provider) AttachPaymentMethod(ctx context.Context, princ domain.Principal, pmID, billingEmail string) (domain.PaymentMethod, error) {
+	if pmID == "" {
+		return domain.PaymentMethod{}, fmt.Errorf("payment_method id required")
+	}
+	custID, err := genSyntheticID("cus_local_")
+	if err != nil {
+		return domain.PaymentMethod{}, err
+	}
+	// Reuse the existing customer id if one is already stashed on the row.
+	if existing, err := p.repo.GetPaymentMethod(ctx, princ.OrgID); err == nil && existing != nil && existing.ExternalCustomerID != "" {
+		custID = existing.ExternalCustomerID
+	}
+	last4 := pmID
+	if len(last4) > 4 {
+		last4 = last4[len(last4)-4:]
+	}
+	now := p.now().UTC()
+	pm := domain.PaymentMethod{
+		OrgID:                   princ.OrgID,
+		Provider:                "local",
+		ExternalCustomerID:      custID,
+		ExternalPaymentMethodID: pmID,
+		Brand:                   "card",
+		Last4:                   last4,
+		ExpMonth:                int(now.Month()),
+		ExpYear:                 now.Year() + 4,
+		BillingEmail:            billingEmail,
+	}
+	if err := p.repo.UpsertPaymentMethod(ctx, pm); err != nil {
+		return domain.PaymentMethod{}, err
+	}
+	out, err := p.repo.GetPaymentMethod(ctx, princ.OrgID)
+	if err != nil {
+		return domain.PaymentMethod{}, err
+	}
+	return *out, nil
+}
+
 // stripSpaces removes ASCII spaces from s.
 func stripSpaces(s string) string {
 	return strings.ReplaceAll(s, " ", "")

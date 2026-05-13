@@ -24,6 +24,7 @@ import * as React from "react";
 
 import { Sidebar } from "@/components/console/Sidebar";
 import { Topbar } from "@/components/console/Topbar";
+import { TourMount } from "@/components/onboarding/TourMount";
 import type { Workspace } from "@/lib/workspaces";
 
 const API =
@@ -47,7 +48,13 @@ export default async function ConsoleLayout({
     cache: "no-store",
   });
   if (!res.ok) redirect("/sign-in");
-  const me = (await res.json()) as { user: { email: string } };
+  const me = (await res.json()) as {
+    user: { email: string };
+    // Phase 8 — `preferences` is sent inline by /v1/me once the backend
+    // exposes it (see Phase 8 spec). Treat as optional so this code keeps
+    // working against the pre-Phase-8 control-plane.
+    preferences?: { tour_completed?: boolean } & Record<string, unknown>;
+  };
 
   // Workspaces list drives both the onboarding gate and the Topbar badge.
   // A non-OK response degrades to an empty list; the onboarding redirect
@@ -69,6 +76,22 @@ export default async function ConsoleLayout({
     workspaces.find((w) => w.status === "ready") ??
     workspaces[0];
 
+  // Phase 8 — Resolve preferences via a side fetch when /v1/me doesn't
+  // inline them. Failures degrade to {}, which makes `tour_completed` falsy
+  // and shows the tour — a safe default (a returning user can dismiss it
+  // once and the patch lands).
+  let prefs: Record<string, unknown> = me.preferences ?? {};
+  if (!me.preferences) {
+    const prefR = await fetch(`${API}/v1/me/preferences`, {
+      headers: { cookie: cookieHeader },
+      cache: "no-store",
+    });
+    if (prefR.ok) {
+      prefs = (await prefR.json()) as Record<string, unknown>;
+    }
+  }
+  const tourCompleted = prefs.tour_completed === true;
+
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-foreground)]">
       <Sidebar />
@@ -81,6 +104,7 @@ export default async function ConsoleLayout({
         />
         <main className="mx-auto max-w-[1440px] px-6 py-6">{children}</main>
       </div>
+      {!tourCompleted && <TourMount />}
     </div>
   );
 }

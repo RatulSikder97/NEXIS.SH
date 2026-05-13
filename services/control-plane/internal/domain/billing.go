@@ -87,11 +87,42 @@ type UsageGroup struct {
 
 // BillingProvider is the port the HTTP billing handlers depend on. Two
 // implementations live in internal/adapter/billing/{local,stripe}/ — the
-// local one is real for Phase 3.5; stripe is a stub returning
-// ErrNotImplemented until Phase 7.
+// local one is real for Phase 3.5; stripe is real in Phase 7 once
+// STRIPE_SECRET_KEY is wired.
+//
+// Two payment-collection flows live behind this port:
+//
+//   - Legacy `AttachCard` accepts raw card data at the BillingProvider
+//     boundary (PAN + CVC never crosses the boundary into the repo). The
+//     local provider implements this flow end-to-end with synthetic
+//     ids; the stripe provider rejects it (the Stripe SDK must never see
+//     a raw PAN — Stripe.js is responsible for tokenisation client-side).
+//
+//   - Stripe SetupIntent flow used by the dashboard's Stripe Elements
+//     form (Phase 7). `CreateSetupIntent` returns a client_secret the
+//     browser uses to confirm the SetupIntent via Stripe.js, then the
+//     browser posts the resulting payment_method id back to
+//     `AttachPaymentMethod`, which attaches it to the org's Stripe
+//     customer, sets it as the default for future invoices, and persists
+//     the brand+last4+expiry projection. The local provider stubs both
+//     calls with synthetic ids so the same wire surface works in dev
+//     without a Stripe key.
 type BillingProvider interface {
 	Name() string
 	AttachCard(ctx context.Context, p Principal, in AddCardInput) (PaymentMethod, error)
 	GetPaymentMethod(ctx context.Context, p Principal) (PaymentMethod, error)
 	DetachCard(ctx context.Context, p Principal) error
+
+	// CreateSetupIntent returns the client_secret of a freshly-minted Stripe
+	// SetupIntent bound to the org's Stripe customer (creating the customer
+	// on demand when the org hasn't yet attached a payment method). The
+	// local provider returns a synthetic "seti_local_..." secret.
+	CreateSetupIntent(ctx context.Context, p Principal) (clientSecret string, err error)
+
+	// AttachPaymentMethod attaches a previously-tokenised payment_method id
+	// (e.g. "pm_1Nyz..." from Stripe.js) to the org's Stripe customer, sets
+	// it as the default for future invoices, and persists the brand/last4
+	// projection. The local provider accepts any pmID and writes a synthetic
+	// row identical in shape to AttachCard.
+	AttachPaymentMethod(ctx context.Context, p Principal, pmID, billingEmail string) (PaymentMethod, error)
 }

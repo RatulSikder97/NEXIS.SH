@@ -1,0 +1,90 @@
+# Phase 8 — BetterStack checks-as-code.
+#
+# Source of truth for the public status page at https://status.nexis.dev.
+# Synced to BetterStack via the BetterStack API on every push to main
+# touching this file. Phase 8 ships the file only; the wire-up to a CD
+# pipeline is Phase 7 territory.
+#
+# Each entry produces one BetterStack monitor (called a "check" in the
+# terraform-betteruptime provider docs). Down-thresholds are conservative;
+# BetterStack waits for `regions_check_failed` consecutive failures across
+# the configured regions before flipping the monitor to `down` and posting
+# to the public status page.
+#
+# Probe contracts:
+#   * control-plane /healthz — public, no auth, returns 200 on the cluster
+#     happy path. Documented in services/control-plane.
+#   * web /                  — public, returns 200 + body contains "NEXIS".
+#   * sentry probe           — POST to /v1/integrations/sentry/probe with
+#                              an HMAC-signed empty body using
+#                              SENTRY_PROBE_HMAC_SECRET; expects 202.
+#   * temporal heartbeat     — GET /healthz/temporal; 200 when a worker
+#                              has reported a heartbeat within 60 s, else
+#                              503.
+
+version: 1
+status_page:
+  domain: status.nexis.dev
+  name: NEXIS
+  subscribe_box: true
+  branding:
+    logo_url: https://nexis.dev/logo-light.svg
+    accent_color: "#2563eb" # tailwind-blue-600 to match the console.
+
+monitors:
+  - name: control-plane /healthz
+    url: https://api.nexis.dev/healthz
+    check_frequency_seconds: 30
+    request_method: GET
+    expected_status_code: 200
+    response_body_contains: "ok"
+    regions: ["us", "eu"]
+    regions_check_failed: 2
+
+  - name: web /
+    url: https://app.nexis.dev/
+    check_frequency_seconds: 60
+    request_method: GET
+    expected_status_code: 200
+    response_body_contains: "NEXIS"
+    regions: ["us", "eu"]
+    regions_check_failed: 2
+
+  - name: sentry-webhook probe
+    url: https://api.nexis.dev/v1/integrations/sentry/probe
+    check_frequency_seconds: 300
+    request_method: POST
+    expected_status_code: 202
+    # The probe HMAC is computed from a fixed payload + the
+    # SENTRY_PROBE_HMAC_SECRET env var at sync time. Don't commit the
+    # secret here — the sync script reads it from the BetterStack secret
+    # store.
+    request_headers:
+      content-type: "application/json"
+      x-nexis-probe-hmac: "$SENTRY_PROBE_HMAC_SECRET"
+    request_body: "{}"
+    regions: ["us"]
+    regions_check_failed: 1
+
+  - name: temporal worker heartbeat
+    url: https://api.nexis.dev/healthz/temporal
+    check_frequency_seconds: 60
+    request_method: GET
+    expected_status_code: 200
+    regions: ["us", "eu"]
+    regions_check_failed: 2
+
+incident_policies:
+  - name: page-on-call
+    monitors:
+      - control-plane /healthz
+      - temporal worker heartbeat
+    notify:
+      pagerduty_integration_key: "$PAGERDUTY_INTEGRATION_KEY"
+
+  - name: ping-team
+    monitors:
+      - web /
+      - sentry-webhook probe
+    notify:
+      slack_webhook_url: "$SLACK_OPS_WEBHOOK_URL"

@@ -24,7 +24,7 @@ func NewFromConfig(cfg config.Config, billingRepo *repo.BillingRepo) (domain.Bil
 	case "local", "":
 		return local.New(billingRepo), nil
 	case "stripe":
-		return stripe.New(stripe.Config{}), nil
+		return stripe.New(stripe.Config{SecretKey: cfg.StripeSecretKey}, billingRepo)
 	default:
 		return nil, fmt.Errorf("unknown BILLING_PROVIDER %q", cfg.BillingProvider)
 	}

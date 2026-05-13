@@ -326,6 +326,144 @@ func (p *Provider) ConsumeMagicLink(ctx context.Context, token string) (domain.S
 	return p.issueSessionForUser(ctx, userID)
 }
 
+// --- OAuth (Phase 7) -------------------------------------------------------
+
+// ConsumeOAuthCode is the local stub for the WorkOS callback handshake. It
+// produces a deterministic user "oauth-stub@nexis.local" so the dev path can
+// exercise the same /v1/auth/workos/callback handler / cookie code without a
+// WorkOS account. On first run it creates the org + user + membership; on
+// subsequent runs it reuses the existing rows and only mints a new session.
+//
+// `code` is accepted but unused — any non-empty value is treated as a valid
+// stub exchange. The handler is responsible for state (CSRF) verification
+// before calling this method.
+func (p *Provider) ConsumeOAuthCode(ctx context.Context, code string) (domain.SignupResult, error) {
+	if code == "" {
+		return domain.SignupResult{}, fmt.Errorf("oauth: code required: %w", domain.ErrInvalidCredentials)
+	}
+	const stubEmail = "oauth-stub@nexis.local"
+	const stubOrgName = "OAuth Stub Org"
+	return p.upsertOAuthUser(ctx, stubEmail, stubOrgName)
+}
+
+// upsertOAuthUser finds-or-creates a user by email and (if newly created) an
+// org with the supplied display name. Then issues a session for the resulting
+// user. Used by both the local-stub ConsumeOAuthCode path and the WorkOS
+// provider's real callback flow.
+//
+// Exported via the OAuthUpserter helper below so the WorkOS adapter can
+// delegate to the same persistence flow without duplicating the org-bootstrap
+// logic.
+func (p *Provider) upsertOAuthUser(ctx context.Context, email, orgDisplayName string) (domain.SignupResult, error) {
+	if email == "" {
+		return domain.SignupResult{}, fmt.Errorf("oauth: email required: %w", domain.ErrInvalidCredentials)
+	}
+	now := p.clock().UTC()
+
+	// Existing user? Reuse their org + role + mint a session. We do not touch
+	// the password hash — OAuth users may not have one. The session mint path
+	// is identical to ConsumeMagicLink.
+	if existing, err := p.store.GetUserByEmail(ctx, email); err == nil && existing != nil {
+		orgID, role, err := p.store.GetMembership(ctx, existing.ID)
+		if err != nil {
+			return domain.SignupResult{}, fmt.Errorf("oauth: lookup membership: %w", err)
+		}
+		org, err := p.store.GetOrganization(ctx, orgID)
+		if err != nil {
+			return domain.SignupResult{}, fmt.Errorf("oauth: lookup org: %w", err)
+		}
+		session := domain.Session{
+			ID:        uuid.NewString(),
+			UserID:    existing.ID,
+			OrgID:     orgID,
+			CreatedAt: now,
+			ExpiresAt: now.Add(p.sessionTTL),
+		}
+		if err := p.store.CreateSession(ctx, &session); err != nil {
+			return domain.SignupResult{}, fmt.Errorf("oauth: create session: %w", err)
+		}
+		tok, err := p.signJWT(session.ID, existing.ID, orgID, role, now, session.ExpiresAt)
+		if err != nil {
+			return domain.SignupResult{}, fmt.Errorf("oauth: sign jwt: %w", err)
+		}
+		return domain.SignupResult{
+			User:    *existing,
+			Org:     *org,
+			Session: domain.SessionToken{Token: tok, ExpiresAt: session.ExpiresAt},
+		}, nil
+	}
+
+	// New user — mirror the Signup flow: org first (with slug-suffix retry on
+	// collision), then user, membership, session. Password hash is left empty
+	// because the OAuth provider owns the credential.
+	userID := uuid.NewString()
+	orgID := uuid.NewString()
+	if orgDisplayName == "" {
+		orgDisplayName = email + "'s org"
+	}
+	baseSlug := slugify(orgDisplayName)
+	org := domain.Organization{
+		ID:          orgID,
+		Name:        orgDisplayName,
+		Slug:        baseSlug,
+		OwnerUserID: userID,
+		CreatedAt:   now,
+	}
+	var createErr error
+	for attempt := 0; attempt < 6; attempt++ {
+		if attempt > 0 {
+			org.Slug = fmt.Sprintf("%s-%d", baseSlug, attempt+1)
+		}
+		createErr = p.store.CreateOrganization(ctx, &org)
+		if createErr == nil {
+			break
+		}
+		if !isUniqueViolation(createErr) {
+			break
+		}
+	}
+	if createErr != nil {
+		return domain.SignupResult{}, fmt.Errorf("oauth: create org: %w", createErr)
+	}
+	user := domain.User{
+		ID:        userID,
+		Email:     email,
+		CreatedAt: now,
+	}
+	if err := p.store.CreateUser(ctx, &user); err != nil {
+		return domain.SignupResult{}, fmt.Errorf("oauth: create user: %w", err)
+	}
+	if err := p.store.CreateMembership(ctx, orgID, userID, domain.RoleOwner); err != nil {
+		return domain.SignupResult{}, fmt.Errorf("oauth: create membership: %w", err)
+	}
+	session := domain.Session{
+		ID:        uuid.NewString(),
+		UserID:    userID,
+		OrgID:     orgID,
+		CreatedAt: now,
+		ExpiresAt: now.Add(p.sessionTTL),
+	}
+	if err := p.store.CreateSession(ctx, &session); err != nil {
+		return domain.SignupResult{}, fmt.Errorf("oauth: create session: %w", err)
+	}
+	tok, err := p.signJWT(session.ID, userID, orgID, domain.RoleOwner, now, session.ExpiresAt)
+	if err != nil {
+		return domain.SignupResult{}, fmt.Errorf("oauth: sign jwt: %w", err)
+	}
+	return domain.SignupResult{
+		User:    user,
+		Org:     org,
+		Session: domain.SessionToken{Token: tok, ExpiresAt: session.ExpiresAt},
+	}, nil
+}
+
+// UpsertOAuthUser is the exported entrypoint the WorkOS adapter calls to share
+// the find-or-create flow without duplicating session-mint logic. It is the
+// same code path the local ConsumeOAuthCode stub uses.
+func (p *Provider) UpsertOAuthUser(ctx context.Context, email, orgDisplayName string) (domain.SignupResult, error) {
+	return p.upsertOAuthUser(ctx, email, orgDisplayName)
+}
+
 // --- MFA -------------------------------------------------------------------
 
 // EnrollMFA generates a TOTP secret and QR code for a user; the secret is

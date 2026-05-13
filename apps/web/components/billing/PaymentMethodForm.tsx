@@ -1,11 +1,19 @@
 "use client";
 
-// Phase 3.5 Stage 8 — Payment-method form.
+// Phase 3.5 Stage 8 / Phase 7 — Payment-method form.
 //
-// Plain HTML inputs + a small handful of validations on the card number
-// (digits only, formatted with spaces every 4). The control-plane masks
-// the card before storing it; we never persist the PAN client-side beyond
-// the live form state.
+// Two render branches gated on NEXT_PUBLIC_BILLING_PROVIDER:
+//
+//   - "stripe" → Stripe Elements (<CardElement /> inside <Elements>) that
+//     pulls a SetupIntent client_secret from the control-plane, calls
+//     `stripe.confirmCardSetup`, then POSTs the resulting payment_method id
+//     back to the control-plane to attach it to the org's Stripe customer.
+//     The PAN never touches our control-plane in this path.
+//
+//   - "local" (default) → Phase 3.5 mocked-card form below. Plain HTML inputs
+//     with light client-side validation. The control-plane masks the card
+//     before storing it; we never persist the PAN client-side beyond the
+//     live form state.
 //
 // "Use test card" is a dev affordance — it fills with the conventional
 // 4242 4242 4242 4242 dummy data so a tester can move past the form
@@ -15,9 +23,21 @@
 import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import {
+  CardElement,
+  Elements,
+  useElements,
+  useStripe,
+} from "@stripe/react-stripe-js";
 
 import { Button } from "@/components/ui/Button";
 import { billing } from "@/lib/billing";
+
+const BILLING_PROVIDER = process.env.NEXT_PUBLIC_BILLING_PROVIDER ?? "local";
+const STRIPE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 function formatCardNumber(raw: string): string {
   // Strip every non-digit, clamp to 19 digits (a Maestro outlier; most cards
@@ -26,11 +46,221 @@ function formatCardNumber(raw: string): string {
   return digits.replace(/(.{4})/g, "$1 ").trim();
 }
 
+// `loadStripe` returns a singleton-style promise that must live outside of
+// the component tree so we don't reload Stripe.js on every render.
+let stripePromise: Promise<Stripe | null> | null = null;
+function getStripePromise(): Promise<Stripe | null> | null {
+  if (!STRIPE_PUBLISHABLE_KEY) return null;
+  if (!stripePromise) {
+    stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
+  }
+  return stripePromise;
+}
+
 export function PaymentMethodForm({
   onSaved,
 }: {
   onSaved?: () => void;
 }) {
+  if (BILLING_PROVIDER === "stripe") {
+    return <StripePaymentMethodForm onSaved={onSaved} />;
+  }
+  return <LocalPaymentMethodForm onSaved={onSaved} />;
+}
+
+// ---------- Stripe Elements path ----------
+
+function StripePaymentMethodForm({ onSaved }: { onSaved?: () => void }) {
+  const promise = getStripePromise();
+  if (!promise) {
+    return (
+      <div
+        role="alert"
+        className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300"
+      >
+        Stripe publishable key is not configured. Set
+        {" "}<code>NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY</code>.
+      </div>
+    );
+  }
+  return (
+    <Elements stripe={promise}>
+      <StripeInnerForm onSaved={onSaved} />
+    </Elements>
+  );
+}
+
+type SetupIntentResp = { client_secret: string };
+
+function StripeInnerForm({ onSaved }: { onSaved?: () => void }) {
+  const router = useRouter();
+  const stripe = useStripe();
+  const elements = useElements();
+
+  const [email, setEmail] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (!stripe || !elements) {
+      // Stripe.js hasn't finished loading yet — the button is disabled in
+      // that state, but guard anyway.
+      return;
+    }
+    const card = elements.getElement(CardElement);
+    if (!card) {
+      setError("Card element is not ready.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      // 1. Ask the control-plane to mint a SetupIntent. The org's Stripe
+      //    customer is created or reused server-side; we never see it.
+      const intentRes = await fetch(`${API}/v1/billing/payment-method/intent`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ billing_email: email || undefined }),
+      });
+      if (!intentRes.ok) {
+        const body = (await intentRes.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(body.error ?? intentRes.statusText);
+      }
+      const { client_secret } = (await intentRes.json()) as SetupIntentResp;
+      if (!client_secret) {
+        throw new Error("Server returned an empty SetupIntent secret.");
+      }
+
+      // 2. Confirm the SetupIntent in the browser. The PAN goes straight to
+      //    Stripe — our origin never touches it.
+      const confirm = await stripe.confirmCardSetup(client_secret, {
+        payment_method: {
+          card,
+          billing_details: email ? { email } : undefined,
+        },
+      });
+      if (confirm.error) {
+        throw new Error(confirm.error.message ?? "Card was declined.");
+      }
+      const paymentMethodId = confirm.setupIntent?.payment_method;
+      if (!paymentMethodId || typeof paymentMethodId !== "string") {
+        throw new Error(
+          "Stripe did not return a payment_method id; please retry.",
+        );
+      }
+
+      // 3. Hand the payment_method id back to the control-plane, which
+      //    attaches it to the customer + sets it as the default for invoices.
+      const confirmRes = await fetch(
+        `${API}/v1/billing/payment-method/confirm`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            payment_method: paymentMethodId,
+            billing_email: email || undefined,
+          }),
+        },
+      );
+      if (!confirmRes.ok) {
+        const body = (await confirmRes.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(body.error ?? confirmRes.statusText);
+      }
+
+      onSaved?.();
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save card");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="space-y-1">
+        <label
+          htmlFor="stripe-card"
+          className="text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]"
+        >
+          Card details
+        </label>
+        <div
+          id="stripe-card"
+          className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-3 text-sm focus-within:ring-2 focus-within:ring-[var(--color-ring)]"
+        >
+          <CardElement
+            options={{
+              hidePostalCode: false,
+              style: {
+                base: {
+                  fontSize: "14px",
+                  // Match the rest of the form's foreground colour; Stripe's
+                  // CardElement can't read CSS variables itself.
+                  color:
+                    typeof window !== "undefined"
+                      ? getComputedStyle(document.documentElement)
+                          .getPropertyValue("--color-foreground")
+                          .trim() || "#0f172a"
+                      : "#0f172a",
+                  "::placeholder": { color: "#9ca3af" },
+                },
+                invalid: { color: "#ef4444" },
+              },
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label
+          htmlFor="stripe-billing-email"
+          className="text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]"
+        >
+          Billing email
+        </label>
+        <input
+          id="stripe-billing-email"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="billing@example.com"
+          className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+        />
+      </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300"
+        >
+          {error}
+        </div>
+      )}
+
+      <div className="flex items-center justify-end gap-3 pt-2">
+        <Button type="submit" disabled={busy || !stripe || !elements}>
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+          Save payment method
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ---------- Phase 3.5 local mocked form ----------
+
+function LocalPaymentMethodForm({ onSaved }: { onSaved?: () => void }) {
   const router = useRouter();
   const [cardNumber, setCardNumber] = React.useState("");
   const [expMonth, setExpMonth] = React.useState("");

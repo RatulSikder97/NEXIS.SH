@@ -7,6 +7,10 @@ import type { StaggerPreset } from "@/components/motion/variants";
 import { staggerPresets } from "@/components/motion/variants";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
+// React 19 / framer-motion 12 children-type mismatch — see FadeUp.tsx for
+// the rationale; runtime is unaffected.
+type Slot = React.ReactElement | null;
+
 export function StaggerGroup({
   children,
   className,
@@ -34,7 +38,7 @@ export function StaggerGroup({
         initial="hidden"
         animate="visible"
       >
-        {children}
+        {children as Slot}
       </motion.div>
     );
   }
@@ -47,7 +51,7 @@ export function StaggerGroup({
       whileInView="visible"
       viewport={{ margin: "-10% 0px -12% 0px", once: true }}
     >
-      {children}
+      {children as Slot}
     </motion.div>
   );
 }

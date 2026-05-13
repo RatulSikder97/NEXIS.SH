@@ -160,6 +160,11 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		r.Post("/v1/auth/magic", handler.Magic(deps.Auth))
 		r.Get("/v1/auth/verify", handler.Verify(deps.Auth, aud, cfg))
 
+		// Phase 7 — WorkOS OAuth callback. Public (no session yet); the
+		// handler validates the one-shot nexis_oauth_state cookie against the
+		// state query param before exchanging the code via the AuthProvider.
+		r.Get("/v1/auth/workos/callback", handler.WorkOSCallback(deps.Auth, aud, cfg))
+
 		// Public invite routes (no session yet).
 		r.Get("/v1/invites/{token}", handler.InviteGet(deps.Auth))
 		r.Post("/v1/invites/{token}/claim", handler.InviteClaim(deps.Auth, cfg))
@@ -305,6 +310,11 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				if deps.Billing != nil {
 					g2.Post("/v1/billing/payment-method", handler.BillingAddPaymentMethod(deps.Billing, aud))
 					g2.Delete("/v1/billing/payment-method", handler.BillingDeletePaymentMethod(deps.Billing, aud))
+					// Phase 7 — Stripe SetupIntent flow used by Stripe Elements
+					// in the dashboard. Local provider serves synthetic secrets
+					// so the same wire surface works without STRIPE_SECRET_KEY.
+					g2.Post("/v1/billing/payment-method/intent", handler.BillingCreateSetupIntent(deps.Billing, aud))
+					g2.Post("/v1/billing/payment-method/confirm", handler.BillingConfirmSetupIntent(deps.Billing, aud))
 				}
 			})
 		})

@@ -19,9 +19,10 @@
 import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { Loader2, PlayCircle, RefreshCw } from "lucide-react";
+import { Beaker, Loader2, PlayCircle, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/empty-state/EmptyState";
 import { InspectorDrawer } from "@/components/console/InspectorDrawer";
 import {
   evalApi,
@@ -340,15 +341,11 @@ export function EvalClient({
       )}
 
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-card)] p-10 text-center">
-          <p className="text-base font-medium text-[var(--color-foreground)]">
-            No eval runs yet
-          </p>
-          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-            Trigger a scenario to compare OpenAI and Ollama side-by-side on the
-            recovery loop.
-          </p>
-          <div className="mt-4 flex justify-center">
+        <EmptyState
+          icon={Beaker}
+          title="No eval runs yet"
+          description="Trigger a scenario to compare OpenAI and Ollama side-by-side on the recovery loop."
+          cta={
             <Button
               size="sm"
               onClick={() => setDialogOpen(true)}
@@ -357,8 +354,8 @@ export function EvalClient({
               <PlayCircle className="h-4 w-4" />
               Run new eval
             </Button>
-          </div>
-        </div>
+          }
+        />
       ) : (
         <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
           <table className="w-full text-sm">

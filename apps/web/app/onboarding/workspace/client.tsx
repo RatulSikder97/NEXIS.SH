@@ -1,29 +1,32 @@
 "use client";
 
 // Phase 3.5 Stage 6 — Onboarding wizard client.
+// Phase 8 — Sample-repo step after provisioning.
 //
-// Two-phase machine:
+// Three-phase machine:
 //   A) form    — name input + RegionPicker → POST /v1/workspaces
-//   B) running — heading + ProvisioningAnimation → on ready, route /console
+//   B) running — heading + ProvisioningAnimation → on ready, transition to C
+//   C) sample  — SampleRepoStep: try the fixture | connect GitHub | skip
 //
 // Errors during create stay in phase A. Errors during provisioning surface
 // inside the animation card with a Retry button that drops us back to A.
+// The Step 2 surface owns its own navigation; we hand it the workspaceId.
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { RegionPicker } from "@/components/onboarding/RegionPicker";
 import { ProvisioningAnimation } from "@/components/onboarding/ProvisioningAnimation";
+import { SampleRepoStep } from "@/components/onboarding/SampleRepoStep";
 import { workspaces, type Region, type Workspace } from "@/lib/workspaces";
 
 type Phase =
   | { kind: "form"; error: string | null }
-  | { kind: "running"; ws: Workspace };
+  | { kind: "running"; ws: Workspace }
+  | { kind: "sample"; ws: Workspace };
 
 export function OnboardingClient({ regions }: { regions: Region[] }) {
-  const router = useRouter();
   const [name, setName] = React.useState("");
   const [region, setRegion] = React.useState<string | null>(
     regions[0]?.id ?? null,
@@ -49,10 +52,13 @@ export function OnboardingClient({ regions }: { regions: Region[] }) {
   }
 
   function onReady() {
-    // Hard navigate so the console layout re-reads cookies and the
-    // workspaces list is fresh.
-    router.replace("/console");
-    router.refresh();
+    // Phase 8: flip to the sample-repo step instead of routing straight to
+    // /console. The Step 2 surface owns its own navigation away from
+    // onboarding so the user lands on whichever follow-on path they pick.
+    setPhase((prev) => {
+      if (prev.kind !== "running") return prev;
+      return { kind: "sample", ws: prev.ws };
+    });
   }
 
   function onError() {
@@ -63,6 +69,15 @@ export function OnboardingClient({ regions }: { regions: Region[] }) {
       kind: "form",
       error: "Provisioning failed. Try again with a different name or region.",
     });
+  }
+
+  if (phase.kind === "sample") {
+    return (
+      <SampleRepoStep
+        workspaceId={phase.ws.id}
+        workspaceName={phase.ws.name}
+      />
+    );
   }
 
   if (phase.kind === "running") {
