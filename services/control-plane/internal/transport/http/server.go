@@ -22,6 +22,7 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
+	platformtemporal "github.com/nexis-eco/nexis/services/control-plane/internal/platform/temporal"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/handler"
 	appmw "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/middleware"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
@@ -88,6 +89,21 @@ type Deps struct {
 	EvalRepo        *repo.EvalRepo
 	EvalRunner      *usecase.EvalRunner
 	TokenLedgerRepo *repo.TokenLedgerRepo
+
+	// Phase 8 — public-beta surface.
+	//
+	//   InviteCodes — repo for system-wide invite-code mint/list/revoke +
+	//     atomic signup redemption.
+	//   NASATLX — repo for the workload-survey POST /v1/nasa-tlx endpoint.
+	//   OrgStats — repo for GET /v1/me/org-stats successful_recoveries_count.
+	//   Sentinel — narrow port satisfied by *sentinel.Detector via TriggerOne;
+	//     null when the detector is disabled / its deps are missing.
+	//   TemporalHB — heartbeat tracker the /v1/healthz/temporal endpoint reads.
+	InviteCodes *repo.InviteCodesRepo
+	NASATLX     *repo.NASATLXRepo
+	OrgStats    *repo.OrgStatsRepo
+	Sentinel    handler.SentinelTriggerer
+	TemporalHB  *platformtemporal.Heartbeat
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
@@ -139,7 +155,7 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		if deps.WorkspacesRepo != nil {
 			wsChecker = deps.WorkspacesRepo
 		}
-		r.Post("/v1/auth/signup", handler.Signup(deps.Auth, aud, cfg, wsChecker))
+		r.Post("/v1/auth/signup", handler.Signup(deps.Auth, aud, cfg, wsChecker, nil, false))
 		r.Post("/v1/auth/login", handler.Login(deps.Auth, aud, cfg, wsChecker))
 		r.Post("/v1/auth/magic", handler.Magic(deps.Auth))
 		r.Get("/v1/auth/verify", handler.Verify(deps.Auth, aud, cfg))
@@ -183,6 +199,13 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 
 			if deps.Integrations != nil {
 				g.Get("/v1/integrations", handler.IntegrationsList(deps.Integrations))
+			}
+
+			// Phase 5+6 — agents fleet. Read-only catalog + per-org observability
+			// rolled up from activity_events. Open to any authenticated principal
+			// in the workspace.
+			if deps.Pool != nil {
+				g.Get("/v1/workspaces/{ws_id}/agents", handler.AgentsList(deps.Pool))
 			}
 
 			// Workspace read paths — open to any authenticated principal.

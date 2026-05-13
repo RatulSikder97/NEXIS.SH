@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -106,6 +107,80 @@ type Config struct {
 	FixtureRepoInstallationID    int64
 	SlackEnabled                 bool
 	ApprovalMediumTimeoutSeconds int
+
+	// Phase 7 — cloud cutover selectors. Defaults are dev-safe; the
+	// FatalIfLocalInCloud assertion fires at boot when AppEnv in
+	// {staging, prod} and any selector is still local/dev-shaped.
+	AWSRegion       string // us-east-1 default
+	KeyVault        string // "local" | "kms"
+	SecretsBackend  string // "env"   | "secretsmanager"
+	Mailer          string // "smtp"  | "ses"
+	ValidatorRunner string // "docker"| "modal"
+	TemporalCloud   bool   // when true, dial Temporal Cloud over mTLS
+	OTLPTarget      string // "local" | "grafana_cloud"
+
+	// AWS adapter config. Resolved at runtime from Secrets Manager in
+	// staging/prod; populated from env in dev.
+	KMSKeyARN           string
+	S3PatchBucket       string
+	S3AuditExportBucket string
+	SecretsPrefix       string // "nexis-<env>/control-plane/"
+
+	// WorkOS (Phase 7 real impl).
+	WorkOSAPIKey        string
+	WorkOSClientID      string
+	WorkOSRedirectURI   string
+	WorkOSWebhookSecret string
+
+	// Stripe (Phase 7 real impl).
+	StripeSecretKey      string
+	StripePublishableKey string
+	StripeWebhookSecret  string
+	StripePriceRuntime   string
+	StripePriceEvents    string
+	StripePriceTokens    string
+
+	// Mailer (SES).
+	SESFromAddress string
+
+	// Temporal Cloud — mTLS dial.
+	TemporalCloudNamespace string
+	TemporalCloudTLSCertPath string
+	TemporalCloudTLSKeyPath  string
+
+	// Grafana Cloud OTLP.
+	GrafanaCloudOTLPEndpoint string
+	GrafanaCloudOTLPToken    string
+
+	// Modal validator runner.
+	ModalAppURL string
+	ModalToken  string
+
+	// Audit anchor cron.
+	AuditAnchorBucket string
+	AuditAnchorCron   string
+
+	// Phase 8 — public-beta surface.
+	//
+	//   SignupRequiresInvite — when true, POST /v1/auth/signup requires
+	//     ?invite=<code> and rejects with 403 if missing or invalid. Defaults
+	//     to false so the existing dev path keeps working.
+	//
+	//   SentryProbeSecret — HMAC secret for the BetterStack probe at
+	//     POST /v1/integrations/sentry/probe. Falls back to
+	//     GitHubDefaultWebhookSecret in dev so the probe works without
+	//     dedicated env wiring.
+	//
+	//   TemporalHealthzWindowSeconds — staleness budget for the temporal
+	//     heartbeat. Defaults to 60.
+	//
+	//   TemporalHeartbeatIntervalMs — how often the heartbeat goroutine
+	//     pings Temporal. Defaults to 15000ms so a ~1/4 of the staleness
+	//     window is covered by every ping.
+	SignupRequiresInvite         bool
+	SentryProbeSecret            string
+	TemporalHealthzWindowSeconds int
+	TemporalHeartbeatIntervalMs  int
 }
 
 func Load() Config {
@@ -196,7 +271,88 @@ func Load() Config {
 		FixtureRepoInstallationID:    int64(envInt("FIXTURE_REPO_INSTALLATION_ID", 98765)),
 		SlackEnabled:                 parseBool(env("SLACK_ENABLED", "1")),
 		ApprovalMediumTimeoutSeconds: envInt("APPROVAL_MEDIUM_TIMEOUT_SECONDS", 120),
+
+		// Phase 7 — cloud cutover selectors.
+		AWSRegion:       env("AWS_REGION", "us-east-1"),
+		KeyVault:        env("KEYVAULT", "local"),
+		SecretsBackend:  env("SECRETS", "env"),
+		Mailer:          env("MAILER", "smtp"),
+		ValidatorRunner: env("VALIDATOR_RUNNER", "docker"),
+		TemporalCloud:   parseBool(env("TEMPORAL_CLOUD", "0")),
+		OTLPTarget:      env("OTLP_TARGET", "local"),
+
+		KMSKeyARN:           env("KMS_KEY_ARN", ""),
+		S3PatchBucket:       env("S3_PATCH_BUCKET", ""),
+		S3AuditExportBucket: env("S3_AUDIT_EXPORT_BUCKET", ""),
+		SecretsPrefix:       env("SECRETS_PREFIX", ""),
+
+		WorkOSAPIKey:        env("WORKOS_API_KEY", ""),
+		WorkOSClientID:      env("WORKOS_CLIENT_ID", ""),
+		WorkOSRedirectURI:   env("WORKOS_REDIRECT_URI", ""),
+		WorkOSWebhookSecret: env("WORKOS_WEBHOOK_SECRET", ""),
+
+		StripeSecretKey:      env("STRIPE_SECRET_KEY", ""),
+		StripePublishableKey: env("STRIPE_PUBLISHABLE_KEY", ""),
+		StripeWebhookSecret:  env("STRIPE_WEBHOOK_SECRET", ""),
+		StripePriceRuntime:   env("STRIPE_PRICE_RUNTIME", ""),
+		StripePriceEvents:    env("STRIPE_PRICE_EVENTS", ""),
+		StripePriceTokens:    env("STRIPE_PRICE_TOKENS", ""),
+
+		SESFromAddress: env("SES_FROM_ADDRESS", "noreply@nexis.dev"),
+
+		TemporalCloudNamespace:   env("TEMPORAL_CLOUD_NAMESPACE", ""),
+		TemporalCloudTLSCertPath: env("TEMPORAL_CLOUD_TLS_CERT_PATH", ""),
+		TemporalCloudTLSKeyPath:  env("TEMPORAL_CLOUD_TLS_KEY_PATH", ""),
+
+		GrafanaCloudOTLPEndpoint: env("GRAFANA_CLOUD_OTLP_ENDPOINT", ""),
+		GrafanaCloudOTLPToken:    env("GRAFANA_CLOUD_OTLP_TOKEN", ""),
+
+		ModalAppURL: env("MODAL_APP_URL", ""),
+		ModalToken:  env("MODAL_TOKEN", ""),
+
+		AuditAnchorBucket: env("AUDIT_ANCHOR_BUCKET", ""),
+		AuditAnchorCron:   env("AUDIT_ANCHOR_CRON", "0 2 * * *"),
+
+		// Phase 8 — public-beta surface.
+		SignupRequiresInvite:         parseBool(env("SIGNUP_REQUIRES_INVITE", "0")),
+		SentryProbeSecret:            env("SENTRY_PROBE_SECRET", ""),
+		TemporalHealthzWindowSeconds: envInt("TEMPORAL_HEALTHZ_WINDOW_SECONDS", 60),
+		TemporalHeartbeatIntervalMs:  envInt("TEMPORAL_HEARTBEAT_INTERVAL_MS", 15000),
 	}
+}
+
+// FatalIfLocalInCloud returns an error when AppEnv is staging or prod but
+// any provider selector is still pointing at a local/dev value. This is the
+// Phase 7 cutover contract's first line of defence (Risk 16.14).
+//
+// Callers should treat the returned error as fatal (os.Exit(2)).
+func (c *Config) FatalIfLocalInCloud() error {
+	if c.AppEnv != "staging" && c.AppEnv != "prod" {
+		return nil
+	}
+	var bad []string
+	check := func(name, value, devValue string) {
+		if value == devValue || value == "" {
+			bad = append(bad, name+"="+value)
+		}
+	}
+	check("AUTH_PROVIDER", c.AuthProvider, "local")
+	check("BILLING_PROVIDER", c.BillingProvider, "local")
+	check("PATCH_STORE", c.PatchStore, "minio")
+	check("KEYVAULT", c.KeyVault, "local")
+	check("SECRETS", c.SecretsBackend, "env")
+	check("MAILER", c.Mailer, "smtp")
+	check("VALIDATOR_RUNNER", c.ValidatorRunner, "docker")
+	if !c.TemporalCloud {
+		bad = append(bad, "TEMPORAL_CLOUD=0")
+	}
+	if c.OTLPTarget != "grafana_cloud" {
+		bad = append(bad, "OTLP_TARGET="+c.OTLPTarget)
+	}
+	if len(bad) > 0 {
+		return fmt.Errorf("cloud env %q has local providers: %v", c.AppEnv, bad)
+	}
+	return nil
 }
 
 func env(k, def string) string {

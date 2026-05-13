@@ -5,7 +5,8 @@
 // Each test mints a unique email so re-running against the same DB doesn't
 // collide with rows from a previous run.
 import { test, expect } from "@playwright/test";
-import { generateSync } from "otplib";
+
+import { totpNow } from "./helpers";
 
 const API_URL = process.env.E2E_API_URL ?? "http://localhost:8080";
 const password = "correct-horse-battery-staple";
@@ -39,7 +40,7 @@ test("signup → MFA enroll → MFA verify → logout → login with MFA → das
   // --- MFA verify (commits the enrollment) ---
   const verifyResp = await page.request.post(`${API_URL}/v1/auth/mfa/verify`, {
     headers: { "content-type": "application/json" },
-    data: { code: generateSync({ secret, strategy: "totp" }) },
+    data: { code: totpNow(secret) },
   });
   expect(verifyResp.status()).toBe(204);
 
@@ -72,7 +73,7 @@ test("signup → MFA enroll → MFA verify → logout → login with MFA → das
   // After the first submit the MFA field becomes visible.
   const mfaField = page.getByLabel(/mfa code/i);
   await expect(mfaField).toBeVisible();
-  await mfaField.fill(generateSync({ secret, strategy: "totp" }));
+  await mfaField.fill(totpNow(secret));
   await page.getByRole("button", { name: /sign in/i }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
 });

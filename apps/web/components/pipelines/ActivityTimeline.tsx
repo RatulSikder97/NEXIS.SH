@@ -35,8 +35,84 @@ import {
 
 import { AgentIcon } from "@/components/pipelines/AgentIcon";
 import { AGENTS_IN_ORDER, AGENT_LABELS, type ActivityEvent } from "@/lib/pipelines";
+import { formatTokens } from "@/lib/eval";
 import { cn } from "@/lib/utils";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
+
+// SQA Phase 4 — incident timeline must surface per-agent token + cost
+// telemetry inline so an operator inspecting a recovery run can spot the
+// expensive step without expanding each payload.
+//
+// Adaptive USD precision matches components/billing/UsageSummary.tsx
+// formatUSD (≥$0.01 → 2 decimals, sub-cent → 4) so the timeline + the
+// billing surface read the same number for the same spend.
+function formatUSDFromCents(cents: number): string {
+  const dollars = cents / 100;
+  const decimals = Math.abs(dollars) >= 0.01 || dollars === 0 ? 2 : 4;
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(dollars);
+}
+
+// extractCostPillData mines tokens_in / tokens_out / cost_cents out of an
+// arbitrary payload. Any field can be absent — we render whichever subset
+// is present so a payload that only ships token counts (no cost) still
+// gets a pill. Returns null when the payload carries none of them, which
+// keeps the row layout unchanged for the pure-status agents (sentinel,
+// approval gate, pipeline complete).
+function extractCostPillData(payload: Record<string, unknown>): {
+  tokensIn?: number;
+  tokensOut?: number;
+  costCents?: number;
+} | null {
+  const ti = payload.tokens_in;
+  const to = payload.tokens_out;
+  const cc = payload.cost_cents;
+  const tokensIn = typeof ti === "number" && Number.isFinite(ti) ? ti : undefined;
+  const tokensOut =
+    typeof to === "number" && Number.isFinite(to) ? to : undefined;
+  const costCents =
+    typeof cc === "number" && Number.isFinite(cc) ? cc : undefined;
+  if (tokensIn === undefined && tokensOut === undefined && costCents === undefined) {
+    return null;
+  }
+  return { tokensIn, tokensOut, costCents };
+}
+
+function CostPills({ payload }: { payload: Record<string, unknown> }) {
+  const data = extractCostPillData(payload);
+  if (!data) return null;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--color-muted)]/60 px-2 py-0.5 font-mono text-[10px] text-[var(--color-foreground)] ring-1 ring-[var(--color-border)]"
+      title="Tokens in · tokens out · cost"
+    >
+      {data.tokensIn !== undefined && (
+        <span data-pill="tokens-in">{formatTokens(data.tokensIn)} in</span>
+      )}
+      {data.tokensIn !== undefined && data.tokensOut !== undefined && (
+        <span aria-hidden className="text-[var(--color-muted-foreground)]">
+          ·
+        </span>
+      )}
+      {data.tokensOut !== undefined && (
+        <span data-pill="tokens-out">{formatTokens(data.tokensOut)} out</span>
+      )}
+      {(data.tokensIn !== undefined || data.tokensOut !== undefined) &&
+        data.costCents !== undefined && (
+          <span aria-hidden className="text-[var(--color-muted-foreground)]">
+            ·
+          </span>
+        )}
+      {data.costCents !== undefined && (
+        <span data-pill="cost">{formatUSDFromCents(data.costCents)}</span>
+      )}
+    </span>
+  );
+}
 
 type RowState = "pending" | "running" | "succeeded" | "failed" | "retrying";
 
@@ -391,7 +467,8 @@ export function ActivityTimeline({
                 )}
                 {row.payload && <PayloadDetails payload={row.payload} />}
               </div>
-              <div className="shrink-0 text-right text-xs text-[var(--color-muted-foreground)]">
+              <div className="flex shrink-0 items-center gap-2 text-right text-xs text-[var(--color-muted-foreground)]">
+                {row.payload && <CostPills payload={row.payload} />}
                 {elapsed !== null && (
                   <span className="font-mono">{formatDuration(elapsed)}</span>
                 )}

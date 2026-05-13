@@ -184,6 +184,59 @@ func (d *Detector) tick(ctx context.Context, now time.Time) {
 	}
 }
 
+// TriggerOne is the Phase 8 admin escape hatch that bypasses the poll loop
+// and synthesises a single IncidentTrigger directly. Used by the
+// POST /v1/admin/sentinel/trigger endpoint so operators can demo a recovery
+// without waiting for a real Sentry fatal to land.
+//
+// The synthetic trigger is stamped Rule="manual" so the detector's bookkeeping
+// (lastTriggered cooldown, lastSeen watermark) is NOT touched — manual
+// triggers are independent of the rule-based path so they don't suppress a
+// real spike that lands seconds later.
+//
+// incidentID is optional; pass "" when the caller doesn't want to associate
+// the run with any incidents_raw row.
+func (d *Detector) TriggerOne(ctx context.Context, orgID, incidentID string) (domain.WorkflowRun, error) {
+	if d == nil {
+		return domain.WorkflowRun{}, errors.New("sentinel: detector not initialised")
+	}
+	wsID, err := d.workspaces.DefaultForOrg(ctx, orgID)
+	if err != nil {
+		return domain.WorkflowRun{}, err
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	trig := domain.IncidentTrigger{
+		OrgID:       orgID,
+		WorkspaceID: wsID,
+		IncidentID:  incidentID,
+		Rule:        "manual",
+		DetectedAt:  now,
+		ReceivedAt:  now,
+	}
+	princ := domain.Principal{Role: "system", OrgID: orgID}
+	inputJSON, _ := json.Marshal(map[string]any{
+		"triggered_by": "sentinel_admin",
+		"incident_id":  trig.IncidentID,
+		"rule":         trig.Rule,
+		"detected_at":  trig.DetectedAt,
+	})
+	run, err := d.workflows.Start(ctx, princ, trig.WorkspaceID, d.workflowType, inputJSON)
+	if err != nil {
+		d.logger.Warn("sentinel.detector.trigger_one.workflow_start",
+			"org_id", orgID, "incident_id", incidentID, "err", err)
+		return domain.WorkflowRun{}, err
+	}
+	if d.audit != nil {
+		_ = d.audit.Write(ctx, princ, "incident.sentinel_admin_triggered", run.ID, map[string]any{
+			"incident_id": trig.IncidentID,
+			"rule":        trig.Rule,
+		})
+	}
+	d.logger.Info("sentinel.detector.trigger_one.fired",
+		"org_id", orgID, "workspace_id", trig.WorkspaceID, "run_id", run.ID)
+	return run, nil
+}
+
 // fire kicks off one RecoveryPipeline run for the given trigger. Errors are
 // logged at WARN — a Temporal-side failure should not take down the detector.
 func (d *Detector) fire(ctx context.Context, t domain.IncidentTrigger) {

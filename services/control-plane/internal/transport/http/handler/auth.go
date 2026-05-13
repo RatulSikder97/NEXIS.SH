@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/dto"
@@ -149,10 +150,34 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 // minted — the request hasn't carried one yet, so we synthesise it from the
 // signup result. Audit Write here runs OUTSIDE the RLS tx (the signup route
 // is unauthenticated), so the writer falls through to its owning pool.
-func Signup(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config, ws WorkspaceChecker) http.HandlerFunc {
+//
+// Phase 8 — optional invite-code redemption. Reads ?invite=<code> from the
+// URL. When `signupRequiresInvite` is true (env SIGNUP_REQUIRES_INVITE=1), a
+// missing/invalid code 403s before the AuthProvider is even called. Otherwise
+// best-effort: a valid code is consumed atomically; missing/invalid is
+// silently ignored so the existing dev path still works.
+func Signup(
+	p domain.AuthProvider,
+	aud domain.AuditWriter,
+	cfg config.Config,
+	ws WorkspaceChecker,
+	codes *repo.InviteCodesRepo,
+	signupRequiresInvite bool,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req dto.SignupReq
 		if !decodeBody(w, r, &req) {
+			return
+		}
+		// Validate + consume invite BEFORE creating any user/org rows. If the
+		// code is bad and required, we 403 here and the AuthProvider is never
+		// touched. This keeps the redemption atomic with the eventual signup
+		// success — if AuthProvider.Signup fails downstream, the code has
+		// already been spent, which is the correct behaviour for an invite
+		// system that defends against an infinite-retry attacker.
+		inviteConsumed, err := applyInviteCode(r, codes, signupRequiresInvite)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "invite required or invalid")
 			return
 		}
 		res, err := p.Signup(r.Context(), domain.SignupInput{
@@ -165,14 +190,18 @@ func Signup(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config, ws
 			return
 		}
 		setSessionCookie(w, cfg, res.Session)
+		auditMeta := map[string]any{
+			"email": res.User.Email,
+			"org":   res.Org.ID,
+		}
+		if inviteConsumed {
+			auditMeta["invite_consumed"] = true
+		}
 		auditWrite(r, aud, domain.Principal{
 			UserID: res.User.ID,
 			OrgID:  res.Org.ID,
 			Role:   domain.RoleOwner,
-		}, "user.signup", res.User.ID, map[string]any{
-			"email": res.User.Email,
-			"org":   res.Org.ID,
-		})
+		}, "user.signup", res.User.ID, auditMeta)
 		writeJSON(w, http.StatusCreated, dto.AuthResp{
 			UserID:       res.User.ID,
 			OrgID:        res.Org.ID,

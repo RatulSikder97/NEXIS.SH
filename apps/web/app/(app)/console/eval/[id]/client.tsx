@@ -18,6 +18,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import type { Route } from "next";
 import { ArrowLeft, ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 
@@ -34,6 +35,19 @@ import {
   type EvalRunStatus,
   type EvalTranscript,
 } from "@/lib/eval";
+
+// Monaco DiffEditor — Phase 5 Stage 8 SQA fix.
+//
+// Backend codegen transcripts carry the patch text on `output_json.patch_diff`
+// (unified diff string). When present we want a real two-pane diff view, not
+// the raw JSON dump. Monaco brings ~2MB of editor + worker chunks though, so
+// we lazy-load via next/dynamic with { ssr: false } — pre-render keeps the
+// page server-rendered, and Monaco only ships to the browser when a user
+// expands a Backend transcript row.
+const DiffEditor = dynamic(
+  () => import("@monaco-editor/react").then((m) => m.DiffEditor),
+  { ssr: false },
+);
 
 const POLL_MS = 5000;
 
@@ -117,7 +131,8 @@ function buildIndex(
 // JsonBlock pretty-prints a structured value. We render `null` explicitly
 // as the literal "null" rather than an empty <pre> so an absent input is
 // distinguishable from "the model returned no JSON". Phase 5 ships raw
-// JSON; Phase 7 will swap in Monaco with syntax highlighting per the plan.
+// JSON; the Backend codegen output_json is rendered as a Monaco diff
+// instead — see extractPatchDiff + PatchDiffBlock below.
 function JsonBlock({ value }: { value: unknown }) {
   let text: string;
   try {
@@ -130,6 +145,45 @@ function JsonBlock({ value }: { value: unknown }) {
     <pre className="overflow-x-auto rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-3 text-[11px] leading-relaxed">
       <code className="font-mono">{text}</code>
     </pre>
+  );
+}
+
+// extractPatchDiff mines `output_json.patch_diff` out of the Backend
+// codegen transcript. Returns the raw unified-diff string when present,
+// otherwise null so the caller falls back to JsonBlock.
+function extractPatchDiff(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const pd = (value as Record<string, unknown>).patch_diff;
+  return typeof pd === "string" && pd.length > 0 ? pd : null;
+}
+
+// PatchDiffBlock renders the Backend codegen patch using Monaco's
+// DiffEditor. Left pane is empty with a single em-dash placeholder so the
+// "added" side reads as net-new code; right pane carries the unified diff
+// text verbatim. Height is fixed at 400px — the eval row is inside a
+// scrollable column so an oversized editor would steal the page's scroll.
+function PatchDiffBlock({ diff }: { diff: string }) {
+  return (
+    <div
+      data-testid="patch-diff"
+      className="overflow-hidden rounded-md border border-[var(--color-border)]"
+    >
+      <DiffEditor
+        height="400px"
+        language="diff"
+        theme="light"
+        original="—"
+        modified={diff}
+        options={{
+          readOnly: true,
+          renderSideBySide: true,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          fontSize: 12,
+          wordWrap: "on",
+        }}
+      />
+    </div>
   );
 }
 
@@ -204,7 +258,17 @@ function AgentRow({
             <p className="text-[10px] font-medium uppercase tracking-widest text-[var(--color-muted-foreground)]">
               Output
             </p>
-            <JsonBlock value={transcript.output_json} />
+            {(() => {
+              const patch =
+                agent === "Backend"
+                  ? extractPatchDiff(transcript.output_json)
+                  : null;
+              return patch !== null ? (
+                <PatchDiffBlock diff={patch} />
+              ) : (
+                <JsonBlock value={transcript.output_json} />
+              );
+            })()}
           </div>
         </div>
       )}
