@@ -42,6 +42,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/empty-state/EmptyState";
 import { EnvironmentChip } from "@/components/projects/EnvironmentChip";
+import { ProviderLogo } from "@/components/integrations/ProviderLogo";
 import {
   PROJECT_INTEGRATION_PROVIDERS,
   ProjectIntegrationIcons,
@@ -381,7 +382,6 @@ function IntegrationsTab({
       </header>
       <ul className="divide-y divide-[var(--color-border)]">
         {PROJECT_INTEGRATION_PROVIDERS.map((p) => {
-          const Icon = p.icon;
           const isConnected = connected.has(p.provider);
           const value = selectorValue(project, p.provider);
           return (
@@ -394,11 +394,14 @@ function IntegrationsTab({
                   className={cn(
                     "inline-flex h-9 w-9 items-center justify-center rounded-md",
                     isConnected
-                      ? "bg-[var(--color-muted)]/60 text-[var(--color-foreground)]"
-                      : "bg-[var(--color-muted)]/40 text-[var(--color-muted-foreground)]/60",
+                      ? "bg-[var(--color-muted)]/60"
+                      : "bg-[var(--color-muted)]/40 opacity-40 grayscale",
                   )}
                 >
-                  <Icon className="h-4 w-4" aria-hidden />
+                  <ProviderLogo
+                    provider={p.provider}
+                    className="flex h-5 w-5 items-center justify-center"
+                  />
                 </span>
                 <div>
                   <p className="text-sm font-medium text-[var(--color-foreground)]">

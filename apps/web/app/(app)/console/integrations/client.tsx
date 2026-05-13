@@ -72,13 +72,13 @@ const CARDS: CardSpec[] = [
     provider: "datadog",
     name: "Datadog",
     description: "Metric-driven anomaly detection.",
-    available: false,
+    available: true,
   },
   {
     provider: "pagerduty",
     name: "PagerDuty",
     description: "On-call routing + paging.",
-    available: false,
+    available: true,
   },
 ];
 
