@@ -63,6 +63,29 @@ type Config struct {
 	MinIOSecretKey    string
 	MinIOUseSSL       bool
 	WorkflowStubDurationMs int // default 0 — when >0 each stub activity sleeps this long
+
+	// Phase 5 — agents L1 + LLM spine.
+	TokenBudgetTokensIn       int64
+	TokenBudgetTokensOut      int64
+	TokenBudgetPeriodDays     int
+	OpenAIEmbedModel          string
+	OllamaEmbedModel          string
+	OpenAIPromptCache         bool
+	EvalEnabled               bool
+	AgentSchemaRetryMax       int
+	AgentModelArchitectOpenAI string
+	AgentModelBackendOpenAI   string
+	AgentModelQAOpenAI        string
+	AgentModelDevOpsOpenAI    string
+	AgentModelDataEngOpenAI   string
+	AgentModelArchitectOllama string
+	AgentModelBackendOllama   string
+	AgentModelQAOllama        string
+	AgentModelDevOpsOllama    string
+	AgentModelDataEngOllama   string
+	// FixtureSHA is the resolved repo SHA used as `fixture-<sha>` for retrieval.
+	// Filled at server start by the seed CLI / pipeline_demo; empty is OK.
+	FixtureSHA string
 }
 
 func Load() Config {
@@ -111,6 +134,28 @@ func Load() Config {
 		MinIOSecretKey:         env("MINIO_SECRET_KEY", "nexis_dev_password"),
 		MinIOUseSSL:            parseBool(env("MINIO_USE_SSL", "0")),
 		WorkflowStubDurationMs: envInt("WORKFLOW_STUB_DURATION_MS", 0),
+
+		// Phase 5
+		TokenBudgetTokensIn:   int64(envInt("TOKEN_BUDGET_TOKENS_IN", 1_000_000)),
+		TokenBudgetTokensOut:  int64(envInt("TOKEN_BUDGET_TOKENS_OUT", 200_000)),
+		TokenBudgetPeriodDays: envInt("TOKEN_BUDGET_PERIOD_DAYS", 30),
+		OpenAIEmbedModel:      env("OPENAI_EMBED_MODEL", "text-embedding-3-small"),
+		OllamaEmbedModel:      env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
+		OpenAIPromptCache:     parseBool(env("OPENAI_PROMPT_CACHE", "1")),
+		EvalEnabled:           parseBool(env("EVAL_ENABLED", "1")),
+		AgentSchemaRetryMax:   envInt("AGENT_SCHEMA_RETRY_MAX", 2),
+
+		AgentModelArchitectOpenAI: env("AGENT_MODEL_ARCHITECT_OPENAI", "gpt-4o-mini"),
+		AgentModelBackendOpenAI:   env("AGENT_MODEL_BACKEND_OPENAI", "gpt-4o"),
+		AgentModelQAOpenAI:        env("AGENT_MODEL_QA_OPENAI", "gpt-4o-mini"),
+		AgentModelDevOpsOpenAI:    env("AGENT_MODEL_DEVOPS_OPENAI", "gpt-4o-mini"),
+		AgentModelDataEngOpenAI:   env("AGENT_MODEL_DATAENG_OPENAI", "gpt-4o-mini"),
+
+		AgentModelArchitectOllama: env("AGENT_MODEL_ARCHITECT_OLLAMA", "llama3.1:8b"),
+		AgentModelBackendOllama:   env("AGENT_MODEL_BACKEND_OLLAMA", "qwen2.5-coder:14b"),
+		AgentModelQAOllama:        env("AGENT_MODEL_QA_OLLAMA", "llama3.1:8b"),
+		AgentModelDevOpsOllama:    env("AGENT_MODEL_DEVOPS_OLLAMA", "llama3.1:8b"),
+		AgentModelDataEngOllama:   env("AGENT_MODEL_DATAENG_OLLAMA", "llama3.1:8b"),
 	}
 }
 

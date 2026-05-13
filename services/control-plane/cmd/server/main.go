@@ -14,13 +14,21 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/architect"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/backend"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/data_engineer"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/devops"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/qa"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/billing"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/keyvault"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/llm"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/patchstore"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/retrieval"
 	validatorclient "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/validator"
 	adapterworkflow "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/workflow"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/workspace"
@@ -226,7 +234,55 @@ func main() {
 			} else {
 				logger.Warn("validator client disabled — VALIDATOR_URL/TOKEN missing")
 			}
-			acts := recoverywf.NewActivitiesFull(wfRepo, wfBroker, ps, vc, stubSleep)
+			// Phase 5 — agents registry + token ledger + retrieval.
+			// `agents.Registry` may be nil; activities fall back to the Phase 4
+			// stubs in that case (test-friendly).
+			var agentRegistry *agents.Registry
+			var ledger domain.TokenLedger
+			if appPool != nil {
+				ledgerRepo := repo.NewTokenLedgerRepo(appPool, adminPool, repo.TokenLedgerConfig{
+					AllowedTokensIn:  cfg.TokenBudgetTokensIn,
+					AllowedTokensOut: cfg.TokenBudgetTokensOut,
+					PeriodDays:       cfg.TokenBudgetPeriodDays,
+				})
+				ledger = ledgerRepo
+
+				providers, perr := llm.NewProviders(cfg, logger)
+				if perr != nil {
+					logger.Warn("llm providers unavailable for agents", "err", perr)
+				} else {
+					retStore := retrieval.New(adminPool)
+					llmClient := &agents.LLMClient{
+						Provider:       providers.LLM,
+						Embedding:      providers.Embedding,
+						Ledger:         ledger,
+						Audit:          auditWriter,
+						Logger:         logger,
+						SchemaRetryMax: cfg.AgentSchemaRetryMax,
+					}
+					retClient := &agents.RetrievalClient{
+						Store:      retStore,
+						Embed:      providers.Embedding,
+						EmbedModel: cfg.OpenAIEmbedModel,
+						K:          5,
+					}
+					synthModel := cfg.OpenAIModelSyn
+					cheapModel := cfg.OpenAIModelCheap
+					if cfg.LLMProvider == "ollama" {
+						synthModel = cfg.OllamaModelGen
+						cheapModel = cfg.OllamaModelCode
+					}
+					agentRegistry = agents.NewRegistry(map[domain.AgentName]domain.Agent{
+						domain.AgentNameArchitect:    architect.New(llmClient, retClient, synthModel),
+						domain.AgentNameBackend:      backend.New(llmClient, retClient, cheapModel),
+						domain.AgentNameQA:           qa.New(llmClient, retClient, cheapModel),
+						domain.AgentNameDevOps:       devops.New(llmClient, retClient, cheapModel),
+						domain.AgentNameDataEngineer: data_engineer.New(llmClient, retClient, synthModel),
+					})
+					logger.Info("agents registry initialised", "agents", agentRegistry.Names())
+				}
+			}
+			acts := recoverywf.NewActivitiesFull(wfRepo, wfBroker, ps, vc, agentRegistry, ledger, stubSleep)
 
 			wfService = adapterworkflow.New(adapterworkflow.Config{
 				Repo:       wfRepo,
@@ -249,19 +305,51 @@ func main() {
 		}
 	}
 
+	// Phase 5 Stage 7 — eval harness wiring. EvalRepo + LedgerRepo always
+	// constructed when the app pool is available so the HTTP surface
+	// (list + budget pill) works even before any run has executed. The
+	// runner is only constructed when both pools + the audit writer are
+	// available — without them the POST endpoint stays unmounted.
+	var evalRepo *repo.EvalRepo
+	var evalRunner *usecase.EvalRunner
+	var tokenLedgerRepoForHTTP *repo.TokenLedgerRepo
+	if appPool != nil && adminPool != nil {
+		evalRepo = repo.NewEvalRepo(appPool, adminPool)
+		tokenLedgerRepoForHTTP = repo.NewTokenLedgerRepo(appPool, adminPool, repo.TokenLedgerConfig{
+			AllowedTokensIn:  cfg.TokenBudgetTokensIn,
+			AllowedTokensOut: cfg.TokenBudgetTokensOut,
+			PeriodDays:       cfg.TokenBudgetPeriodDays,
+		})
+		evalRunner = &usecase.EvalRunner{
+			Cfg:          cfg,
+			AppPool:      appPool,
+			AdminPool:    adminPool,
+			EvalRepo:     evalRepo,
+			LedgerRepo:   tokenLedgerRepoForHTTP,
+			WorkflowRepo: wfRepo,
+			AuditWriter:  auditWriter,
+			Logger:       logger,
+			Providers:    []string{"openai", "ollama"},
+		}
+		logger.Info("eval runner initialised", "providers", evalRunner.Providers)
+	}
+
 	srv := httpserver.New(cfg, logger, httpserver.Deps{
-		Pool:           adminPool,
-		AppPool:        appPool,
-		Auth:           authProvider,
-		Audit:          auditWriter,
-		AuditLister:    auditLister,
-		Integrations:   registry,
-		Workspaces:     wsService,
-		WorkspacesRepo: wsRepo,
-		Billing:        billingProvider,
-		BillingRepo:    billingRepo,
-		Workflows:      wfService,
-		WorkflowsRepo:  wfRepo,
+		Pool:            adminPool,
+		AppPool:         appPool,
+		Auth:            authProvider,
+		Audit:           auditWriter,
+		AuditLister:     auditLister,
+		Integrations:    registry,
+		Workspaces:      wsService,
+		WorkspacesRepo:  wsRepo,
+		Billing:         billingProvider,
+		BillingRepo:     billingRepo,
+		Workflows:       wfService,
+		WorkflowsRepo:   wfRepo,
+		EvalRepo:        evalRepo,
+		EvalRunner:      evalRunner,
+		TokenLedgerRepo: tokenLedgerRepoForHTTP,
 	})
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

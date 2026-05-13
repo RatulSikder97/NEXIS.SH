@@ -24,6 +24,7 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/handler"
 	appmw "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/middleware"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
 )
 
 // noopAudit is the fallback AuditWriter used when Deps.Audit is nil — keeps
@@ -78,6 +79,15 @@ type Deps struct {
 	// Phase 4 — Temporal-backed pipeline runs.
 	Workflows     domain.WorkflowService
 	WorkflowsRepo *repo.WorkflowRepo
+
+	// Phase 5 Stage 7 — eval harness + token-budget pill.
+	//
+	// EvalRepo persists eval_runs + eval_transcripts; TokenLedgerRepo
+	// powers the topbar budget pill. EvalRunner is the side-by-side
+	// OpenAI vs Ollama orchestrator kicked off by the POST handler.
+	EvalRepo        *repo.EvalRepo
+	EvalRunner      *usecase.EvalRunner
+	TokenLedgerRepo *repo.TokenLedgerRepo
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
@@ -194,6 +204,18 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 					handler.PipelineEvents(deps.Workflows, deps.WorkflowsRepo, deps.WorkspacesRepo))
 			}
 
+			// Phase 5 Stage 7 — eval read paths + token-budget pill. Open
+			// to any authenticated principal so members can watch the
+			// matrix without owner-elevation. The POST (kick off run)
+			// lives in the owner|admin sub-group below.
+			if deps.EvalRepo != nil {
+				g.Get("/v1/workspaces/{ws_id}/eval", handler.EvalRunsList(deps.EvalRepo))
+				g.Get("/v1/workspaces/{ws_id}/eval/{run_id}", handler.EvalRunGet(deps.EvalRepo))
+			}
+			if deps.TokenLedgerRepo != nil {
+				g.Get("/v1/workspaces/{ws_id}/agents/budget", handler.BudgetStatus(deps.TokenLedgerRepo))
+			}
+
 			// Owner OR admin — Stage 5 RBAC. Owners and admins can manage
 			// integrations + api keys + the audit list/CSV; members are
 			// read-only on their own profile.
@@ -224,6 +246,14 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 					if cfg.AppEnv == "dev" {
 						g2.Post("/v1/workspaces/{ws_id}/pipelines/demo", handler.PipelineDemo(deps.Workflows, aud, cfg))
 					}
+				}
+
+				// Phase 5 Stage 7 — POST /v1/workspaces/{ws}/eval is
+				// owner|admin. The runner is detached so the handler
+				// returns 202 immediately; the client polls the list
+				// endpoint to watch openai_status + ollama_status.
+				if deps.EvalRunner != nil {
+					g2.Post("/v1/workspaces/{ws_id}/eval", handler.EvalRunCreate(deps.EvalRunner, aud))
 				}
 
 				// Billing read paths + dev recompute are owner|admin.

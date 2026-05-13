@@ -20,4 +20,9 @@ var (
 	ErrSessionRevoked     = errors.New("session revoked")
 	ErrSessionExpired     = errors.New("session expired")
 	ErrNotImplemented     = errors.New("not implemented")
+
+	// Phase 5 — token budget + agent + retrieval.
+	ErrBudgetExceeded      = errors.New("token budget exceeded")
+	ErrAgentSchemaMismatch = errors.New("agent output failed schema validation")
+	ErrEmbeddingFailed     = errors.New("embedding provider failed")
 )

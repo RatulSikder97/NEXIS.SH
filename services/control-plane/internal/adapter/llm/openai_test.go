@@ -41,6 +41,38 @@ func TestOpenAIProvider_Complete(t *testing.T) {
 	}
 }
 
+func TestOpenAIProvider_CachedTokensAndCost(t *testing.T) {
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+            "model":"gpt-4o-mini",
+            "choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],
+            "usage":{"prompt_tokens":2500,"completion_tokens":400,"prompt_tokens_details":{"cached_tokens":2000}}
+        }`))
+	}))
+	defer mock.Close()
+
+	p := NewOpenAIProvider(OpenAIConfig{BaseURL: mock.URL, APIKey: "x", Default: "gpt-4o-mini"})
+	resp, err := p.Complete(context.Background(), CompletionRequest{
+		System: "you are nexis", Prompt: "hi", CacheSystem: true,
+	})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if resp.CachedTokens != 2000 {
+		t.Errorf("cached=%d want 2000", resp.CachedTokens)
+	}
+	if resp.InputTokens != 2500 || resp.OutputTokens != 400 {
+		t.Errorf("token counts wrong: in=%d out=%d", resp.InputTokens, resp.OutputTokens)
+	}
+	if resp.CostCents <= 0 {
+		t.Errorf("cost not populated: %v", resp.CostCents)
+	}
+	if resp.DurationMs < 0 {
+		t.Errorf("duration not populated: %v", resp.DurationMs)
+	}
+}
+
 func TestOpenAIProvider_Info(t *testing.T) {
 	p := NewOpenAIProvider(OpenAIConfig{BaseURL: "https://api.openai.com", Default: "gpt-4o"})
 	info, err := p.Info(context.Background())

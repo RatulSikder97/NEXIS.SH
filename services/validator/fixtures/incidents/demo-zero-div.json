@@ -1,0 +1,8 @@
+{
+  "label": "demo-zero-div",
+  "title": "ZeroDivisionError: division by zero in safe_div",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/api.py\", line 6, in handler\n    return safe_div(a, b)\n  File \"src/nexis_fixture/api.py\", line 8, in safe_div\n    return a / b\nZeroDivisionError: division by zero",
+  "logs": "msg=division-by-zero a=1 b=0 ts=2026-05-13T12:00:00Z"
+}

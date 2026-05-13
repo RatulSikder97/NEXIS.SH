@@ -26,11 +26,17 @@ var stdActivityOpts = workflow.ActivityOptions{
 }
 
 // llmActivityOpts overrides start-to-close for codegen/test-gen activities.
-// Phase 4 stubs don't need the 5-minute window but we set it now so Phase 5
-// inherits the orchestration unchanged.
+// Phase 5 caps MaximumAttempts at 2 — schema retries already happen inside
+// the agent layer, so the workflow-level retry would multiply token cost on
+// LLM-bound activities.
 var llmActivityOpts = func() workflow.ActivityOptions {
 	o := stdActivityOpts
 	o.StartToCloseTimeout = 5 * time.Minute
+	if o.RetryPolicy != nil {
+		rp := *o.RetryPolicy
+		rp.MaximumAttempts = 2
+		o.RetryPolicy = &rp
+	}
 	return o
 }()
 
@@ -56,39 +62,66 @@ var recorderOpts = workflow.ActivityOptions{
 func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, error) {
 	start := workflow.Now(ctx)
 	results := make([]domain.ActivityResult, 0, 9)
+	prior := map[string]any{}
+	if in.PriorOutputs == nil {
+		in.PriorOutputs = prior
+	} else {
+		prior = in.PriorOutputs
+	}
+
+	// foldPrior pulls structured payload of a completed activity into the
+	// prior map under its agent name. This is what each L1 agent reads via
+	// AgentInput.PriorOutputs.
+	foldPrior := func(name domain.AgentName, payload map[string]any) {
+		if payload == nil {
+			return
+		}
+		if s, ok := payload["structured"].(map[string]any); ok {
+			prior[string(name)] = s
+		}
+	}
 
 	// runActivity records started → executes → records terminal status.
 	// Failures cause the workflow to return early; the reaper goroutine on
 	// the adapter side observes the workflow failure and updates the
 	// workflow_runs row to status=failed.
-	runActivity := func(role domain.AgentRole, activityName string, fn any, opts workflow.ActivityOptions) (domain.ActivityResult, error) {
+	runActivity := func(role domain.AgentRole, activityName string, fn any, opts workflow.ActivityOptions, agentName domain.AgentName) (domain.ActivityResult, error) {
 		c := workflow.WithActivityOptions(ctx, opts)
 		recordEvent(ctx, in, role, activityName, domain.ActStarted, "", nil, 1)
+		// Snapshot a fresh PipelineInput so each ExecuteActivity carries
+		// the current prior map without races (Temporal serialises history;
+		// passing a shared pointer here is fine but explicit is safer).
+		stepIn := in
+		stepIn.PriorOutputs = clonePrior(prior)
 		var r domain.ActivityResult
-		if err := workflow.ExecuteActivity(c, fn, in).Get(c, &r); err != nil {
+		if err := workflow.ExecuteActivity(c, fn, stepIn).Get(c, &r); err != nil {
 			recordEvent(ctx, in, role, activityName, domain.ActFailed, err.Error(), nil, 1)
 			return domain.ActivityResult{}, err
 		}
 		recordEvent(ctx, in, role, activityName, domain.ActSucceeded, r.Message, r.Payload, 1)
+		if agentName != "" {
+			foldPrior(agentName, r.Payload)
+		}
 		return r, nil
 	}
 
 	// ---- L2 detect → diagnose → plan (sequential) ----
 	for _, step := range []struct {
-		role domain.AgentRole
-		name string
-		fn   any
-		opts workflow.ActivityOptions
+		role  domain.AgentRole
+		name  string
+		fn    any
+		opts  workflow.ActivityOptions
+		agent domain.AgentName
 	}{
-		{domain.AgentSentinel, "Sentinel.Detect", (*Activities).SentinelDetect, stdActivityOpts},
-		{domain.AgentPathfinder, "Pathfinder.Diagnose", (*Activities).PathfinderDiagnose, stdActivityOpts},
-		{domain.AgentSynthesiser, "Synthesiser.Plan", (*Activities).SynthesiserPlan, stdActivityOpts},
+		{domain.AgentSentinel, "Sentinel.Detect", (*Activities).SentinelDetect, stdActivityOpts, ""},
+		{domain.AgentPathfinder, "Pathfinder.Diagnose", (*Activities).PathfinderDiagnose, stdActivityOpts, ""},
+		{domain.AgentSynthesiser, "Synthesiser.Plan", (*Activities).SynthesiserPlan, stdActivityOpts, ""},
 		// ---- L1 architect → backend → qa (sequential) ----
-		{domain.AgentArchitect, "Architect.Solution", (*Activities).ArchitectSolution, stdActivityOpts},
-		{domain.AgentBackend, "Backend.Codegen", (*Activities).BackendCodegen, llmActivityOpts},
-		{domain.AgentQA, "QA.TestGen", (*Activities).QATestGen, llmActivityOpts},
+		{domain.AgentArchitect, "Architect.Solution", (*Activities).ArchitectSolution, llmActivityOpts, domain.AgentNameArchitect},
+		{domain.AgentBackend, "Backend.Codegen", (*Activities).BackendCodegen, llmActivityOpts, domain.AgentNameBackend},
+		{domain.AgentQA, "QA.TestGen", (*Activities).QATestGen, llmActivityOpts, domain.AgentNameQA},
 	} {
-		r, err := runActivity(step.role, step.name, step.fn, step.opts)
+		r, err := runActivity(step.role, step.name, step.fn, step.opts, step.agent)
 		if err != nil {
 			return PipelineOutput{}, err
 		}
@@ -99,10 +132,12 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 	recordEvent(ctx, in, domain.AgentDevOps, "DevOps.Pipeline", domain.ActStarted, "", nil, 1)
 	recordEvent(ctx, in, domain.AgentDataEngineer, "DataEngineer.Migrations", domain.ActStarted, "", nil, 1)
 
-	devopsFut := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, stdActivityOpts),
-		(*Activities).DevOpsPipeline, in)
-	dataFut := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, stdActivityOpts),
-		(*Activities).DataEngineerMigrate, in)
+	parIn := in
+	parIn.PriorOutputs = clonePrior(prior)
+	devopsFut := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, llmActivityOpts),
+		(*Activities).DevOpsPipeline, parIn)
+	dataFut := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, llmActivityOpts),
+		(*Activities).DataEngineerMigrate, parIn)
 
 	var rDev, rData domain.ActivityResult
 	if err := devopsFut.Get(ctx, &rDev); err != nil {
@@ -110,6 +145,7 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 		return PipelineOutput{}, err
 	}
 	recordEvent(ctx, in, domain.AgentDevOps, "DevOps.Pipeline", domain.ActSucceeded, rDev.Message, rDev.Payload, 1)
+	foldPrior(domain.AgentNameDevOps, rDev.Payload)
 	results = append(results, rDev)
 
 	if err := dataFut.Get(ctx, &rData); err != nil {
@@ -117,10 +153,11 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 		return PipelineOutput{}, err
 	}
 	recordEvent(ctx, in, domain.AgentDataEngineer, "DataEngineer.Migrations", domain.ActSucceeded, rData.Message, rData.Payload, 1)
+	foldPrior(domain.AgentNameDataEngineer, rData.Payload)
 	results = append(results, rData)
 
 	// ---- ApprovalGate.Route (join) ----
-	rApprove, err := runActivity(domain.AgentApprovalGate, "ApprovalGate.Route", (*Activities).ApprovalGateRoute, stdActivityOpts)
+	rApprove, err := runActivity(domain.AgentApprovalGate, "ApprovalGate.Route", (*Activities).ApprovalGateRoute, stdActivityOpts, "")
 	if err != nil {
 		return PipelineOutput{}, err
 	}
@@ -135,6 +172,21 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 		fmt.Sprintf("duration=%s", time.Duration(out.DurationMS)*time.Millisecond),
 		map[string]interface{}{"duration_ms": out.DurationMS}, 1)
 	return out, nil
+}
+
+// clonePrior shallow-copies the prior outputs map so each ExecuteActivity
+// gets a stable snapshot. Temporal serialises the input to history; a
+// shallow copy is sufficient because the inner values are themselves
+// JSON-decoded maps (no shared pointers further down).
+func clonePrior(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 // recordEvent is the workflow-side helper that calls RecordActivityEvent as

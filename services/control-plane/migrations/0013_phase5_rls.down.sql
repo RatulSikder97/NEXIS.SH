@@ -1,0 +1,10 @@
+DROP POLICY IF EXISTS tenant_isolation ON eval_transcripts;
+DROP POLICY IF EXISTS tenant_isolation ON eval_runs;
+DROP POLICY IF EXISTS tenant_isolation ON code_embeddings;
+DROP POLICY IF EXISTS tenant_isolation ON token_ledger;
+DROP POLICY IF EXISTS tenant_isolation ON token_budgets;
+ALTER TABLE eval_transcripts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE eval_runs        DISABLE ROW LEVEL SECURITY;
+ALTER TABLE code_embeddings  DISABLE ROW LEVEL SECURITY;
+ALTER TABLE token_ledger     DISABLE ROW LEVEL SECURITY;
+ALTER TABLE token_budgets    DISABLE ROW LEVEL SECURITY;

@@ -19,6 +19,7 @@ import { usePathname } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
+  Beaker,
   CheckSquare,
   ChevronsLeft,
   ChevronsRight,
@@ -112,6 +113,10 @@ function useRunningPipelineCount(): number {
 
 const PLATFORM: NavItem[] = [
   { href: "/console/agents", label: "Agents", icon: Activity },
+  // Phase 5 Stage 8 — Eval surface compares OpenAI vs Ollama for the
+  // same scenario. Slotted between Agents and Integrations so the
+  // "Platform" section reads top-down as observability → tooling.
+  { href: "/console/eval", label: "Eval", icon: Beaker },
   { href: "/console/integrations", label: "Integrations", icon: Plug },
   { href: "/console/live-demo", label: "Live Demo", icon: PlayCircle },
 ];

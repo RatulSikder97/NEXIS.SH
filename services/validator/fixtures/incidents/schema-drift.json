@@ -1,0 +1,8 @@
+{
+  "label": "schema-drift",
+  "title": "psycopg2.errors.UndefinedColumn: column users.email_verified_at does not exist",
+  "service": "nexis-fixture",
+  "environment": "staging",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/api.py\", line 14, in get_user\n    cur.execute('SELECT email_verified_at FROM users WHERE id=%s', (uid,))\npsycopg2.errors.UndefinedColumn: column users.email_verified_at does not exist",
+  "logs": "msg=schema-drift query_failed table=users column=email_verified_at"
+}

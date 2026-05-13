@@ -12,13 +12,17 @@ import "github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 
 // PipelineInput is the StartWorkflow input. Carries the org + workspace +
 // optional incident id (Phase 4 uses 'manual' or 'demo'; Phase 6 fills in
-// from a Sentinel emission).
+// from a Sentinel emission). Phase 5 adds Incident (full payload) + RepoSHA
+// (pgvector retrieval scope) + PriorOutputs (DAG fan-in).
 type PipelineInput struct {
-	OrgID       string `json:"org_id"`
-	WorkspaceID string `json:"workspace_id"`
-	RunID       string `json:"run_id"` // also the Temporal WorkflowID
-	IncidentID  string `json:"incident_id"`
-	TriggeredBy string `json:"triggered_by"` // 'manual' | 'demo' | 'sentinel'
+	OrgID        string                  `json:"org_id"`
+	WorkspaceID  string                  `json:"workspace_id"`
+	RunID        string                  `json:"run_id"` // also the Temporal WorkflowID
+	IncidentID   string                  `json:"incident_id"`
+	TriggeredBy  string                  `json:"triggered_by"` // 'manual' | 'demo' | 'sentinel'
+	Incident     *domain.IncidentPayload `json:"incident,omitempty"`
+	RepoSHA      string                  `json:"repo_sha,omitempty"`
+	PriorOutputs map[string]any          `json:"prior_outputs,omitempty"`
 }
 
 // PipelineOutput is the workflow return value. Used by GetRun for the

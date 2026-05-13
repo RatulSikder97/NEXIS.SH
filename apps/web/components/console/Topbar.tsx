@@ -17,6 +17,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "@/components/console/CommandPalette";
 import { UserMenu } from "@/components/console/UserMenu";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
+import { evalApi, formatTokens, type BudgetStatus } from "@/lib/eval";
 
 function humanize(segment: string): string {
   if (!segment) return "";
@@ -54,6 +55,87 @@ function Breadcrumb() {
         </React.Fragment>
       ))}
     </nav>
+  );
+}
+
+// COOKIE_WORKSPACE matches the one the Sidebar reads. We re-derive the id
+// here instead of threading it through props so the Topbar stays a
+// drop-in component the layout can mount without extra wiring.
+const COOKIE_WORKSPACE = "nexis_workspace";
+const BUDGET_POLL_MS = 30_000;
+
+function readWorkspaceCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(
+    new RegExp(
+      "(?:^|; )" +
+        COOKIE_WORKSPACE.replace(/[.$?*|{}()[\]\\/+^]/g, "\\$&") +
+        "=([^;]*)",
+    ),
+  );
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+// useBudget polls /v1/workspaces/{ws}/agents/budget every 30s and returns
+// the latest snapshot. Returns null until the first response resolves so
+// the pill stays hidden until we actually have something to show — we
+// want the topbar to look identical to its pre-Stage-8 state when the
+// org has never burned a token.
+function useBudget(): BudgetStatus | null {
+  const [budget, setBudget] = React.useState<BudgetStatus | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function tick() {
+      const wsId = readWorkspaceCookie();
+      if (!wsId) {
+        if (!cancelled) setBudget(null);
+        return;
+      }
+      try {
+        const next = await evalApi.budget(wsId);
+        if (!cancelled) setBudget(next);
+      } catch {
+        // swallow — next tick retries. Don't clear `budget` because a
+        // transient 5xx shouldn't make the pill disappear mid-session.
+      }
+    }
+    void tick();
+    const id = window.setInterval(tick, BUDGET_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+  return budget;
+}
+
+function BudgetPill() {
+  const b = useBudget();
+  // Hide the pill when we have no data, or the org's allowance is 0
+  // (defensive — a budget row with allowed_=0 means "uncapped" upstream
+  // but we treat it as "don't render" so the topbar doesn't lie).
+  if (!b) return null;
+  const used = b.used_tokens_in + b.used_tokens_out;
+  const allowed = b.allowed_tokens_in + b.allowed_tokens_out;
+  if (allowed <= 0 || used === 0) return null;
+  const ratio = used / allowed;
+  // Three tones: green under 70%, amber 70–90%, red ≥90%. Picked to match
+  // the operator's mental model of "fine / heads-up / about to be cut off".
+  const tone =
+    ratio >= 0.9
+      ? "bg-red-500/15 text-red-700 ring-red-500/30 dark:text-red-300"
+      : ratio >= 0.7
+        ? "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300"
+        : "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] ring-[var(--color-border)]";
+  return (
+    <span
+      title={`Token usage this period · ${used.toLocaleString()} / ${allowed.toLocaleString()}`}
+      className={`hidden items-center rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 sm:inline-flex ${tone}`}
+    >
+      <span className="font-mono">
+        {formatTokens(used)}/{formatTokens(allowed)} tokens
+      </span>
+    </span>
   );
 }
 
@@ -97,6 +179,7 @@ export function Topbar({
           <Breadcrumb />
         </div>
         <div className="flex items-center gap-2">
+          <BudgetPill />
           <button
             type="button"
             onClick={openPalette}

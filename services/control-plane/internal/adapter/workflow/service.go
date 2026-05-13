@@ -72,9 +72,8 @@ func (s *Service) Start(ctx context.Context, p domain.Principal, workspaceID, wo
 		TriggeredBy: "manual",
 	}
 	if len(inputJSON) > 0 {
-		// Best-effort: pull triggered_by out of the input payload if the
-		// caller supplied one. Future Phase 6 sentinel calls will use this
-		// to stamp the row.
+		// Best-effort: pull triggered_by + incident payload out of the input
+		// payload if the caller supplied one.
 		var raw map[string]any
 		if err := json.Unmarshal(inputJSON, &raw); err == nil {
 			if v, ok := raw["triggered_by"].(string); ok && v != "" {
@@ -82,6 +81,31 @@ func (s *Service) Start(ctx context.Context, p domain.Principal, workspaceID, wo
 			}
 			if v, ok := raw["incident_id"].(string); ok && v != "" {
 				in.IncidentID = v
+			}
+			if v, ok := raw["repo_sha"].(string); ok && v != "" {
+				in.RepoSHA = v
+			}
+			if inc, ok := raw["incident"].(map[string]any); ok {
+				ip := &domain.IncidentPayload{}
+				if v, ok := inc["label"].(string); ok {
+					ip.Label = v
+				}
+				if v, ok := inc["title"].(string); ok {
+					ip.Title = v
+				}
+				if v, ok := inc["service"].(string); ok {
+					ip.Service = v
+				}
+				if v, ok := inc["environment"].(string); ok {
+					ip.Environment = v
+				}
+				if v, ok := inc["stacktrace"].(string); ok {
+					ip.Stacktrace = v
+				}
+				if v, ok := inc["logs"].(string); ok {
+					ip.Logs = v
+				}
+				in.Incident = ip
 			}
 		}
 	}

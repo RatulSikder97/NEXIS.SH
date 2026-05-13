@@ -29,6 +29,7 @@ components:
     in: internal/workflow/**
 
 deps:
+
   main:
     mayDependOn: [domain, usecase, adapter, transport, platform, workflow]
   tests:
@@ -36,7 +37,13 @@ deps:
   domain:
     anyVendorDeps: true
   usecase:
-    mayDependOn: [domain]
+    # Phase 5 — the eval harness composes adapter types (agents.Registry,
+    # llm.Providers, retrieval.Store, repo.EvalRepo/TokenLedgerRepo) per
+    # provider so the OpenAI vs Ollama matrix runs from one binary. Lives
+    # in usecase because the HTTP handler + CLI both call into it; moving
+    # the orchestration to adapter would leak HTTP / CLI awareness into
+    # the adapter layer.
+    mayDependOn: [domain, adapter, platform]
   adapter:
     # adapter→adapter is allowed so a top-level adapter package (e.g. auth/)
     # can compose its sibling sub-adapters (auth/local, auth/workos) via a

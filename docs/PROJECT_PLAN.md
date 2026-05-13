@@ -568,7 +568,7 @@ Persisted via `next-themes`, default `light`, system-respecting opt-in.
 
 ---
 
-### Phase 4 — Pipeline Substrate: Temporal + Sandbox (Weeks 10–12) — **LOCAL DOCKER**
+### Phase 4 — Pipeline Substrate: Temporal + Sandbox (Weeks 10–12) — **LOCAL DOCKER** — Completed 2026-05-13
 
 **Scope**
 - Temporal **dev server** (already in docker-compose from Phase 1) + worker scaffolding in `services/control-plane/internal/workflow`.
@@ -589,7 +589,7 @@ Persisted via `next-themes`, default `light`, system-respecting opt-in.
 
 ---
 
-### Phase 5 — Agents L1 + LLM Spine (Weeks 13–15) — **OPENAI + OLLAMA DUAL-MODE**
+### Phase 5 — Agents L1 + LLM Spine (Weeks 13–15) — **OPENAI + OLLAMA DUAL-MODE** — Completed 2026-05-13
 
 **Scope**
 - LLM `Provider` interface fully fleshed out: `OpenAIProvider` (gpt-4o for synthesis, gpt-4o-mini for classifications, OpenAI prompt caching enabled where supported, in-process system-prompt cache otherwise) + `OllamaProvider` (default `llama3.1:8b-instruct`, `qwen2.5-coder:14b` for code synthesis when available).

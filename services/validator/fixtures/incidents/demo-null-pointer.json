@@ -1,0 +1,8 @@
+{
+  "label": "demo-null-pointer",
+  "title": "TypeError: 'NoneType' object is not subscriptable in /predict",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/api.py\", line 8, in safe_div\n    return a / b\nZeroDivisionError: division by zero",
+  "logs": "request_id=abc env=prod ts=2026-05-13T12:00:00Z msg=zero-div invocation"
+}

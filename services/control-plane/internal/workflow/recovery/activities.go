@@ -3,10 +3,13 @@ package recovery
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/sse"
@@ -16,16 +19,19 @@ import (
 // instance is registered with the worker via RegisterActivity(a); Temporal
 // dispatches method calls on it.
 //
-// Phase 4 wires Repo + Broker + PatchStore + Validator. The stub activity
-// bodies exercise these dependencies on the happy path so Stage 8 verifies
-// the full integration; Phase 5 will replace stubs with real LLM bodies
-// without touching the dependency surface.
+// Phase 5 wires the L1 agents (Architect/Backend/QA/DevOps/DataEngineer)
+// behind a Registry; the 4 L2 stubs (Sentinel/Pathfinder/Synthesiser/
+// ApprovalGate) remain stubs until Phase 6. When Agents is nil the L1
+// activities fall back to the Phase 4 stub path so the test suite keeps
+// working without LLM mocks.
 type Activities struct {
 	Repo      *repo.WorkflowRepo
 	Broker    *sse.Broker[domain.ActivityEvent]
-	Patches   domain.PatchStore     // optional — when nil, BackendCodegen skips object-storage round-trip
-	Validator ValidatorClient       // optional — when nil, BackendCodegen skips sandbox call
-	StubSleep time.Duration         // 0 = no sleep; set via WORKFLOW_STUB_DURATION_MS
+	Patches   domain.PatchStore
+	Validator ValidatorClient
+	Agents    *agents.Registry
+	Ledger    domain.TokenLedger
+	StubSleep time.Duration
 }
 
 // ValidatorClient is the port BackendCodegen depends on to issue a sandbox
@@ -36,8 +42,6 @@ type ValidatorClient interface {
 	Validate(ctx context.Context, in ValidateRequest) (ValidateResponse, error)
 }
 
-// ValidateRequest mirrors the validator service's HTTP body. Kept here so
-// callers don't need to import the validator adapter package.
 type ValidateRequest struct {
 	RepoSHA   string
 	PatchDiff string
@@ -45,7 +49,6 @@ type ValidateRequest struct {
 	TimeoutMs int
 }
 
-// ValidateResponse mirrors the validator service's HTTP response shape.
 type ValidateResponse struct {
 	TestsPassed bool
 	TestCount   int
@@ -55,24 +58,26 @@ type ValidateResponse struct {
 	Logs        string
 }
 
-// NewActivities constructs an Activities. stubSleep is the duration each stub
-// activity should hold before returning — set to 0 for fast unit tests; the
-// compose env supplies a non-zero value for visible-in-UI runs. Pass nil for
-// patches + validator to disable the storage / sandbox smoke-tests (tests do
-// this; the real Compose setup always supplies both via NewActivitiesFull).
+// NewActivities is the test-friendly constructor (Phase 4 compatibility).
 func NewActivities(r *repo.WorkflowRepo, b *sse.Broker[domain.ActivityEvent], stubSleep time.Duration) *Activities {
 	return &Activities{Repo: r, Broker: b, StubSleep: stubSleep}
 }
 
 // NewActivitiesFull is the production constructor that wires every
-// dependency. The test path uses NewActivities + nil patches/validator;
-// main.go uses this to compose the full activity object before worker
-// registration. The Temporal SDK only inspects methods of the form
-// (ctx, …) (T, error) or (ctx, …) error so non-activity setters would
-// panic at RegisterActivity — we avoid that by funneling all setup through
-// constructors.
-func NewActivitiesFull(r *repo.WorkflowRepo, b *sse.Broker[domain.ActivityEvent], ps domain.PatchStore, v ValidatorClient, stubSleep time.Duration) *Activities {
-	return &Activities{Repo: r, Broker: b, Patches: ps, Validator: v, StubSleep: stubSleep}
+// dependency. Phase 5 adds Agents + Ledger.
+func NewActivitiesFull(
+	r *repo.WorkflowRepo,
+	b *sse.Broker[domain.ActivityEvent],
+	ps domain.PatchStore,
+	v ValidatorClient,
+	ag *agents.Registry,
+	ledger domain.TokenLedger,
+	stubSleep time.Duration,
+) *Activities {
+	return &Activities{
+		Repo: r, Broker: b, Patches: ps, Validator: v,
+		Agents: ag, Ledger: ledger, StubSleep: stubSleep,
+	}
 }
 
 // RecordActivityEvent persists a row to activity_events + publishes to the
@@ -80,9 +85,6 @@ func NewActivitiesFull(r *repo.WorkflowRepo, b *sse.Broker[domain.ActivityEvent]
 // Temporal heartbeats) so we control the seq numbering and the wire shape.
 func (a *Activities) RecordActivityEvent(ctx context.Context, in RecordEventInput) error {
 	if a.Repo == nil {
-		// Test path — pipeline_test.go injects a mock RecordActivityEvent via
-		// OnActivity so this branch is only reached when a test bypasses the
-		// mock. Returning nil keeps the workflow happy.
 		return nil
 	}
 	seq, err := a.Repo.NextSeq(ctx, in.WorkflowRunID)
@@ -114,8 +116,8 @@ func (a *Activities) RecordActivityEvent(ctx context.Context, in RecordEventInpu
 	return nil
 }
 
-// stubSleep is the body shared by every Phase 4 activity. Phases 5+6 replace
-// each per-agent function with real work while keeping this signature.
+// stub is the body shared by the L2 stub activities (Phase 4 carryover).
+// Phase 6 replaces those four bodies.
 func (a *Activities) stub(ctx context.Context, role domain.AgentRole, name string) (domain.ActivityResult, error) {
 	activity.GetLogger(ctx).Info("stub start", "agent", role, "activity", name)
 	if a.StubSleep > 0 {
@@ -133,8 +135,82 @@ func (a *Activities) stub(ctx context.Context, role domain.AgentRole, name strin
 	}, nil
 }
 
-// One method per agent. Phase 5 swaps bodies; the workflow orchestration
-// stays put.
+// runAgent dispatches one L1 agent via the Registry. When Agents is nil
+// (test path / Phase 4 compatibility) it falls back to the stub.
+func (a *Activities) runAgent(ctx context.Context, name domain.AgentName, in PipelineInput) (domain.ActivityResult, error) {
+	if a.Agents == nil {
+		return a.stub(ctx, agentRoleOf(name), string(name)+".Run")
+	}
+	out, err := a.Agents.Run(ctx, name, domain.AgentInput{
+		WorkflowRunID: in.RunID,
+		OrgID:         in.OrgID,
+		WorkspaceID:   in.WorkspaceID,
+		PriorOutputs:  in.PriorOutputs,
+		Incident:      in.Incident,
+		RepoSHA:       in.RepoSHA,
+	})
+	if err != nil {
+		// Budget exceeded is non-retryable so the workflow surfaces it as
+		// status='cancelled' rather than retry-storming.
+		if isBudgetExceeded(err) {
+			return domain.ActivityResult{}, temporal.NewNonRetryableApplicationError(
+				err.Error(), "BudgetError", err,
+			)
+		}
+		return domain.ActivityResult{}, err
+	}
+	payload := map[string]any{
+		"tokens_in":     out.TokensIn,
+		"tokens_out":    out.TokensOut,
+		"cached_tokens": out.CachedTokens,
+		"cost_cents":    out.CostCents,
+		"model":         out.Model,
+		"provider":      out.Provider,
+		"structured":    out.Structured,
+		"schema_retries": out.SchemaRetries,
+	}
+	return domain.ActivityResult{
+		AgentRole: agentRoleOf(name),
+		Status:    domain.ActSucceeded,
+		Message: fmt.Sprintf("agent=%s tokens=%d/%d cost_cents=%.4f",
+			name, out.TokensIn, out.TokensOut, out.CostCents),
+		Payload: payload,
+	}, nil
+}
+
+func isBudgetExceeded(err error) bool {
+	for e := err; e != nil; {
+		if e == domain.ErrBudgetExceeded {
+			return true
+		}
+		if u, ok := e.(interface{ Unwrap() error }); ok {
+			e = u.Unwrap()
+		} else {
+			return false
+		}
+	}
+	return false
+}
+
+func agentRoleOf(n domain.AgentName) domain.AgentRole {
+	switch n {
+	case domain.AgentNameArchitect:
+		return domain.AgentArchitect
+	case domain.AgentNameBackend:
+		return domain.AgentBackend
+	case domain.AgentNameQA:
+		return domain.AgentQA
+	case domain.AgentNameDevOps:
+		return domain.AgentDevOps
+	case domain.AgentNameDataEngineer:
+		return domain.AgentDataEngineer
+	}
+	return ""
+}
+
+// One method per agent. Phase 5 swaps the L1 bodies (Architect / Backend /
+// QA / DevOps / DataEngineer); the L2 set stays on the stub path.
+
 func (a *Activities) SentinelDetect(ctx context.Context, _ PipelineInput) (domain.ActivityResult, error) {
 	return a.stub(ctx, domain.AgentSentinel, "Sentinel.Detect")
 }
@@ -144,76 +220,72 @@ func (a *Activities) PathfinderDiagnose(ctx context.Context, _ PipelineInput) (d
 func (a *Activities) SynthesiserPlan(ctx context.Context, _ PipelineInput) (domain.ActivityResult, error) {
 	return a.stub(ctx, domain.AgentSynthesiser, "Synthesiser.Plan")
 }
-func (a *Activities) ArchitectSolution(ctx context.Context, _ PipelineInput) (domain.ActivityResult, error) {
-	return a.stub(ctx, domain.AgentArchitect, "Architect.Solution")
+func (a *Activities) ArchitectSolution(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
+	return a.runAgent(ctx, domain.AgentNameArchitect, in)
 }
-// BackendCodegen exercises the full patch-store + validator round-trip on
-// the happy path so Stage 8 e2e verifies the wiring. When Patches or
-// Validator is nil (test path) the activity falls back to the bare stub.
+
+// BackendCodegen runs the L1 Backend agent and, when patches + validator
+// are wired, persists the resulting diff to MinIO + validates against the
+// fixture sandbox. The activity treats patch / validator wiring as best-
+// effort: any failure is logged and surfaced in payload but doesn't fail
+// the activity.
 func (a *Activities) BackendCodegen(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
-	activity.GetLogger(ctx).Info("Backend.Codegen begin", "run", in.RunID)
-	if a.StubSleep > 0 {
-		select {
-		case <-time.After(a.StubSleep):
-		case <-ctx.Done():
-			return domain.ActivityResult{}, ctx.Err()
+	res, err := a.runAgent(ctx, domain.AgentNameBackend, in)
+	if err != nil {
+		return res, err
+	}
+	if a.Patches == nil {
+		return res, nil
+	}
+	// Extract patch_diff from structured payload.
+	var patchDiff string
+	if structured, ok := res.Payload["structured"].(map[string]any); ok {
+		if d, ok := structured["patch_diff"].(string); ok {
+			patchDiff = d
 		}
 	}
 
-	// Best-effort smoke: store an empty patch + a fake report so Stage 8
-	// can grep the MinIO bucket. Errors are logged but don't fail the
-	// activity in Phase 4 — Phase 5 will surface real failures.
-	payload := map[string]interface{}{}
-	if a.Patches != nil {
-		bucket := domain.BucketForOrg(in.OrgID)
-		patchKey := "patches/" + in.RunID + "/Backend.Codegen.patch.enc"
-		if err := a.Patches.Put(ctx, domain.PutOptions{
-			Bucket: bucket, Key: patchKey, Body: []byte(""),
-			ContentType: "application/octet-stream",
-		}); err != nil {
-			activity.GetLogger(ctx).Warn("Backend.Codegen patch put failed", "err", err)
+	bucket := domain.BucketForOrg(in.OrgID)
+	patchKey := "patches/" + in.RunID + "/Backend.Codegen.patch.enc"
+	if err := a.Patches.Put(ctx, domain.PutOptions{
+		Bucket: bucket, Key: patchKey, Body: []byte(patchDiff),
+		ContentType: "text/x-diff",
+	}); err != nil {
+		activity.GetLogger(ctx).Warn("Backend.Codegen patch put failed", "err", err)
+	} else {
+		res.Payload["patch_key"] = patchKey
+	}
+
+	if a.Validator != nil && patchDiff != "" {
+		rep, vErr := a.Validator.Validate(ctx, ValidateRequest{
+			RepoSHA: in.RepoSHA, PatchDiff: patchDiff,
+		})
+		if vErr != nil {
+			activity.GetLogger(ctx).Warn("Backend.Codegen validator failed", "err", vErr)
 		} else {
-			payload["patch_key"] = patchKey
-		}
-
-		if a.Validator != nil {
-			rep, err := a.Validator.Validate(ctx, ValidateRequest{
-				RepoSHA:   "fixture",
-				PatchDiff: "",
+			res.Payload["tests_passed"] = rep.TestsPassed
+			res.Payload["test_count"] = rep.TestCount
+			res.Payload["coverage"] = rep.Coverage
+			reportJSON, _ := json.Marshal(rep)
+			reportKey := "reports/" + in.RunID + "/Backend.Codegen.report.json.enc"
+			_ = a.Patches.Put(ctx, domain.PutOptions{
+				Bucket: bucket, Key: reportKey, Body: reportJSON,
+				ContentType: "application/json",
 			})
-			if err != nil {
-				activity.GetLogger(ctx).Warn("Backend.Codegen validator failed", "err", err)
-			} else {
-				payload["tests_passed"] = rep.TestsPassed
-				payload["test_count"] = rep.TestCount
-				payload["coverage"] = rep.Coverage
-				reportJSON, _ := json.Marshal(rep)
-				reportKey := "reports/" + in.RunID + "/Backend.Codegen.report.json.enc"
-				_ = a.Patches.Put(ctx, domain.PutOptions{
-					Bucket: bucket, Key: reportKey, Body: reportJSON,
-					ContentType: "application/json",
-				})
-				payload["report_key"] = reportKey
-			}
+			res.Payload["report_key"] = reportKey
 		}
 	}
+	return res, nil
+}
 
-	activity.GetLogger(ctx).Info("Backend.Codegen end", "run", in.RunID, "payload", payload)
-	return domain.ActivityResult{
-		AgentRole: domain.AgentBackend,
-		Status:    domain.ActSucceeded,
-		Message:   "stub completed",
-		Payload:   payload,
-	}, nil
+func (a *Activities) QATestGen(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
+	return a.runAgent(ctx, domain.AgentNameQA, in)
 }
-func (a *Activities) QATestGen(ctx context.Context, _ PipelineInput) (domain.ActivityResult, error) {
-	return a.stub(ctx, domain.AgentQA, "QA.TestGen")
+func (a *Activities) DevOpsPipeline(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
+	return a.runAgent(ctx, domain.AgentNameDevOps, in)
 }
-func (a *Activities) DevOpsPipeline(ctx context.Context, _ PipelineInput) (domain.ActivityResult, error) {
-	return a.stub(ctx, domain.AgentDevOps, "DevOps.Pipeline")
-}
-func (a *Activities) DataEngineerMigrate(ctx context.Context, _ PipelineInput) (domain.ActivityResult, error) {
-	return a.stub(ctx, domain.AgentDataEngineer, "DataEngineer.Migrations")
+func (a *Activities) DataEngineerMigrate(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
+	return a.runAgent(ctx, domain.AgentNameDataEngineer, in)
 }
 func (a *Activities) ApprovalGateRoute(ctx context.Context, _ PipelineInput) (domain.ActivityResult, error) {
 	return a.stub(ctx, domain.AgentApprovalGate, "ApprovalGate.Route")

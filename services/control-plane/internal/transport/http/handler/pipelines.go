@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -185,6 +187,48 @@ var demoScenarios = map[string]struct{}{
 	"synthetic":    {},
 }
 
+// scenarioToFixture maps a demo scenario to the fixture incident JSON file.
+// When the file is present, the demo handler embeds its contents in the
+// workflow input as `incident: {...}` so the L1 agents have real payload.
+var scenarioToFixture = map[string]string{
+	"schema-drift": "schema-drift.json",
+	"null-deref":   "demo-null-pointer.json",
+	"synthetic":    "demo-null-pointer.json",
+	"oom":          "demo-null-pointer.json",
+}
+
+// loadFixtureIncident reads services/validator/fixtures/incidents/<file>.
+// Returns nil when the file is missing — agents fall back to a placeholder
+// incident in that case. The fixture base is configurable via the
+// FIXTURE_INCIDENTS_DIR env var so the binary stays portable across compose
+// vs. local runs.
+func loadFixtureIncident(scenario string) map[string]any {
+	file, ok := scenarioToFixture[scenario]
+	if !ok {
+		return nil
+	}
+	candidates := []string{
+		os.Getenv("FIXTURE_INCIDENTS_DIR"),
+		"services/validator/fixtures/incidents",
+		"/app/fixtures/incidents",
+		"../../services/validator/fixtures/incidents",
+	}
+	for _, base := range candidates {
+		if base == "" {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(base, file))
+		if err != nil {
+			continue
+		}
+		var inc map[string]any
+		if err := json.Unmarshal(body, &inc); err == nil {
+			return inc
+		}
+	}
+	return nil
+}
+
 // PipelineDemo wires POST /v1/workspaces/{ws_id}/pipelines/demo. Identical
 // to PipelineCreate but stamps triggered_by=demo so the dashboard can filter
 // demo runs from real ones. Gated to cfg.AppEnv == "dev" by the router.
@@ -218,11 +262,15 @@ func PipelineDemo(svc domain.WorkflowService, aud domain.AuditWriter, _ config.C
 			return
 		}
 
-		inputBytes, _ := json.Marshal(map[string]string{
+		demoPayload := map[string]any{
 			"incident_id":  "demo",
 			"triggered_by": "demo",
 			"scenario":     req.Scenario,
-		})
+		}
+		if inc := loadFixtureIncident(req.Scenario); inc != nil {
+			demoPayload["incident"] = inc
+		}
+		inputBytes, _ := json.Marshal(demoPayload)
 		run, err := svc.Start(r.Context(), princ, wsID, "RecoveryPipeline", inputBytes)
 		if err != nil {
 			if errors.Is(err, domain.ErrNotFound) {
