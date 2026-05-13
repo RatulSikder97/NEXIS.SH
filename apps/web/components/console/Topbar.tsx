@@ -15,6 +15,7 @@ import { usePathname } from "next/navigation";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "@/components/console/CommandPalette";
+import { NotificationsBell } from "@/components/console/NotificationsBell";
 import { UserMenu } from "@/components/console/UserMenu";
 import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 import { evalApi, formatTokens, type BudgetStatus } from "@/lib/eval";
@@ -184,13 +185,14 @@ export function Topbar({
             type="button"
             onClick={openPalette}
             aria-label="Open command palette"
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+            className="inline-flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-sm text-[var(--color-muted-foreground)] transition-colors hover:border-[var(--color-primary)]/40 hover:text-[var(--color-foreground)]"
           >
-            <span>Search…</span>
+            <span>Jump to…</span>
             <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-muted)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-muted-foreground)]">
               ⌘K
             </kbd>
           </button>
+          <NotificationsBell />
           <ThemeToggle />
           <UserMenu email={userEmail} />
         </div>

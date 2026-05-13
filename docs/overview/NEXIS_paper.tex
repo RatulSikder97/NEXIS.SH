@@ -1,0 +1,368 @@
+\documentclass[manuscript,nonacm=true,screen=false,review=false]{acmart}
+
+% ---- packages ----
+\usepackage[ruled,linesnumbered]{algorithm2e}
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{microtype}
+
+% suppress ACM rights footer for a clean academic manuscript
+\setcopyright{none}
+\settopmatter{printacmref=false, printccs=false, printfolios=true}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\pagestyle{plain}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  frame=single,
+  framesep=4pt,
+  framerule=0.3pt,
+  rulecolor=\color{black!40},
+  showstringspaces=false,
+}
+
+% pretty algorithm comment + functions
+\algrenewcommand\algorithmicrequire{\textbf{Input:}}
+\algrenewcommand\algorithmicensure{\textbf{Output:}}
+\algrenewcommand{\algorithmiccomment}[1]{\hfill\(\triangleright\) \textit{#1}}
+\algnewcommand\algorithmicassert{\textbf{assert}}
+\algnewcommand\Assert[1]{\State \algorithmicassert(#1)}
+\algnewcommand\algorithmicto{\textbf{to}}
+\algnewcommand\algorithmicand{\textbf{and}}
+\algnewcommand\algorithmicor{\textbf{or}}
+
+% ---- frontmatter ----
+\title{NEXIS: A Multi-Tenant Agentic Pipeline for Supervised Autonomous Fault Recovery}
+\subtitle{System Architecture, Algorithms, and Evaluation Harness}
+
+\author{Ratul Sikder}
+\affiliation{%
+  \institution{Independent Research / Masters Project}
+  \city{Auckland}
+  \country{New Zealand}
+}
+\email{ratulsikder.research@gmail.com}
+
+\renewcommand{\shortauthors}{Sikder}
+
+\begin{abstract}
+We present \textsc{Nexis}, a multi-tenant Software-as-a-Service platform that closes the production fault-recovery loop with a fleet of nine cooperating Large Language Model (LLM) agents arranged in two layers (L2 cognitive: \emph{Sentinel}, \emph{Pathfinder}, \emph{Synthesiser}; L1 executive: \emph{Architect}, \emph{Backend}, \emph{QA}, \emph{DevOps}, \emph{DataEngineer}) plus a deterministic \emph{ApprovalGate}. The pipeline ingests webhook events from Sentry, ArgoCD, and OpenTelemetry; performs windowed anomaly detection; queries a code-dependency graph in Neo4j with do-calculus root-cause analysis (DoWhy); generates a candidate patch through retrieval-augmented LLM synthesis; validates the patch inside a network-less Docker sandbox; routes by severity through a human approval gate; and opens a pull request on the tenant's repository via a scoped GitHub App. The control plane is a Go modular monolith; validator and gitops are carved out as separate services because each holds a hard security boundary. Tenant isolation is enforced at the database layer through Postgres Row-Level Security keyed by a \texttt{SET LOCAL} GUC. We describe the system model, present pseudocode for each agent layer, the severity-routed signal/timer race used by the approval gate, the JSON-schema retry policy applied uniformly to L1 agents, and the per-tenant token-budget enforcement. We also describe the dual-provider evaluation harness used to compare \texttt{gpt-4o} against locally hosted \texttt{qwen2.5-coder:14b} on a 30-fault benchmark with five seeds per fault.
+\end{abstract}
+
+\keywords{LLM agents, fault recovery, multi-tenant SaaS, workflow orchestration, row-level security, do-calculus, sandbox validation, GitOps}
+
+\begin{document}
+\maketitle
+
+% =============================================================
+\section{Introduction}
+% =============================================================
+
+Modern service operators spend a disproportionate share of engineering capacity on \emph{toil}: triaging alerts, hand-writing post-mortems, and applying repetitive patches under time pressure. Recent advances in instruction-tuned LLMs make it tractable to delegate parts of this loop --- diagnosis, patch drafting, test scaffolding --- to autonomous agents. However, naively wiring an LLM to a production deployment pipeline is operationally indefensible: bad patches can be auto-deployed, sandbox escape can leak tenant credentials, and unbounded LLM spend can bankrupt a small operator. \textsc{Nexis} addresses these failure modes simultaneously through (i)~a closed-loop, observable, replay-deterministic workflow on Temporal; (ii)~strict service-level isolation for the two surfaces that matter (validator sandbox, GitOps credential); (iii)~severity-routed human supervision; and (iv)~a per-tenant pre-call token budget with hard kill switches.
+
+The system targets three concurrent goals: (a)~SaaS productisation (10~design partners by month~6); (b)~a Masters thesis whose contribution is the integrated architecture; and (c)~an empirical evaluation comparing closed and open-weight LLM stacks under an identical fault-injection harness.
+
+\textbf{Contributions.}
+\begin{enumerate}
+\item A modular-monolith control plane with a nine-agent plane and two carved-out security services, justified against the alternative of nine independent microservices (Sec.~\ref{sec:arch}).
+\item Pseudocode for each algorithmic layer: L2 detection (Algorithm~\ref{alg:sentinel}), L2 causal RCA (Algorithm~\ref{alg:pathfinder}), L2 planning (Algorithm~\ref{alg:synth}), L1 generic agent with JSON-schema retry (Algorithm~\ref{alg:l1}), the ApprovalGate severity router with deterministic signal/timer race (Algorithm~\ref{alg:gate}), the orchestrating recovery DAG (Algorithm~\ref{alg:dag}), and the per-tenant pre-call token budget (Algorithm~\ref{alg:budget}).
+\item A database-level multi-tenancy proof obligation discharged by Postgres Row-Level Security and an integration-test fuzzer (Sec.~\ref{sec:rls}).
+\item A dual-provider evaluation harness comparing \texttt{gpt-4o} and \texttt{qwen2.5-coder:14b} on the same incident, with token, cost, latency, and patch-correctness instrumentation (Sec.~\ref{sec:eval}).
+\end{enumerate}
+
+% =============================================================
+\section{System Architecture}\label{sec:arch}
+% =============================================================
+
+\textsc{Nexis} is deployed as four backend processes and one frontend:
+
+\begin{enumerate}
+\item \texttt{control-plane} (Go 1.22 + Chi): HTTP API, Temporal worker, 9-agent plane.
+\item \texttt{validator} (Go): receives \((repo\_sha, patch\_diff)\) and runs the patched image inside \texttt{docker run \-\-network=none \-\-read-only \-\-tmpfs /tmp}. Property tests via Hypothesis.
+\item \texttt{gitops} (Go): mints short-lived GitHub App JWTs (10\,min TTL) and opens pull requests with the patch, agent transcript, and risk score. Sole holder of the GitHub App private key.
+\item \texttt{causal-inference} (Python, gRPC :8090): DoWhy do-calculus over metric series for backdoor-adjusted root-cause hypothesis.
+\item \texttt{apps/web} (Next.js 16.2.2): landing and console; subscribes to a Server-Sent Events stream for the live pipeline timeline.
+\end{enumerate}
+
+The pipeline runs on Temporal so that workflow history is replay-deterministic; activities outside the workflow (such as approval signals) are delivered through signal channels that are themselves replay-safe.
+
+\subsection{Why a Modular Monolith, Not Nine Microservices}
+
+The nine agents are logical roles, not deployment units. A microservice per agent would multiply the number of IAM roles, dashboards, contract artefacts, and distributed traces by~9, in exchange for no runtime benefit a solo developer can capture in the launch window. We keep the agent plane inside one binary with strict package boundaries enforced by \texttt{go-arch-lint}. Two services are split out where the separation buys a security property:
+
+\begin{itemize}
+\item \textbf{Validator} is isolated because untrusted code is executed there. The blast radius of a sandbox escape must not include the control plane's database connection or the GitHub App key.
+\item \textbf{GitOps} is isolated because it is the \emph{only} process with permission to read the GitHub App private key. A compromise of the control plane that did not also compromise GitOps cannot mint a JWT.
+\end{itemize}
+
+\subsection{Multi-Tenancy via Row-Level Security}\label{sec:rls}
+
+Every tenant table carries an \texttt{org\_id} column and enables Postgres RLS in \texttt{FORCE} mode:
+
+\begin{lstlisting}[language=SQL]
+ALTER TABLE incidents_raw ENABLE ROW LEVEL SECURITY;
+ALTER TABLE incidents_raw FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON incidents_raw
+  USING (org_id = current_setting('app.current_org_id')::uuid)
+  WITH CHECK (org_id = current_setting('app.current_org_id')::uuid);
+\end{lstlisting}
+
+The application connects as role \texttt{nexis\_app}, which is not \texttt{BYPASSRLS}. Every transaction issued by the application calls \texttt{set\_config('app.current\_org\_id', \$1, true)} as its first statement; \texttt{true} scopes the GUC to the transaction, eliminating leakage across pooled connections. The migration role \texttt{nexis} is the only role with \texttt{BYPASSRLS} and is used only by golang-migrate. An integration-test fuzzer creates rows under \texttt{org\_a} and \texttt{org\_b}, sets the GUC to \texttt{org\_a}, and asserts that \texttt{SELECT *} returns zero rows belonging to \texttt{org\_b}. This test is run for every tenant table on every CI build and constitutes the system's SOC~2 cross-tenant evidence.
+
+% =============================================================
+\section{Algorithms}\label{sec:alg}
+% =============================================================
+
+We now describe the algorithmic content of each layer. We use the notation \(\mathcal{O}\) for the calling organisation, \(\rho\) for the agent role, \(W\) for a Temporal workflow run, and \(\Sigma\) for a JSON Schema.
+
+\subsection{L2 Sentinel: Windowed Anomaly Detection}
+
+Sentinel ingests Sentry, ArgoCD, and OpenTelemetry webhook events into \texttt{incidents\_raw}. A Temporal cron polls a sliding window of size \(\tau_w = 60\,\text{s}\) and applies a small rule set: \emph{burst}, \emph{level\_shift}, and \emph{novelty}. The \emph{novelty} rule embeds the event title via the tenant's preferred embedding model and asks pgvector for the nearest neighbour; if the cosine distance to all prior events exceeds a threshold \(\delta_n\) (default \(0.35\)), the event is treated as novel and forwarded for diagnosis. Severity is initialised from the source level and refined by the rule that fires (Algorithm~\ref{alg:sentinel}).
+
+\begin{algorithm}
+\caption{L2 Sentinel.Detect --- windowed anomaly aggregation}\label{alg:sentinel}
+\begin{algorithmic}[1]
+\Require organisation \(\mathcal{O}\), window \(\tau_w\), thresholds \(\theta_{burst}, \theta_{shift}, \delta_n\)
+\Ensure incident decision \(I = \{\text{detected}, \text{severity\_hint}, \text{evidence}\}\)
+\State \(W \gets \textsc{Query}(\text{incidents\_raw where org\_id} = \mathcal{O} \wedge \text{received\_at} \geq \text{now}-\tau_w)\)
+\If{$|W| = 0$} \State \Return \{detected: false\} \EndIf
+\State \(g \gets \textsc{GroupBy}(W, \text{service}, \text{level})\)
+\State \(R \gets \emptyset\)
+\ForAll{$(s,\ell,n) \in g$}
+  \If{$n \geq \theta_{burst}$} \State \(R \gets R \cup \{(\text{burst}, s, \ell, n)\}$ \EndIf
+\EndFor
+\State \(\mu, \sigma \gets \textsc{HistoricalRate}(\mathcal{O}, s, \ell, 24\text{h})\)
+\If{$n > \mu + 3\sigma$} \State \(R \gets R \cup \{(\text{level\_shift}, s, \ell, n)\}$ \EndIf
+\State \(e \gets \textsc{Embed}(\text{title}(W_{\text{latest}}))\)
+\State \(d \gets \textsc{pgvectorNearest}(\mathcal{O}, e)\)
+\If{$d > \delta_n$} \State \(R \gets R \cup \{(\text{novelty}, d)\}$ \EndIf
+\If{$R = \emptyset$} \State \Return \{detected: false\} \EndIf
+\State $\text{sev} \gets \textsc{SeverityFromRules}(R)$ \Comment{novelty $\to$ high; burst $\to$ medium}
+\State \Return \{detected: true, severity\_hint: $\text{sev}$, evidence: $R$\}
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{L2 Pathfinder: Causal Root-Cause Analysis}
+
+Pathfinder consults the tenant's code-dependency graph (Neo4j) for upstream candidates and then calls the Python causal sidecar to compute a do-calculus backdoor adjustment of \(\Pr[\text{symptom} \mid do(\text{candidate})]\) over a metric history~\cite{pearl2009causality}. The hypothesis with the highest adjusted effect that also has a non-trivial graph path is returned (Algorithm~\ref{alg:pathfinder}).
+
+\begin{algorithm}
+\caption{L2 Pathfinder.Diagnose --- causal RCA on codegraph}\label{alg:pathfinder}
+\begin{algorithmic}[1]
+\Require detected incident $I$, organisation \(\mathcal{O}\)
+\Ensure root-cause report $\mathcal{R}$ with ranked candidates
+\State $s \gets I.\text{service}$
+\State $C \gets \textsc{Neo4jCypher}($MATCH$\ (s)\leftarrow[\ast 1..k]\ (c)$ RETURN $c)$ \Comment{$k=3$}
+\If{$C = \emptyset$} \State \Return \{candidates: $\emptyset$, fallback: heuristic\} \EndIf
+\State $M \gets \textsc{LoadMetricSeries}(\mathcal{O}, s \cup C, 24\text{h})$
+\State $\hat{\mathcal{T}} \gets \emptyset$
+\ForAll{$c \in C$}
+  \State $\tau_c \gets \textsc{CausalSidecar.Estimate}(M, \text{treatment}=c, \text{outcome}=s)$
+  \State $\hat{\mathcal{T}} \gets \hat{\mathcal{T}} \cup \{(c, \tau_c.\text{ate}, \tau_c.\text{p\_value})\}$
+\EndFor
+\State sort $\hat{\mathcal{T}}$ by ATE descending, filter $p < 0.05$
+\State $\mathcal{R} \gets$ top-$3$ of $\hat{\mathcal{T}}$ with graph path summaries
+\State \textsc{Persist}(root\_cause\_reports, $\mathcal{R}$)
+\State \Return $\mathcal{R}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{L2 Synthesiser: Plan and Delegate}
+
+The Synthesiser drafts a structured \emph{plan} by retrieving from \texttt{code\_embeddings} the top-$k$ chunks most relevant to the root-cause hypothesis and instructing an LLM (Algorithm~\ref{alg:synth}). The plan declares which L1 agents should run, in what order, and with which preconditions. The DAG (Algorithm~\ref{alg:dag}) consumes that plan as input but is itself static --- the L2 plan informs prompts, not control flow, to keep Temporal history deterministic.
+
+\begin{algorithm}
+\caption{L2 Synthesiser.Plan --- retrieval-augmented planning}\label{alg:synth}
+\begin{algorithmic}[1]
+\Require root-cause report $\mathcal{R}$, organisation $\mathcal{O}$, top-$k$ retrieval cap
+\Ensure plan $\mathcal{P} = \{\text{steps}, \text{retrieved\_context}\}$
+\State $q \gets \textsc{ConstructQuery}(\mathcal{R}.\text{top})$
+\State $E \gets \textsc{Embed}(q)$
+\State $\mathcal{C} \gets \textsc{pgvectorTopK}(\mathcal{O}, E, k)$ \Comment{RLS-scoped}
+\State $\pi \gets \textsc{LoadPrompt}(\text{synthesiser.plan.v}\geq 1)$
+\State $\mathcal{P} \gets \textsc{LLM.Structured}(\pi, \mathcal{R}, \mathcal{C}, \Sigma_{\text{plan}})$
+\State \Return $\mathcal{P}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{L1 Generic Agent Activity}
+
+All five L1 agents (Architect, Backend, QA, DevOps, DataEngineer) share one activity shape (Algorithm~\ref{alg:l1}). Three properties are uniform: (i)~the LLM is called only through \texttt{adapter/llm.Provider}; (ii)~the response is parsed against a JSON Schema $\Sigma_\rho$ and retried at most $r_{\max}=2$ times on schema violation; (iii)~tokens, model, provider, latency, and cost are written to \texttt{token\_ledger} regardless of outcome.
+
+\begin{algorithm}
+\caption{L1 generic agent activity (\(\rho\in\)\{Architect, Backend, QA, DevOps, DataEng\})}\label{alg:l1}
+\begin{algorithmic}[1]
+\Require workflow context $W$, role $\rho$, prior outputs $\Pi$, schema $\Sigma_\rho$, retry cap $r_{\max}$
+\Ensure structured payload $y$
+\State \textsc{ChargeBudget}($\mathcal{O}, \rho$) \Comment{Alg.~\ref{alg:budget}; fails closed}
+\State $\pi_\rho \gets \textsc{LoadPrompt}(\rho)$
+\State $x \gets \textsc{BuildInput}(\pi_\rho, \Pi)$
+\State $r \gets 0$, $y \gets \bot$
+\While{$r \leq r_{\max}$}
+  \State $t_0 \gets$ now
+  \State $\text{resp} \gets \textsc{LLM.Generate}(\rho, x)$
+  \State $t \gets$ now $- t_0$
+  \State \textsc{LedgerInsert}($W, \rho, \text{resp.usage}, t$)
+  \If{$\textsc{ValidateJSON}(\text{resp.body}, \Sigma_\rho)$}
+    \State $y \gets \textsc{Parse}(\text{resp.body})$
+    \State \textbf{break}
+  \EndIf
+  \State $r \gets r + 1$
+  \State $x \gets \textsc{AppendSchemaErrorHint}(x, \Sigma_\rho)$
+\EndWhile
+\If{$y = \bot$}
+  \State \Return $\textsc{Fallback}(\rho)$ \Comment{stub payload; degrades demo gracefully}
+\EndIf
+\State \Return $y$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{ApprovalGate: Signal/Timer Race}
+
+The ApprovalGate is deterministic and does not call an LLM. It maps the synthesised patch to a severity in $\{\text{low}, \text{medium}, \text{high}\}$ using rule-based features (changed-files count, blast-radius from Pathfinder, prior auto-approve success in the last 30 days). Severity drives the signal/timer race shown in Algorithm~\ref{alg:gate}. The race uses Temporal's \texttt{Selector}, \texttt{Timer}, and signal channels, all of which are replay-safe; mutating workflow state outside selector callbacks would break replay determinism and is forbidden.
+
+\begin{algorithm}
+\caption{ApprovalGate severity router with signal/timer race}\label{alg:gate}
+\begin{algorithmic}[1]
+\Require severity $\sigma$, signal channel $\text{sigCh}$, medium timeout $\tau_m=120\,\text{s}$
+\Ensure approval signal $\delta \in \{\text{auto\_approved}, \text{approved}, \text{rejected}, \text{timeout\_rejected}\}$
+\If{$\sigma = \text{low}$}
+  \State \Return $\{\delta: \text{auto\_approved}, \text{notes}: \text{``low severity''}\}$
+\EndIf
+\State \textsc{NotifySlack}($W$, $\sigma$), \textsc{PersistDecision}(pending)
+\If{$\sigma = \text{medium}$}
+  \State $T \gets$ \textsc{NewTimer}($\tau_m$)
+  \State $S \gets$ \textsc{NewSelector}
+  \State $S$.addReceive(sigCh, $\lambda$ msg $\to \delta \gets$ msg; cancel($T$); done)
+  \State $S$.addFuture($T$, $\lambda \to$ \textbf{if} not done \textbf{then} $\delta \gets$ timeout\_rejected)
+  \State $S$.select()
+  \State \Return $\delta$
+\ElsIf{$\sigma = \text{high}$}
+  \State \(\delta \gets\) sigCh.receive() \Comment{blocks until human responds}
+  \State \Return $\delta$
+\Else
+  \State \textbf{error} unknown severity \Comment{fail closed --- never auto-approve}
+\EndIf
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Recovery DAG Orchestration}
+
+The workflow body (Algorithm~\ref{alg:dag}) sequences three L2 activities, three L1 activities, runs DevOps and DataEngineer in parallel, joins on the ApprovalGate, and conditionally calls validator and gitops if approved. Every activity emits one \texttt{activity\_events} row at \emph{started} and one at terminal status; the workflow itself emits a \texttt{Pipeline.Complete} event last so the Server-Sent Events stream knows to close.
+
+\begin{algorithm}
+\caption{RecoveryPipeline workflow body}\label{alg:dag}
+\begin{algorithmic}[1]
+\Require pipeline input $\mathcal{I}=(\mathcal{O}, \text{workspace}, \text{incident})$
+\Ensure terminal state of $W$
+\State $\Pi \gets \emptyset$ \Comment{prior outputs accumulator}
+\ForAll{$\rho \in \langle \text{Sentinel}, \text{Pathfinder}, \text{Synthesiser}, \text{Architect}, \text{Backend}, \text{QA}\rangle$}
+  \State $r \gets$ \textsc{Execute}($\rho$, $\Pi$)
+  \If{$r.\text{status} = \text{failed}$} \State \Return failed \EndIf
+  \State $\Pi[\rho] \gets r.\text{structured}$
+\EndFor
+\State $r_{\text{do}}, r_{\text{de}} \gets$ \textsc{ParallelExecute}(DevOps, DataEng, $\Pi$)
+\State $\Pi[\text{DevOps}] \gets r_{\text{do}}$, $\Pi[\text{DataEng}] \gets r_{\text{de}}$
+\State $g \gets$ \textsc{Execute}(ApprovalGate.Route, $\Pi$) \Comment{computes severity}
+\State $\delta \gets$ Algorithm~\ref{alg:gate}($g.\text{severity}$)
+\State \textsc{Execute}(ApprovalGate.Finalize, $\delta$)
+\If{$\delta \in \{\text{rejected}, \text{timeout\_rejected}\}$}
+  \State \Return failed (non-retryable)
+\EndIf
+\State $v \gets$ \textsc{Validator}(\text{patch\_diff}, \text{repo\_sha})
+\If{$\neg v.\text{tests\_passed}$} \State \Return failed \EndIf
+\State \textsc{GitOps.OpenPR}(\text{patch}, \text{transcript}, \text{risk\_score})
+\State \Return succeeded
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Per-Tenant Token-Budget Enforcement}
+
+Pre-call budget enforcement is the only defence against runaway LLM spend that survives a buggy agent loop. The \texttt{token\_budgets} table holds one row per organisation per monthly period with \texttt{allowed\_tokens\_in/out} and the running used counters. The middleware in Algorithm~\ref{alg:budget} is consulted before the provider HTTP call; on over-budget it returns \texttt{ErrBudgetExceeded} and the activity short-circuits to a stub fallback. Ollama runs are charged at zero dollars but still consume the in-token counter, so we can monitor demand without spending.
+
+\begin{algorithm}
+\caption{Pre-call token budget middleware}\label{alg:budget}
+\begin{algorithmic}[1]
+\Require organisation $\mathcal{O}$, agent $\rho$, predicted input tokens $\hat{t}_{in}$
+\Ensure permit $p \in \{\text{ok}, \text{deny}\}$
+\State $B \gets$ \textsc{Lookup}(token\_budgets where org $=\mathcal{O} \wedge$ period covers now)
+\If{$B = \bot$} \State $B \gets$ \textsc{Provision}(default monthly cap) \EndIf
+\If{$B.\text{used\_in} + \hat{t}_{in} > B.\text{allowed\_in}$}
+  \State \textsc{Audit}(budget\_denied, $\mathcal{O}, \rho, \hat{t}_{in}$)
+  \State \Return deny
+\EndIf
+\State \textsc{Increment}($B$, $\hat{t}_{in}$, 0) \Comment{post-call adjusts with actual usage}
+\State \Return ok
+\end{algorithmic}
+\end{algorithm}
+
+% =============================================================
+\section{Security Boundaries}
+% =============================================================
+
+Three boundaries carry the bulk of the security argument.
+
+\subsection{Validator Sandbox}
+The validator container launches a child container with \texttt{\-\-network=none}, \texttt{\-\-read-only}, \texttt{\-\-tmpfs /tmp}, no IAM, and no environment passthrough. The fixture repository is mounted read-only. Any patch behaviour that requires the network (data exfiltration, callback) fails by construction. The interface contract is identical to the Phase~7 Modal.com swap, so the cloud transition is one adapter change.
+
+\subsection{GitHub App Credential Boundary}
+The GitHub App private key is bind-mounted only into the gitops container. Control-plane has no path to read it. The minted JWT has a 10-minute TTL and is scoped to a single installation; the installation token is requested per call rather than cached longer than five minutes. All PR creations are logged to the immutable audit log with the hash chain (see below).
+
+\subsection{Audit Hash Chain}
+\texttt{audit\_log} rows carry \(\text{prev\_hash}\) and \(\text{row\_hash}\). On insert, the row hash is computed as
+\[
+h_i = H(h_{i-1} \| \text{org\_id} \| \text{action} \| \text{target} \| \text{metadata} \| \text{ts})
+\]
+with $H = \text{HMAC-SHA-256}$ under \texttt{AUDIT\_SECRET}. Tampering with any historical row breaks the chain on the next anchor. A nightly anchor publishes $h_n$ to S3 Object Lock (Phase~7) to make tampering externally falsifiable.
+
+% =============================================================
+\section{Evaluation Harness}\label{sec:eval}
+% =============================================================
+
+The evaluation track is decoupled from the build phases and runs against a synthetic fault-injection harness with 30~fault classes (null-deref, schema-drift, OOM, deadlock, deploy-fail, race, configuration drift, etc.) and 5~seeds per class. Each (fault, seed) is run twice: once with \texttt{LLM\_PROVIDER=openai} (\texttt{gpt-4o} for synthesis, \texttt{gpt-4o-mini} for classifications), once with \texttt{LLM\_PROVIDER=ollama} (\texttt{qwen2.5-coder:14b} for code, \texttt{llama3.1:8b} elsewhere). Each run writes one \texttt{eval\_runs} parent row and one \texttt{eval\_transcripts} row per (provider, agent). Metrics:
+
+\begin{itemize}
+\item \textbf{MTTR}: wall-clock from incident ingest to PR open.
+\item \textbf{Fix-precision}: validator pass rate on first attempt.
+\item \textbf{Fix-recall}: fraction of injected faults where the pipeline closed the loop.
+\item \textbf{\$/incident}: cost per closed loop (Ollama charged at \$0).
+\item \textbf{Human-intervention rate}: fraction of medium-severity runs requiring an explicit signal before the 120\,s timer.
+\item \textbf{Schema-validity rate}: fraction of L1 LLM responses passing $\Sigma_\rho$ on first try.
+\end{itemize}
+
+For human factors, a within-subjects NASA Task-Load Index study (planned, $n=12$) compares \textsc{Nexis} against a PagerDuty-plus-human baseline; the Wilcoxon signed-rank test is the planned non-parametric primary analysis.
+
+% =============================================================
+\section{Threats to Validity}
+% =============================================================
+
+The eval harness uses synthetic faults; production-fault distribution is heavier-tailed and includes faults Pathfinder's codegraph cannot reach (third-party regressions). The DoWhy adjustment relies on a correctly specified DAG; we mitigate by reporting both raw and adjusted estimates and flagging adjustment-sensitivity. The LLM-provider comparison is confounded by prompt cache state for the OpenAI path; we re-warm the cache before each (fault, seed) and report cache hit rate alongside latency. RLS is verified only for tables we own; webhook-ingested raw payloads can leak tenant context inside JSON columns and are therefore redacted before storage.
+
+% =============================================================
+\section{Related Work}
+% =============================================================
+
+The closest agentic systems are SWE-agent, Devin, OpenHands, and AutoCodeRover for the LLM-agent side, and PagerDuty, FireHydrant, and Rootly for the incident-response side; \textsc{Nexis} is positioned as the join: an agentic LLM stack with severity-routed human supervision, sandbox-validated patches, and a deployment exit through GitOps. The causal RCA layer is most closely related to do-calculus pipelines~\cite{pearl2009causality} adapted to time-series telemetry.
+
+% =============================================================
+\section{Conclusion}
+% =============================================================
+
+\textsc{Nexis} demonstrates that a single Go binary can host nine cooperating LLM agents behind a Temporal workflow, gate them through a deterministic severity router, validate their output inside a network-less sandbox, and ship the result through a GitHub App, while honouring row-level multi-tenancy and a per-tenant token budget. The architecture trades the optionality of nine microservices for the shippability of a modular monolith with two carved-out security services, and the algorithmic pieces --- detection, causal RCA, planning, JSON-schema-retried L1 synthesis, and the signal/timer approval race --- are concise enough to specify in pseudocode. The dual-provider evaluation harness allows direct comparison of closed and open-weight stacks on identical input, providing the empirical core of the accompanying thesis.
+
+\begin{thebibliography}{9}
+\bibitem{pearl2009causality} J.~Pearl. \emph{Causality: Models, Reasoning, and Inference}. Cambridge University Press, 2nd~ed., 2009.
+\bibitem{temporal} Temporal Technologies. Workflow determinism and replay. \url{https://docs.temporal.io}, 2024.
+\bibitem{rls} The PostgreSQL Global Development Group. Row Security Policies, \emph{PostgreSQL 16 Manual}, 2024.
+\bibitem{dowhy} A.~Sharma, E.~Kiciman. DoWhy: An end-to-end library for causal inference. \emph{arXiv:2011.04216}, 2020.
+\bibitem{nasatlx} S.~G.~Hart, L.~E.~Staveland. Development of NASA-TLX. \emph{Advances in Psychology}, 1988.
+\end{thebibliography}
+
+\end{document}

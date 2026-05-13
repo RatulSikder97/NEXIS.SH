@@ -112,6 +112,19 @@ type Deps struct {
 	// the existing SignalerService. Optional — when nil, the
 	// POST /v1/integrations/slack/interactivity route is not mounted.
 	SlackDecider handler.SlackApprovalsService
+
+	// Operational-surfaces stage — repos + probe deps for the read-only
+	// operator endpoints (activity feed, system-health, integration log,
+	// validator runs, cost rollup, knowledge status, system-status pill).
+	//
+	//   WebhookDeliveries — append-only audit log written by the webhook
+	//     handlers, read by /v1/integrations/webhooks. Optional.
+	//
+	//   SystemHealth — bundle of dependency handles the /v1/system-health
+	//     fanout probes. Empty fields surface as "disabled" rather than
+	//     "down" so the dashboard can render a mixed-deploy correctly.
+	WebhookDeliveries *repo.WebhookDeliveriesRepo
+	SystemHealth      handler.SystemHealthDeps
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
@@ -180,8 +193,11 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		// Public webhook ingest. HMAC-authenticated inside each adapter; no
 		// session cookie or bearer is involved. Pool argument is the admin
 		// pool — see handler.Webhook for the RLS pinning rationale.
+		//
+		// WebhookDeliveries (optional) records every attempt for the
+		// operator-side /v1/integrations/webhooks audit log.
 		if deps.Integrations != nil && deps.Pool != nil {
-			r.Post("/v1/webhooks/{provider}/{org_id}", handler.Webhook(deps.Integrations, deps.Pool))
+			r.Post("/v1/webhooks/{provider}/{org_id}", handler.Webhook(deps.Integrations, deps.Pool, deps.WebhookDeliveries))
 
 			// Task 8 — Datadog + PagerDuty webhook URLs are configured by the
 			// customer inside their own provider dashboard, so they cannot
@@ -190,9 +206,9 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			// otherwise identical to Webhook above (same HMAC verify, same
 			// RLS pinning).
 			r.Post("/v1/integrations/datadog/webhook",
-				handler.WebhookByQuery(domain.IntegrationDatadog, deps.Integrations, deps.Pool))
+				handler.WebhookByQuery(domain.IntegrationDatadog, deps.Integrations, deps.Pool, deps.WebhookDeliveries))
 			r.Post("/v1/integrations/pagerduty/webhook",
-				handler.WebhookByQuery(domain.IntegrationPagerDuty, deps.Integrations, deps.Pool))
+				handler.WebhookByQuery(domain.IntegrationPagerDuty, deps.Integrations, deps.Pool, deps.WebhookDeliveries))
 		}
 
 		// Task 8 — Slack interactivity. Slack-signed POST; no session
@@ -294,6 +310,38 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				g.Get("/v1/workspaces/{ws_id}/agents/budget", handler.BudgetStatus(deps.TokenLedgerRepo))
 			}
 
+			// Operational surfaces — eight read-only endpoints + one
+			// integration probe. All session-gated; everything except the
+			// /probe is open to any authenticated principal.
+			//
+			//   /v1/orgs/{org_id}/activity                 — paginated cross-workflow feed
+			//   /v1/orgs/{org_id}/activity-stream          — SSE companion (2s poll)
+			//   /v1/system-health                          — dependency probe (15s cache)
+			//   /v1/integrations/webhooks                  — webhook delivery audit log
+			//   /v1/validator/runs                         — recent validator sandbox runs
+			//   /v1/orgs/{org_id}/cost                     — per-org token-ledger rollup
+			//   /v1/knowledge/status                       — pgvector retrieval state
+			//   /v1/system-status                          — sidebar pill (30s per-org cache)
+			//
+			// The {org_id} URL value is informational — handlers always
+			// filter on the principal's OrgID, so a leaked URL doesn't leak
+			// data.
+			if deps.WorkflowsRepo != nil {
+				g.Get("/v1/orgs/{org_id}/activity", handler.OrgActivity(deps.WorkflowsRepo))
+				g.Get("/v1/orgs/{org_id}/activity-stream", handler.OrgActivityStream(deps.WorkflowsRepo))
+			}
+			g.Get("/v1/system-health", handler.SystemHealth(deps.SystemHealth))
+			g.Get("/v1/integrations/webhooks", handler.IntegrationsWebhooks(deps.WebhookDeliveries))
+			if deps.Pool != nil {
+				g.Get("/v1/validator/runs", handler.ValidatorRuns(deps.Pool))
+				g.Get("/v1/orgs/{org_id}/cost", handler.OrgCost(deps.Pool))
+				g.Get("/v1/knowledge/status", handler.KnowledgeStatus(deps.Pool))
+			}
+			g.Get("/v1/system-status", handler.SystemStatus(handler.SystemStatusDeps{
+				AdminPool: deps.Pool,
+				Health:    deps.SystemHealth,
+			}))
+
 			// Owner OR admin — Stage 5 RBAC. Owners and admins can manage
 			// integrations + api keys + the audit list/CSV; members are
 			// read-only on their own profile.
@@ -308,6 +356,11 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 					g2.Post("/v1/integrations/{provider}/connect", handler.IntegrationsConnect(deps.Integrations, aud))
 					g2.Delete("/v1/integrations/{provider}", handler.IntegrationsDisconnect(deps.Integrations, aud))
 					g2.Get("/v1/integrations/github/mock_install", handler.GitHubMockInstall(deps.Integrations, aud, cfg.AppBaseURL, cfg.AppEnv))
+
+					// Manual probe — operator forces a Status refresh on a
+					// single integration. Owner|Admin only so members can't
+					// hammer an upstream API. Audited as integration.probed.
+					g2.Post("/v1/integrations/{provider}/probe", handler.IntegrationProbe(deps.Integrations, aud))
 
 					// Task 1 — install-START routes. Session-gated so the
 					// callback can attribute the resulting connection to the

@@ -245,6 +245,183 @@ func (r *WorkflowRepo) NextSeq(ctx context.Context, runID string) (int, error) {
 	return n, err
 }
 
+// OrgActivityFilter narrows the cross-workflow activity feed read. OrgID is
+// the required tenancy key (matched against workflow_runs.org_id, since
+// activity_events.org_id is denormalised but the JOIN doubles as a defence-
+// in-depth check). The other fields are optional and pass through as
+// permissive SQL filters when set.
+//
+// Kind maps the operator-facing UI filter (`?kind=start|log|finish|error`)
+// onto the canonical activity_events.status values. The mapping is
+// intentionally loose so the SQL stays readable; see kindToStatuses.
+type OrgActivityFilter struct {
+	OrgID       string
+	Since       time.Time // exclusive lower bound on ts; zero time disables
+	Kind        string    // start | log | finish | error
+	AgentRole   string    // exact match on activity_events.agent_role; empty disables
+	WorkspaceID string    // exact match on workflow_runs.workspace_id; empty disables
+	Limit       int       // default 50, max 200
+	Offset      int       // default 0
+}
+
+// kindToStatuses converts the operator-facing kind filter into the
+// activity_events.status values it should match. The mapping is documented
+// alongside the constants in domain/workflow.go.
+//
+//	start  → 'started'
+//	log    → 'retrying'  (replay/log-style frames)
+//	finish → 'succeeded'
+//	error  → 'failed' OR 'timed_out'
+//
+// Empty kind returns nil, which the caller treats as "no status filter".
+func kindToStatuses(kind string) []string {
+	switch kind {
+	case "start":
+		return []string{"started"}
+	case "log":
+		return []string{"retrying"}
+	case "finish":
+		return []string{"succeeded"}
+	case "error":
+		return []string{"failed", "timed_out"}
+	default:
+		return nil
+	}
+}
+
+// ListOrgActivity returns the cross-workflow activity feed for one org,
+// ordered most-recent first. Used by the operator-facing
+// /v1/orgs/{org_id}/activity endpoint + its SSE companion.
+//
+// Runs on the admin pool — the operator endpoint authenticates via session
+// middleware and the principal's OrgID is the tenancy boundary. The SQL
+// JOINs workflow_runs so the workspace_id filter (and the second-line
+// org_id defence) works against the canonical column.
+//
+// Returns the page rows + the unpaginated total so the dashboard can render
+// "N of M" without an extra round-trip.
+func (r *WorkflowRepo) ListOrgActivity(ctx context.Context, f OrgActivityFilter) ([]domain.ActivityEvent, int, error) {
+	if r == nil || r.admin == nil {
+		return []domain.ActivityEvent{}, 0, nil
+	}
+	limit := f.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	offset := f.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	var sinceArg any
+	if !f.Since.IsZero() {
+		sinceArg = f.Since
+	}
+	statuses := kindToStatuses(f.Kind)
+	// Pass an explicit empty array when no status filter applies so the SQL
+	// can guard with `(cardinality($N::text[])=0 OR ae.status = ANY($N::text[]))`.
+	statusFilter := statuses
+	if statusFilter == nil {
+		statusFilter = []string{}
+	}
+
+	// Total (unpaginated) for the pager.
+	var total int
+	if err := r.admin.QueryRow(ctx, `
+        SELECT count(*)
+        FROM activity_events ae
+        JOIN workflow_runs wr ON wr.id = ae.workflow_run_id
+        WHERE wr.org_id = $1
+          AND ($2::timestamptz IS NULL OR ae.ts > $2)
+          AND ($3 = ''       OR ae.agent_role = $3)
+          AND ($4 = ''       OR wr.workspace_id::text = $4)
+          AND (cardinality($5::text[])=0 OR ae.status = ANY($5::text[]))`,
+		f.OrgID, sinceArg, f.AgentRole, f.WorkspaceID, statusFilter,
+	).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
+		return []domain.ActivityEvent{}, 0, nil
+	}
+
+	rows, err := r.admin.Query(ctx, `
+        SELECT ae.id, ae.org_id, ae.workflow_run_id, ae.seq, ae.agent_role, ae.activity_name,
+               ae.status, ae.attempt, COALESCE(ae.message, ''), ae.payload, ae.ts
+        FROM activity_events ae
+        JOIN workflow_runs wr ON wr.id = ae.workflow_run_id
+        WHERE wr.org_id = $1
+          AND ($2::timestamptz IS NULL OR ae.ts > $2)
+          AND ($3 = ''       OR ae.agent_role = $3)
+          AND ($4 = ''       OR wr.workspace_id::text = $4)
+          AND (cardinality($5::text[])=0 OR ae.status = ANY($5::text[]))
+        ORDER BY ae.ts DESC, ae.seq DESC
+        LIMIT $6 OFFSET $7`,
+		f.OrgID, sinceArg, f.AgentRole, f.WorkspaceID, statusFilter, limit, offset,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := make([]domain.ActivityEvent, 0, limit)
+	for rows.Next() {
+		var e domain.ActivityEvent
+		var role, status string
+		var payload []byte
+		if err := rows.Scan(
+			&e.ID, &e.OrgID, &e.WorkflowRunID, &e.Seq, &role, &e.ActivityName,
+			&status, &e.Attempt, &e.Message, &payload, &e.TS,
+		); err != nil {
+			return nil, 0, err
+		}
+		e.AgentRole = domain.AgentRole(role)
+		e.Status = domain.ActivityStatus(status)
+		e.Payload = payload
+		out = append(out, e)
+	}
+	return out, total, rows.Err()
+}
+
+// ListOrgActivityAfter is the streaming companion to ListOrgActivity. Used
+// by the SSE handler — fetches rows with ts strictly greater than `after`,
+// in ascending order so the cursor can advance. Limit caps the per-tick
+// batch so a backlog after a long disconnect can't blow up the broker.
+func (r *WorkflowRepo) ListOrgActivityAfter(ctx context.Context, orgID string, after time.Time, limit int) ([]domain.ActivityEvent, error) {
+	if r == nil || r.admin == nil {
+		return []domain.ActivityEvent{}, nil
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := r.admin.Query(ctx, `
+        SELECT ae.id, ae.org_id, ae.workflow_run_id, ae.seq, ae.agent_role, ae.activity_name,
+               ae.status, ae.attempt, COALESCE(ae.message, ''), ae.payload, ae.ts
+        FROM activity_events ae
+        JOIN workflow_runs wr ON wr.id = ae.workflow_run_id
+        WHERE wr.org_id = $1 AND ae.ts > $2
+        ORDER BY ae.ts ASC, ae.seq ASC
+        LIMIT $3`, orgID, after, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]domain.ActivityEvent, 0, limit)
+	for rows.Next() {
+		var e domain.ActivityEvent
+		var role, status string
+		var payload []byte
+		if err := rows.Scan(
+			&e.ID, &e.OrgID, &e.WorkflowRunID, &e.Seq, &role, &e.ActivityName,
+			&status, &e.Attempt, &e.Message, &payload, &e.TS,
+		); err != nil {
+			return nil, err
+		}
+		e.AgentRole = domain.AgentRole(role)
+		e.Status = domain.ActivityStatus(status)
+		e.Payload = payload
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // jsonOrNil returns nil for an empty byte slice so the JSONB column lands
 // as SQL NULL rather than an empty string (which Postgres rejects).
 func jsonOrNil(b []byte) any {

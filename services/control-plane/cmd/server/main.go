@@ -44,6 +44,7 @@ import (
 	temporalplatform "github.com/nexis-eco/nexis/services/control-plane/internal/platform/temporal"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/sentinel"
 	httpserver "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/handler"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
 	recoverywf "github.com/nexis-eco/nexis/services/control-plane/internal/workflow/recovery"
 )
@@ -399,22 +400,45 @@ func main() {
 		logger.Info("eval runner initialised", "providers", evalRunner.Providers)
 	}
 
+	// Operational-surfaces stage — webhook_deliveries audit log + the
+	// dependency probe bundle the /v1/system-health endpoint reads. Both
+	// are tolerant of missing wiring: a nil repo just causes the operator
+	// log to render empty, and disabled probes surface as "disabled" in
+	// the health response rather than "down".
+	var webhookDeliveriesRepo *repo.WebhookDeliveriesRepo
+	if appPool != nil {
+		webhookDeliveriesRepo = repo.NewWebhookDeliveriesRepo(appPool, adminPool)
+	}
+
 	srv := httpserver.New(cfg, logger, httpserver.Deps{
-		Pool:            adminPool,
-		AppPool:         appPool,
-		Auth:            authProvider,
-		Audit:           auditWriter,
-		AuditLister:     auditLister,
-		Integrations:    registry,
-		Workspaces:      wsService,
-		WorkspacesRepo:  wsRepo,
-		Billing:         billingProvider,
-		BillingRepo:     billingRepo,
-		Workflows:       wfService,
-		WorkflowsRepo:   wfRepo,
-		EvalRepo:        evalRepo,
-		EvalRunner:      evalRunner,
-		TokenLedgerRepo: tokenLedgerRepoForHTTP,
+		Pool:              adminPool,
+		AppPool:           appPool,
+		Auth:              authProvider,
+		Audit:             auditWriter,
+		AuditLister:       auditLister,
+		Integrations:      registry,
+		Workspaces:        wsService,
+		WorkspacesRepo:    wsRepo,
+		Billing:           billingProvider,
+		BillingRepo:       billingRepo,
+		Workflows:         wfService,
+		WorkflowsRepo:     wfRepo,
+		EvalRepo:          evalRepo,
+		EvalRunner:        evalRunner,
+		TokenLedgerRepo:   tokenLedgerRepoForHTTP,
+		WebhookDeliveries: webhookDeliveriesRepo,
+		SystemHealth: handler.SystemHealthDeps{
+			AdminPool: adminPool,
+			RedisAddr: os.Getenv("REDIS_ADDR"),
+			Neo4j:     nil, // surface as "disabled" when the Phase 6 driver isn't wired here
+			MinIO: integration.MinIOConfig{
+				Endpoint:  cfg.MinIOEndpoint,
+				AccessKey: cfg.MinIOAccessKey,
+				SecretKey: cfg.MinIOSecretKey,
+				UseSSL:    cfg.MinIOUseSSL,
+			},
+			Temporal: nil, // surface as "disabled" — temporal heartbeat already exposes /v1/healthz/temporal
+		},
 	})
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

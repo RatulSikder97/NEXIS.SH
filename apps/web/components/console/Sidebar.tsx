@@ -1,17 +1,26 @@
 "use client";
 
-// Phase 3 Stage 6 — Console sidebar.
+// Console sidebar — operational-grade navigation for an agentic SRE / incident
+// recovery surface.
 //
-// Two sections (Workspace + Platform) with a pinned Settings footer.
-// Collapsed/expanded state is persisted in localStorage under
-// "nexis_sidebar_collapsed". Width is 240px expanded / 64px collapsed.
+// Six sections (Workspace + Fleet + Observability + Integrations + Operations
+// + Settings) with a sticky footer that surfaces live system health and
+// last-3-activity rotation. Widths still 240px expanded / 64px collapsed so
+// the static `ml-60` gutter in ConsoleLayout keeps working without a
+// hydration dance.
 //
-// NOTE: the surrounding ConsoleLayout pads the main column with a static
-// `ml-60` (240px). When the sidebar collapses, the main column does NOT
-// shrink — toggling collapse only hides the labels, not the gutter. This is
-// a deliberate compromise for Phase 3 to keep the layout server-renderable
-// and avoid a hydration dance. Stage 7+ may revisit if collapse becomes a
-// daily-driver feature.
+// Live signals on the sidebar:
+//   * Incidents — running pipeline count (10s poll), blue pill
+//   * Approvals — pending approvals count (10s poll), amber pill
+//   * Workflows — same running pipeline count, mirrors Incidents row
+//   * Integrations — connected/total (slow 60s poll)
+//   * SystemStatusPill — aggregates integration health (30s poll), bottom
+//   * ActivityTicker — last 3 audit rows rotating (30s poll), bottom
+//
+// All polls are cheap and degrade silently on transient errors. Endpoints
+// referenced by new sections (system-health, system-status, validator/runs,
+// integrations/webhooks, integrations/{provider}/probe) MAY 404 today; pages
+// individually handle that and render the EmptyState "Endpoint coming soon".
 
 import * as React from "react";
 import Link from "next/link";
@@ -20,59 +29,62 @@ import {
   Activity,
   AlertTriangle,
   Beaker,
+  BookOpen,
   CheckSquare,
   ChevronsLeft,
   ChevronsRight,
-  FileText,
-  Home,
+  Container,
+  DollarSign,
+  Gauge,
+  HeartPulse,
+  LayoutDashboard,
+  Network,
   PlayCircle,
   Plug,
+  Radio,
+  ScrollText,
   Settings,
+  ShieldAlert,
+  Webhook,
+  Workflow,
+  Wrench,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { pipelines } from "@/lib/pipelines";
 import { approvals } from "@/lib/approvals";
+import { integrations } from "@/lib/integrations";
 import { WorkspaceSwitcher } from "@/components/workspaces/WorkspaceSwitcher";
+import { SystemStatusPill } from "@/components/console/SystemStatusPill";
+import { ActivityTicker } from "@/components/console/ActivityTicker";
+
+type BadgeTone = "info" | "warn" | "ok" | "muted";
 
 type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
   // navKey lets a NavLink consumer correlate this row with side-channel
-  // state (e.g. a running-count badge on Incidents) without leaking that
-  // logic into the static config table.
-  navKey?: "incidents" | "approvals";
+  // state (e.g. a running-count badge on Incidents).
+  navKey?:
+    | "incidents"
+    | "approvals"
+    | "workflows"
+    | "agents"
+    | "integrations"
+    | "validator";
+  // Constant badge text (e.g. "9" on Agents) — overrides dynamic counts.
+  constantBadge?: string;
+  // Optional secondary line shown below the label (expanded mode only).
+  secondary?: string;
 };
 
-const WORKSPACE: NavItem[] = [
-  { href: "/console", label: "Home", icon: Home },
-  {
-    href: "/console/incidents",
-    label: "Incidents",
-    icon: AlertTriangle,
-    navKey: "incidents",
-  },
-  {
-    href: "/console/approvals",
-    label: "Approvals",
-    icon: CheckSquare,
-    navKey: "approvals",
-  },
-  { href: "/console/audit", label: "Audit", icon: FileText },
-];
-
-// COOKIE_WORKSPACE mirrors the value WorkspaceSwitcher reads/writes so the
-// running-pipelines polling badge queries the same workspace the rest of
-// the console is scoped to.
 const COOKIE_WORKSPACE = "nexis_workspace";
 const INCIDENTS_POLL_MS = 10_000;
-// Phase 6 Stage 9 — pending-approvals badge polls at the same cadence as
-// running-incidents. The two badges live next to each other in the sidebar
-// so a single 10s heartbeat keeps the operator's "what needs my attention?"
-// surface fresh without spamming the control-plane.
 const APPROVALS_POLL_MS = 10_000;
+const INTEGRATIONS_POLL_MS = 60_000;
 
 function readWorkspaceCookie(): string | null {
   if (typeof document === "undefined") return null;
@@ -86,10 +98,6 @@ function readWorkspaceCookie(): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-// useRunningPipelineCount polls /v1/workspaces/{ws}/pipelines every 10s and
-// returns the count of queued|running rows. Returns 0 (not null) until the
-// first fetch resolves so the badge stays out of the layout until we know
-// there's something to show.
 function useRunningPipelineCount(): number {
   const [count, setCount] = React.useState(0);
   React.useEffect(() => {
@@ -122,12 +130,6 @@ function useRunningPipelineCount(): number {
   return count;
 }
 
-// usePendingApprovalsCount polls /v1/workspaces/{ws}/approvals/pending every
-// 10s and returns the row count. The endpoint is owner|admin only — for
-// regular members the call returns 403 and we degrade to 0 silently so the
-// badge simply never appears for non-privileged viewers. We do NOT push the
-// 403 through the standard error path because the sidebar mounts on every
-// console page and surfacing a perpetual "forbidden" toast would be noisy.
 function usePendingApprovalsCount(): number {
   const [count, setCount] = React.useState(0);
   React.useEffect(() => {
@@ -143,8 +145,7 @@ function usePendingApprovalsCount(): number {
         if (cancelled) return;
         setCount(rows.length);
       } catch {
-        // 403 (member role) and transient errors both land here. The next
-        // tick will retry; in the 403 case it keeps failing harmlessly.
+        // 403 (member role) and transient errors both land here.
       }
     }
     void tick();
@@ -157,47 +158,191 @@ function usePendingApprovalsCount(): number {
   return count;
 }
 
-const PLATFORM: NavItem[] = [
-  { href: "/console/agents", label: "Agents", icon: Activity },
-  // Phase 5 Stage 8 — Eval surface compares OpenAI vs Ollama for the
-  // same scenario. Slotted between Agents and Integrations so the
-  // "Platform" section reads top-down as observability → tooling.
-  { href: "/console/eval", label: "Eval", icon: Beaker },
-  { href: "/console/integrations", label: "Integrations", icon: Plug },
-  { href: "/console/live-demo", label: "Live Demo", icon: PlayCircle },
-];
+function useIntegrationsConnectedSummary(): { connected: number; total: number } {
+  const [s, setS] = React.useState<{ connected: number; total: number }>({
+    connected: 0,
+    total: 6,
+  });
+  React.useEffect(() => {
+    let cancelled = false;
+    async function tick() {
+      try {
+        const rows = await integrations.listConnections();
+        if (cancelled) return;
+        let connected = 0;
+        for (const r of rows) if (r.connected) connected++;
+        setS({ connected, total: rows.length || 6 });
+      } catch {
+        // ignore
+      }
+    }
+    void tick();
+    const id = window.setInterval(tick, INTEGRATIONS_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+  return s;
+}
 
 const STORAGE_KEY = "nexis_sidebar_collapsed";
+
+// Sections rendered top → bottom. Sticky Settings footer is rendered
+// separately so it doesn't get cut off by overflow on tall sidebars.
+const SECTION_WORKSPACE: { label: string; items: NavItem[] } = {
+  label: "Workspace",
+  items: [
+    { href: "/console", label: "Dashboard", icon: LayoutDashboard },
+    {
+      href: "/console/incidents",
+      label: "Incidents",
+      icon: AlertTriangle,
+      navKey: "incidents",
+    },
+    {
+      href: "/console/approvals",
+      label: "Approvals",
+      icon: CheckSquare,
+      navKey: "approvals",
+    },
+    { href: "/console/audit", label: "Audit Log", icon: ScrollText },
+  ],
+};
+
+const SECTION_FLEET: { label: string; items: NavItem[] } = {
+  label: "Fleet",
+  items: [
+    {
+      href: "/console/agents",
+      label: "Agents",
+      icon: Users,
+      navKey: "agents",
+      constantBadge: "9",
+    },
+    {
+      href: "/console/workflows",
+      label: "Workflows",
+      icon: Workflow,
+      navKey: "workflows",
+    },
+    { href: "/console/activity", label: "Activity Stream", icon: Activity },
+    {
+      href: "/console/validator",
+      label: "Validator Sandbox",
+      icon: Container,
+      navKey: "validator",
+    },
+  ],
+};
+
+const SECTION_OBSERVABILITY: { label: string; items: NavItem[] } = {
+  label: "Observability",
+  items: [
+    { href: "/console/performance", label: "Performance", icon: Gauge },
+    { href: "/console/cost", label: "Cost Tracker", icon: DollarSign },
+    { href: "/console/health", label: "System Health", icon: HeartPulse },
+  ],
+};
+
+const SECTION_INTEGRATIONS: { label: string; items: NavItem[] } = {
+  label: "Integrations",
+  items: [
+    {
+      href: "/console/integrations",
+      label: "All Integrations",
+      icon: Plug,
+      navKey: "integrations",
+    },
+    { href: "/console/webhooks", label: "Webhook Activity", icon: Webhook },
+    {
+      href: "/console/connections",
+      label: "Connection Health",
+      icon: Network,
+    },
+  ],
+};
+
+const SECTION_OPERATIONS: { label: string; items: NavItem[] } = {
+  label: "Operations",
+  items: [
+    {
+      href: "/console/recovery",
+      label: "Recovery Pipeline",
+      icon: ShieldAlert,
+    },
+    { href: "/console/eval", label: "Eval Harness", icon: Beaker },
+    { href: "/console/live-demo", label: "Live Demo", icon: PlayCircle },
+    { href: "/console/knowledge", label: "Knowledge Base", icon: BookOpen },
+  ],
+};
+
+function BadgePill({
+  count,
+  tone,
+  collapsed,
+  label,
+}: {
+  count: string;
+  tone: BadgeTone;
+  collapsed: boolean;
+  label: string;
+}) {
+  const classes: Record<BadgeTone, string> = {
+    info: "bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300",
+    warn: "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300",
+    ok: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-300",
+    muted:
+      "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] ring-[var(--color-border)]",
+  };
+  const dots: Record<BadgeTone, string> = {
+    info: "bg-blue-500",
+    warn: "bg-amber-500",
+    ok: "bg-emerald-500",
+    muted: "bg-zinc-400",
+  };
+  if (collapsed) {
+    return (
+      <span
+        aria-label={label}
+        className={cn(
+          "absolute right-1.5 top-1.5 inline-block h-1.5 w-1.5 rounded-full",
+          dots[tone],
+        )}
+      />
+    );
+  }
+  return (
+    <span
+      aria-label={label}
+      className={cn(
+        "ml-auto inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
+        classes[tone],
+      )}
+    >
+      {count}
+    </span>
+  );
+}
 
 function NavLink({
   item,
   collapsed,
   active,
   badge,
-  // badgeTone toggles the colour family: "info" (blue) for running counts,
-  // "warn" (amber) for "action required" counts like pending approvals.
   badgeTone = "info",
   badgeLabel,
 }: {
   item: NavItem;
   collapsed: boolean;
   active: boolean;
-  // Optional positive integer rendered as a pill next to the label (or as
-  // a small superscript dot when the sidebar is collapsed).
-  badge?: number;
-  badgeTone?: "info" | "warn";
-  // badgeLabel overrides the aria-label suffix. Defaults to "running" to
-  // preserve the Phase 4 behaviour for the Incidents row.
+  badge?: string;
+  badgeTone?: BadgeTone;
   badgeLabel?: string;
 }) {
   const Icon = item.icon;
-  const showBadge = typeof badge === "number" && badge > 0;
-  const badgeClasses =
-    badgeTone === "warn"
-      ? "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300"
-      : "bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300";
-  const dotClass = badgeTone === "warn" ? "bg-amber-500" : "bg-blue-500";
-  const labelSuffix = badgeLabel ?? "running";
+  const showBadge = typeof badge === "string" && badge.length > 0;
+  const labelSuffix = badgeLabel ?? "items";
   return (
     <Link
       // typedRoutes treats the href as Route; cast through unknown for the
@@ -206,52 +351,71 @@ function NavLink({
       title={collapsed ? item.label : undefined}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+        "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
         active
-          ? "bg-[var(--color-muted)] text-[var(--color-foreground)] font-medium"
-          : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]",
+          ? "bg-[var(--color-muted)]/70 text-[var(--color-foreground)] font-medium"
+          : "text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]/60 hover:text-[var(--color-foreground)]",
       )}
     >
-      <Icon className="h-4 w-4 shrink-0" />
-      {!collapsed && <span className="truncate">{item.label}</span>}
-      {!collapsed && showBadge && (
+      {/* 2px left ring for active rows — less heavy than full bg-fill */}
+      {active && !collapsed && (
         <span
-          aria-label={`${badge} ${labelSuffix}`}
-          className={cn(
-            "ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1",
-            badgeClasses,
+          aria-hidden
+          className="absolute inset-y-1 left-0 w-[2px] rounded-r-full bg-[var(--color-primary)]"
+        />
+      )}
+      <Icon
+        className={cn(
+          "h-4 w-4 shrink-0",
+          active ? "text-[var(--color-foreground)]" : undefined,
+        )}
+      />
+      {!collapsed && (
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate leading-none">{item.label}</span>
+          {item.secondary && (
+            <span className="mt-0.5 truncate text-[10px] text-[var(--color-muted-foreground)]">
+              {item.secondary}
+            </span>
           )}
-        >
-          {badge}
         </span>
       )}
-      {collapsed && showBadge && (
-        <span
-          aria-label={`${badge} ${labelSuffix}`}
-          className={cn(
-            "absolute right-1 top-1 inline-block h-1.5 w-1.5 rounded-full",
-            dotClass,
-          )}
+      {showBadge && (
+        <BadgePill
+          count={badge}
+          tone={badgeTone}
+          collapsed={collapsed}
+          label={`${badge} ${labelSuffix}`}
         />
       )}
     </Link>
   );
 }
 
-function SectionLabel({ label, collapsed }: { label: string; collapsed: boolean }) {
+function SectionLabel({
+  label,
+  collapsed,
+}: {
+  label: string;
+  collapsed: boolean;
+}) {
   if (collapsed) {
-    return <div className="my-2 border-t border-[var(--color-border)]" aria-hidden />;
+    return (
+      <div
+        className="my-2 border-t border-[var(--color-border)]"
+        aria-hidden
+      />
+    );
   }
   return (
-    <p className="px-3 pb-1 pt-3 text-[10px] uppercase tracking-widest text-[var(--color-muted-foreground)]">
+    <p className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-muted-foreground)]">
       {label}
     </p>
   );
 }
 
 // Module-level "tick" counter so external mutations via toggle() can wake
-// every subscriber on the page. (Only one Sidebar mounts at a time, but
-// keeping this stable across renders is required by useSyncExternalStore.)
+// every subscriber on the page. Required by useSyncExternalStore.
 const tickListeners = new Set<() => void>();
 let tick = 0;
 function emit() {
@@ -272,25 +436,54 @@ function readCollapsed(): boolean {
   }
 }
 
+function badgeFor(
+  navKey: NavItem["navKey"],
+  signals: {
+    incidents: number;
+    approvals: number;
+    integrationsConnected: number;
+    integrationsTotal: number;
+  },
+): { count?: string; tone: BadgeTone; label: string } | null {
+  switch (navKey) {
+    case "incidents":
+      return signals.incidents > 0
+        ? { count: String(signals.incidents), tone: "info", label: "running" }
+        : null;
+    case "workflows":
+      return signals.incidents > 0
+        ? { count: String(signals.incidents), tone: "info", label: "running" }
+        : null;
+    case "approvals":
+      return signals.approvals > 0
+        ? { count: String(signals.approvals), tone: "warn", label: "pending" }
+        : null;
+    case "integrations":
+      return {
+        count: `${signals.integrationsConnected}/${signals.integrationsTotal}`,
+        tone:
+          signals.integrationsConnected === signals.integrationsTotal
+            ? "ok"
+            : signals.integrationsConnected === 0
+              ? "muted"
+              : "info",
+        label: "connected",
+      };
+    default:
+      return null;
+  }
+}
+
 export function Sidebar() {
   const pathname = usePathname();
-  // useSyncExternalStore is the React-blessed way to subscribe to an
-  // external sync source (localStorage) without tripping the
-  // set-state-in-effect lint rule. The server snapshot is `false`
-  // (expanded) so SSR matches the static `ml-60` gutter on the main column.
   const collapsed = React.useSyncExternalStore(
     subscribe,
     readCollapsed,
     () => false,
   );
-  // Running-pipelines count is hoisted out of the per-NavLink render so the
-  // 10s poll runs exactly once for the whole sidebar.
   const runningIncidents = useRunningPipelineCount();
-  // Pending-approvals count drives an amber badge on the Approvals row.
-  // Owner|admin only — degrades silently to 0 for other roles.
   const pendingApprovals = usePendingApprovalsCount();
-  // Force-read `tick` so the IDE doesn't strip the unused import; the
-  // subscribe callback already triggers re-renders.
+  const integrationsSummary = useIntegrationsConnectedSummary();
   void tick;
 
   function toggle() {
@@ -311,16 +504,32 @@ export function Sidebar() {
     return pathname === href || pathname.startsWith(href + "/");
   }
 
+  const signals = {
+    incidents: runningIncidents,
+    approvals: pendingApprovals,
+    integrationsConnected: integrationsSummary.connected,
+    integrationsTotal: integrationsSummary.total,
+  };
+
+  const sections = [
+    SECTION_WORKSPACE,
+    SECTION_FLEET,
+    SECTION_OBSERVABILITY,
+    SECTION_INTEGRATIONS,
+    SECTION_OPERATIONS,
+  ];
+
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-30 flex flex-col border-r border-[var(--color-border)] bg-[var(--color-card)]",
+        "fixed inset-y-0 left-0 z-30 flex min-h-screen flex-col border-r border-[var(--color-border)] bg-[var(--color-card)]",
         width,
       )}
     >
-      <div className="flex h-14 items-center justify-between border-b border-[var(--color-border)] px-3">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--color-border)] px-3">
         {!collapsed && (
-          <span className="text-sm font-semibold tracking-tight text-[var(--color-foreground)]">
+          <span className="flex items-center gap-2 text-sm font-semibold tracking-tight text-[var(--color-foreground)]">
+            <Wrench className="h-4 w-4 text-[var(--color-primary)]" />
             NEXIS
           </span>
         )}
@@ -340,38 +549,63 @@ export function Sidebar() {
 
       <WorkspaceSwitcher collapsed={collapsed} />
 
-      <nav className="flex-1 overflow-y-auto px-2 py-2">
-        <ul className="space-y-0.5">
-          {WORKSPACE.map((item) => (
-            <li key={item.href}>
-              <NavLink
-                item={item}
-                collapsed={collapsed}
-                active={isActive(item.href)}
-                badge={
-                  item.navKey === "incidents" ? runningIncidents : undefined
-                }
-              />
-            </li>
-          ))}
-        </ul>
-
-        <SectionLabel label="Platform" collapsed={collapsed} />
-        <ul className="space-y-0.5">
-          {PLATFORM.map((item) => (
-            <li key={item.href}>
-              <NavLink item={item} collapsed={collapsed} active={isActive(item.href)} />
-            </li>
-          ))}
-        </ul>
+      <nav
+        className="flex-1 overflow-y-auto px-2 py-2"
+        aria-label="Console navigation"
+      >
+        {sections.map((section, sIdx) => (
+          <div key={section.label} className={sIdx === 0 ? "" : ""}>
+            {sIdx > 0 && <SectionLabel label={section.label} collapsed={collapsed} />}
+            {sIdx === 0 && (
+              <SectionLabel label={section.label} collapsed={collapsed} />
+            )}
+            <ul className="space-y-0.5">
+              {section.items.map((item) => {
+                const dynamic = badgeFor(item.navKey, signals);
+                const badge = item.constantBadge ?? dynamic?.count;
+                const tone: BadgeTone =
+                  item.constantBadge !== undefined
+                    ? "muted"
+                    : (dynamic?.tone ?? "info");
+                const label = dynamic?.label ?? "items";
+                return (
+                  <li key={item.href}>
+                    <NavLink
+                      item={item}
+                      collapsed={collapsed}
+                      active={isActive(item.href)}
+                      badge={badge}
+                      badgeTone={tone}
+                      badgeLabel={label}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
-      <div className="border-t border-[var(--color-border)] px-2 py-2">
+      <div className="shrink-0 border-t border-[var(--color-border)] px-2 py-2">
         <NavLink
-          item={{ href: "/console/settings/profile", label: "Settings", icon: Settings }}
+          item={{
+            href: "/console/settings/profile",
+            label: "Settings",
+            icon: Settings,
+          }}
           collapsed={collapsed}
           active={isActive("/console/settings")}
         />
+      </div>
+
+      <div className="shrink-0 space-y-1.5 border-t border-[var(--color-border)] bg-[var(--color-card)] px-2 py-2">
+        {!collapsed && (
+          <p className="px-1 pb-0.5 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-muted-foreground)]">
+            <Radio className="mr-1 inline h-3 w-3" aria-hidden /> Live
+          </p>
+        )}
+        <ActivityTicker collapsed={collapsed} />
+        <SystemStatusPill collapsed={collapsed} />
       </div>
     </aside>
   );
