@@ -8,29 +8,42 @@ import (
 // IncidentTrigger is what the Sentinel detector emits per evaluated rule hit.
 // The detector goroutine consumes []IncidentTrigger from rules.Apply and
 // hands them to WorkflowService.Start one by one.
+//
+// SourceEventID is filled on per-row triggers (rule="fatal_level") with the
+// upstream natural key — used by the multi-source dedupe layer to collapse
+// duplicates inside a 60-second window. Rate-spike triggers leave it empty
+// because they correspond to an aggregate count, not a single event.
 type IncidentTrigger struct {
-	OrgID       string
-	WorkspaceID string
-	IncidentID  string
-	Rule        string // 'fatal_level' | 'error_rate_spike'
-	DetectedAt  time.Time
-	ReceivedAt  time.Time
+	OrgID         string
+	WorkspaceID   string
+	IncidentID    string
+	SourceEventID string
+	Rule          string // 'fatal_level' | 'error_rate_spike'
+	DetectedAt    time.Time
+	ReceivedAt    time.Time
 }
 
 // IncidentRow is the minimal projection the Sentinel rules + downstream
 // activities need. The full row in incidents_raw has more columns; the
 // stacktrace + logs strings are extracted from raw_payload by the repo.
+//
+// SourceEventID is the per-source natural key (Sentry event_id, Datadog
+// alert_id, PagerDuty incident.id). The Sentinel dedupe layer
+// (sentinel/multisource.go) groups by (org_id, source_event_id) inside a
+// 60-second window so a single root incident observed by multiple sources
+// only spawns one recovery workflow.
 type IncidentRow struct {
-	ID          string
-	OrgID       string
-	Source      string // 'sentry'
-	Level       string // 'fatal'|'error'|'warning'|'info'
-	Title       string
-	Service     string
-	Environment string
-	Stacktrace  string
-	Logs        string
-	ReceivedAt  time.Time
+	ID            string
+	OrgID         string
+	Source        string // 'sentry'|'datadog'|'pagerduty'
+	SourceEventID string
+	Level         string // 'fatal'|'error'|'warning'|'info'
+	Title         string
+	Service       string
+	Environment   string
+	Stacktrace    string
+	Logs          string
+	ReceivedAt    time.Time
 }
 
 // IncidentsReader is the read-only port the Sentinel goroutine depends on.

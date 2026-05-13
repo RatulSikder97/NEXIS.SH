@@ -98,10 +98,84 @@ func Webhook(reg *integration.Registry, pool *pgxpool.Pool) http.HandlerFunc {
 	}
 }
 
+// WebhookByQuery is the variant of Webhook for providers whose webhook URL is
+// configured by the customer in their own dashboard (Datadog, PagerDuty). The
+// provider segment is wired statically at mount time; the destination org_id
+// comes from the `?org=<org_id>` query string so a single mount can fan out
+// to every tenant without per-tenant routes.
+//
+// Behaviour is otherwise identical to Webhook: same admin-pool tx, same
+// app.current_org_id pinning via set_config(...,true), same HMAC-mismatch →
+// 401 mapping. Missing `?org` returns 404 — without a target org the adapter
+// has no key to look up and we want this to look like a routing failure to
+// the upstream so it doesn't keep retrying.
+func WebhookByQuery(provider domain.IntegrationProvider, reg *integration.Registry, pool *pgxpool.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		orgID := r.URL.Query().Get("org")
+		if orgID == "" {
+			httpJSON(w, http.StatusNotFound, map[string]string{"error": "missing org query parameter"})
+			return
+		}
+		p, ok := reg.Get(provider)
+		if !ok {
+			httpJSON(w, http.StatusNotFound, map[string]string{"error": "unknown provider"})
+			return
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			httpJSON(w, http.StatusBadRequest, map[string]string{"error": "read body"})
+			return
+		}
+		hdrs := make(map[string]string, len(r.Header))
+		for k := range r.Header {
+			hdrs[k] = r.Header.Get(k)
+		}
+
+		ctx := r.Context()
+		tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			slog.Default().Error("webhook_q: begin tx", "err", err)
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		defer func() {
+			if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+				slog.Default().Error("webhook_q: rollback", "err", rbErr)
+			}
+		}()
+
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.current_org_id', $1, true)", orgID); err != nil {
+			slog.Default().Error("webhook_q: set org_id", "err", err, "org_id", orgID)
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+
+		err = p.HandleWebhook(db.WithTx(ctx, tx), orgID, hdrs, body)
+		if err != nil {
+			if isHMACError(err) {
+				httpJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+				return
+			}
+			slog.Default().Error("webhook_q handler",
+				"provider", string(provider), "err", err)
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		if err := tx.Commit(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			slog.Default().Error("webhook_q: commit", "err", err)
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": "commit"})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
 // isHMACError matches the canonical signature-failure errors returned by each
 // integration adapter. Keeping the matcher loose (substring) lets new adapters
 // adopt the same phrasing without a wiring change here. The exact strings come
-// from github/sentry/argocd provider.go's HandleWebhook.
+// from github/sentry/argocd/datadog/pagerduty provider.go's HandleWebhook.
 func isHMACError(err error) bool {
 	s := err.Error()
 	return containsAny(s, []string{
@@ -109,6 +183,9 @@ func isHMACError(err error) bool {
 		"missing X-Hub-Signature",
 		"missing Sentry-Hook-Signature",
 		"missing argocd webhook signature",
+		"missing X-Datadog-Signature",
+		"missing webhook signature",
+		"missing X-PagerDuty-Signature",
 	})
 }
 

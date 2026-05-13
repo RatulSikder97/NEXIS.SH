@@ -53,7 +53,8 @@ func Apply(
 	for _, r := range fatals {
 		out = append(out, domain.IncidentTrigger{
 			OrgID: orgID, WorkspaceID: workspaceID, IncidentID: r.ID,
-			Rule: "fatal_level", DetectedAt: now, ReceivedAt: r.ReceivedAt,
+			SourceEventID: r.SourceEventID,
+			Rule:          "fatal_level", DetectedAt: now, ReceivedAt: r.ReceivedAt,
 		})
 	}
 	cooldownOK := lastTriggerAt.IsZero() || now.Sub(lastTriggerAt) > SpikeCooldown

@@ -65,6 +65,10 @@ func (f *fakeIntegrations) ConnectedSentryOrgs(_ context.Context) ([]string, err
 	return f.orgs, nil
 }
 
+func (f *fakeIntegrations) ConnectedIncidentOrgs(_ context.Context) ([]string, error) {
+	return f.orgs, nil
+}
+
 type fakeWorkflows struct {
 	mu    sync.Mutex
 	calls []startCall

@@ -131,8 +131,9 @@ func (r *IntegrationsRepo) Delete(ctx context.Context, orgID string, provider do
 }
 
 // ConnectedSentryOrgs returns the org ids that have a connected Sentry
-// integration. Used by the Phase 6 Sentinel detector to enumerate the orgs it
-// must poll each tick.
+// integration. Still used by Sentry's backfill cron (which is inherently
+// Sentry-only). The Phase 6 Sentinel detector has moved to
+// ConnectedIncidentOrgs so it sees Datadog + PagerDuty tenants too.
 //
 // Runs on the admin pool — the detector goroutine has no principal in ctx, so
 // the per-request RLS path would filter every row out. The query is also
@@ -147,6 +148,42 @@ func (r *IntegrationsRepo) ConnectedSentryOrgs(ctx context.Context) ([]string, e
 	rows, err := r.adminPool.Query(ctx, `
 		SELECT org_id FROM integrations
 		WHERE provider='sentry' AND status='connected'
+		ORDER BY org_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// ConnectedIncidentOrgs returns the distinct org ids that have at least one
+// connected incident-emitting integration (Sentry, Datadog, or PagerDuty).
+// Used by the Sentinel detector after Task 8's multi-source widening.
+//
+// SELECT DISTINCT keeps the slice deduped when an org has connected more than
+// one provider — without it the detector would poll the same org twice per
+// tick.
+//
+// Same RLS-bypass rationale as ConnectedSentryOrgs: this is a system-job path
+// served by a goroutine that has no principal in ctx and is inherently
+// cross-tenant.
+func (r *IntegrationsRepo) ConnectedIncidentOrgs(ctx context.Context) ([]string, error) {
+	if r.adminPool == nil {
+		return nil, domain.ErrUnknown
+	}
+	rows, err := r.adminPool.Query(ctx, `
+		SELECT DISTINCT org_id FROM integrations
+		WHERE provider IN ('sentry','datadog','pagerduty')
+		      AND status='connected'
 		ORDER BY org_id
 	`)
 	if err != nil {

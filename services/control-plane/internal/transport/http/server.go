@@ -104,6 +104,14 @@ type Deps struct {
 	OrgStats    *repo.OrgStatsRepo
 	Sentinel    handler.SentinelTriggerer
 	TemporalHB  *platformtemporal.Heartbeat
+
+	// Task 8 — Slack interactivity approvals.
+	//
+	// SlackDecider is the adapter that resolves a workflow run id (decoded
+	// from the Slack button payload) to a workspace + org and forwards to
+	// the existing SignalerService. Optional — when nil, the
+	// POST /v1/integrations/slack/interactivity route is not mounted.
+	SlackDecider handler.SlackApprovalsService
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
@@ -174,6 +182,40 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		// pool — see handler.Webhook for the RLS pinning rationale.
 		if deps.Integrations != nil && deps.Pool != nil {
 			r.Post("/v1/webhooks/{provider}/{org_id}", handler.Webhook(deps.Integrations, deps.Pool))
+
+			// Task 8 — Datadog + PagerDuty webhook URLs are configured by the
+			// customer inside their own provider dashboard, so they cannot
+			// embed our control-plane URL pattern. We accept the org id as a
+			// `?org=<org_id>` query string instead. The handler is
+			// otherwise identical to Webhook above (same HMAC verify, same
+			// RLS pinning).
+			r.Post("/v1/integrations/datadog/webhook",
+				handler.WebhookByQuery(domain.IntegrationDatadog, deps.Integrations, deps.Pool))
+			r.Post("/v1/integrations/pagerduty/webhook",
+				handler.WebhookByQuery(domain.IntegrationPagerDuty, deps.Integrations, deps.Pool))
+		}
+
+		// Task 8 — Slack interactivity. Slack-signed POST; no session
+		// involved. The signature IS auth — the handler verifies
+		// X-Slack-Signature over the raw body before parsing the payload.
+		if deps.SlackDecider != nil && len(cfg.SlackSigningSecret) > 0 {
+			r.Post("/v1/integrations/slack/interactivity",
+				handler.SlackInteractivity(deps.SlackDecider, cfg.SlackSigningSecret))
+		}
+
+		// Task 1 — OAuth install callbacks. Public routes (the user arrives
+		// here via a 302 from GitHub / Slack with no session cookie set yet);
+		// the handler re-reads the session cookie if present, but a missing
+		// session lands the user on /console/integrations?install_error=
+		// unauthorized so the dashboard can render a banner without crashing.
+		//
+		// The install-START routes are session-gated and mounted further down
+		// inside the owner|admin group.
+		if deps.Integrations != nil {
+			r.Get("/v1/integrations/github/install/callback",
+				handler.GitHubInstallCallback(deps.Integrations, aud, cfg))
+			r.Get("/v1/integrations/slack/callback",
+				handler.SlackInstallCallback(deps.Integrations, aud, cfg))
 		}
 
 		// Protected routes — RequireAuth issues 401 if no principal is in ctx;
@@ -266,6 +308,14 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 					g2.Post("/v1/integrations/{provider}/connect", handler.IntegrationsConnect(deps.Integrations, aud))
 					g2.Delete("/v1/integrations/{provider}", handler.IntegrationsDisconnect(deps.Integrations, aud))
 					g2.Get("/v1/integrations/github/mock_install", handler.GitHubMockInstall(deps.Integrations, aud, cfg.AppBaseURL, cfg.AppEnv))
+
+					// Task 1 — install-START routes. Session-gated so the
+					// callback can attribute the resulting connection to the
+					// caller's org. The matching CALLBACK routes are public
+					// (mounted above) — see integration_oauth.go for the CSRF
+					// handshake.
+					g2.Get("/v1/integrations/github/install", handler.GitHubInstallStart(cfg))
+					g2.Get("/v1/integrations/slack/install", handler.SlackInstallStart(deps.Integrations, cfg))
 				}
 				g2.Get("/v1/orgs/{id}/invites", handler.InviteList(deps.Auth))
 

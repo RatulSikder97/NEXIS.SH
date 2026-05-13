@@ -70,21 +70,31 @@ func (r *IncidentsRepo) Insert(ctx context.Context, orgID string, raw domain.Raw
 var _ domain.IncidentSink = (*IncidentsRepo)(nil)
 var _ domain.IncidentsReader = (*IncidentsRepo)(nil)
 
-// PollFatalSince returns Sentry rows with level='fatal' whose received_at is
-// after `since`, capped at 50 rows per call to bound a single Sentinel tick.
+// PollFatalSince returns rows with level='fatal' whose received_at is after
+// `since`, capped at 50 rows per call to bound a single Sentinel tick.
 // Runs on the admin pool — this is a system-job path with no principal in ctx.
 //
+// Multi-source widening (Task 8): the source filter is now
+// IN ('sentry','datadog','pagerduty') — every adapter that emits via
+// IncidentSink.Insert. The level=='fatal' criterion still applies; the
+// Datadog adapter maps Priority=='P1' to 'fatal' (per its alert→level table)
+// and PagerDuty maps Severity=='critical' to 'fatal', so a P1 alert or a
+// PagerDuty critical lands in the same tick that a Sentry fatal does. The
+// detector's dedupe layer (sentinel/multisource.go) collapses double-fires
+// when multiple sources observe the same root incident inside the dedupe
+// window.
+//
 // The query projects title / service / environment from the dedicated columns
-// and pulls stacktrace / logs out of raw_payload->'data'->'exception' (Sentry
-// envelope shape). Phase 6's fixture incidents place stacktrace under the
-// same path so the same query works for both real Sentry events and the
-// scripted fixture-pump path.
+// and pulls stacktrace / logs out of raw_payload. Phase 6's fixture incidents
+// place stacktrace under the same path so the same query works for both real
+// Sentry events and the scripted fixture-pump path.
 func (r *IncidentsRepo) PollFatalSince(ctx context.Context, orgID string, since time.Time) ([]domain.IncidentRow, error) {
 	if r.adminPool == nil {
 		return nil, fmt.Errorf("IncidentsRepo.PollFatalSince: %w", domain.ErrUnknown)
 	}
 	rows, err := r.adminPool.Query(ctx, `
 		SELECT id, org_id, source,
+		       COALESCE(source_event_id, '') AS source_event_id,
 		       COALESCE(level, '') AS level,
 		       COALESCE(title, '') AS title,
 		       COALESCE(service, '') AS service,
@@ -93,7 +103,8 @@ func (r *IncidentsRepo) PollFatalSince(ctx context.Context, orgID string, since 
 		       COALESCE(raw_payload->>'logs', '') AS logs,
 		       received_at
 		FROM incidents_raw
-		WHERE org_id=$1 AND source='sentry' AND level='fatal' AND received_at > $2
+		WHERE org_id=$1 AND source IN ('sentry','datadog','pagerduty')
+		      AND level='fatal' AND received_at > $2
 		ORDER BY received_at ASC
 		LIMIT 50
 	`, orgID, since)
@@ -104,8 +115,9 @@ func (r *IncidentsRepo) PollFatalSince(ctx context.Context, orgID string, since 
 	out := []domain.IncidentRow{}
 	for rows.Next() {
 		var x domain.IncidentRow
-		if err := rows.Scan(&x.ID, &x.OrgID, &x.Source, &x.Level, &x.Title,
-			&x.Service, &x.Environment, &x.Stacktrace, &x.Logs, &x.ReceivedAt); err != nil {
+		if err := rows.Scan(&x.ID, &x.OrgID, &x.Source, &x.SourceEventID,
+			&x.Level, &x.Title, &x.Service, &x.Environment,
+			&x.Stacktrace, &x.Logs, &x.ReceivedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, x)

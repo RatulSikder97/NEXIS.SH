@@ -19,10 +19,18 @@ type WorkspacesReader interface {
 }
 
 // IntegrationsReader is the narrow port the detector depends on to enumerate
-// the orgs it must poll each tick. Implemented by *repo.IntegrationsRepo via
-// ConnectedSentryOrgs.
+// the orgs it must poll each tick. After Task 8 (multi-source) the detector
+// reads ConnectedIncidentOrgs so it sees Datadog + PagerDuty tenants too.
+// ConnectedSentryOrgs stays on the port for backward compatibility with
+// fakes / call sites that have not migrated yet; new wiring should target
+// ConnectedIncidentOrgs.
+//
+// *repo.IntegrationsRepo satisfies both. The test fakes in detector_test.go
+// implement both methods; production wiring in main.go uses the same repo
+// instance.
 type IntegrationsReader interface {
 	ConnectedSentryOrgs(ctx context.Context) ([]string, error)
+	ConnectedIncidentOrgs(ctx context.Context) ([]string, error)
 }
 
 // Detector is the always-on goroutine that polls incidents_raw + triggers a
@@ -44,6 +52,11 @@ type Detector struct {
 	mu            sync.Mutex
 	lastSeen      map[string]time.Time
 	lastTriggered map[string]time.Time
+
+	// dedupeLedger backs the multi-source dedupe layer (sentinel/multisource.go).
+	// Keyed by (org_id, source_event_id) → last-seen time. Same mutex as
+	// lastSeen/lastTriggered; lazily initialised on first use.
+	dedupeLedger map[dedupeKey]time.Time
 }
 
 // Config bundles every Detector dependency. The runtime constructor lives in
@@ -115,7 +128,7 @@ func (d *Detector) warm(ctx context.Context) error {
 	if d.integrations == nil || d.incidents == nil {
 		return errors.New("sentinel.warm: nil deps")
 	}
-	orgs, err := d.integrations.ConnectedSentryOrgs(ctx)
+	orgs, err := d.integrations.ConnectedIncidentOrgs(ctx)
 	if err != nil {
 		return err
 	}
@@ -132,10 +145,15 @@ func (d *Detector) warm(ctx context.Context) error {
 	return nil
 }
 
-// tick performs one detection sweep across every Sentry-connected org. Errors
-// per org are logged + skipped — they never abort the sweep.
+// tick performs one detection sweep across every connected incident-source
+// org. Errors per org are logged + skipped — they never abort the sweep.
+//
+// After Task 8 the source set widens to (sentry, datadog, pagerduty); the
+// triggers slice produced by Apply is run through dedupeTriggers so a single
+// underlying incident observed by multiple sources (or duplicated by the same
+// source mid-window) only spawns one workflow run.
 func (d *Detector) tick(ctx context.Context, now time.Time) {
-	orgs, err := d.integrations.ConnectedSentryOrgs(ctx)
+	orgs, err := d.integrations.ConnectedIncidentOrgs(ctx)
 	if err != nil {
 		d.logger.Warn("sentinel.detector.tick.orgs", "err", err)
 		return
@@ -168,8 +186,13 @@ func (d *Detector) tick(ctx context.Context, now time.Time) {
 		}
 
 		triggers := Apply(orgID, wsID, last, lastTrig, fatals, recentCount, now)
+		triggers = d.dedupeTriggers(orgID, triggers, now)
 		for _, t := range triggers {
 			d.fire(ctx, t)
+			// Stamp the dedupe ledger AFTER fire so a concurrent failure
+			// doesn't accidentally suppress the next legitimate try; the fire
+			// itself is best-effort and idempotent at the workflow layer.
+			d.recordDedupe(orgID, t, now)
 		}
 		if len(fatals) > 0 {
 			d.mu.Lock()
