@@ -270,6 +270,9 @@ func PipelineDemo(svc domain.WorkflowService, aud domain.AuditWriter, _ config.C
 		if inc := loadFixtureIncident(req.Scenario); inc != nil {
 			demoPayload["incident"] = inc
 		}
+		if req.ProjectID != "" {
+			demoPayload["project_id"] = req.ProjectID
+		}
 		inputBytes, _ := json.Marshal(demoPayload)
 		run, err := svc.Start(r.Context(), princ, wsID, "RecoveryPipeline", inputBytes)
 		if err != nil {
