@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -148,11 +149,34 @@ func main() {
 		intRepo = repo.NewIntegrationsRepoWithAdmin(appPool, adminPool)
 		incRepo = repo.NewIncidentsRepoWithAdmin(appPool, adminPool)
 		registry = integration.NewRegistry(integration.Deps{
-			Repo:                intRepo,
-			KV:                  kv,
-			IncidentSink:        incRepo,
-			GitHubDefaultSecret: []byte(cfg.GitHubDefaultWebhookSecret),
+			Repo:                 intRepo,
+			KV:                   kv,
+			IncidentSink:         incRepo,
+			GitHubDefaultSecret:  []byte(cfg.GitHubDefaultWebhookSecret),
+			PagerDutyFromEmail:   cfg.PagerDutyFromEmail,
+			DatadogSigningSecret: cfg.DatadogWebhookSigningSecret,
 		})
+
+		// Wire real-API clients onto the adapters when credentials are
+		// present. Each adapter degrades to stub mode if its config is empty.
+		stopSentryCron := registry.EnableRealAPIs(ctx, integration.RealConfig{
+			AppBaseURL:               cfg.AppBaseURL,
+			GitHubAppID:              cfg.GitHubAppID,
+			GitHubAppPrivateKeyPEM:   cfg.GitHubAppPrivateKeyPEM,
+			GitHubAppSlug:            cfg.GitHubAppSlug,
+			GitHubWebhookSecret:      cfg.GitHubWebhookSecret,
+			SentryBaseURL:            cfg.SentryBaseURL,
+			SentryListConnectedOrgs:  intRepo.ConnectedSentryOrgs,
+			SlackClientID:            cfg.SlackClientID,
+			SlackClientSecret:        cfg.SlackClientSecret,
+			SlackAppRedirectURI:      cfg.SlackAppRedirectURI,
+			PagerDutyWebhookSecrets:  cfg.PagerDutyWebhookSecrets,
+			IncidentSink:             incRepo,
+		})
+		if stopSentryCron != nil {
+			defer stopSentryCron()
+		}
+		_ = strings.TrimRight // keep import in case of future use
 	} else {
 		logger.Warn("integration registry disabled — DATABASE_URL_APP missing")
 	}

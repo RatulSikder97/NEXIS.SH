@@ -3,6 +3,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strconv"
@@ -46,6 +47,19 @@ type Config struct {
 	// Phase 3
 	MasterKey                  string // 32-byte base64 for LocalKeyVault
 	GitHubDefaultWebhookSecret string
+
+	// Sentry integration — REST base URL. Defaults to https://sentry.io; set
+	// to a self-hosted Sentry's base when applicable. Consumed by
+	// internal/adapter/integration/sentry to build the typed REST client.
+	SentryBaseURL string
+
+	// DatadogWebhookSigningSecret is the optional process-wide HMAC-SHA256
+	// secret used by the Datadog adapter to verify the X-Datadog-Signature
+	// header on inbound webhooks. When empty the adapter falls back to a
+	// per-tenant secret stored alongside the API + APP keys (and accepts
+	// unsigned payloads when no per-tenant secret is configured either).
+	// Sourced from DATADOG_WEBHOOK_SIGNING_SECRET.
+	DatadogWebhookSigningSecret []byte
 
 	// Phase 3.5
 	BillingProvider        string  // "local" | "stripe"
@@ -101,12 +115,46 @@ type Config struct {
 	GitOpsToken                  string
 	GitHubAppID                  int64
 	GitHubAppPrivateKeyPath      string
+	// GitHubAppPrivateKeyPEM is the raw PEM bytes of the GitHub App private
+	// key. Sourced from GITHUB_APP_PRIVATE_KEY_PEM (base64-encoded so the env
+	// var stays on one line) at boot, falling back to reading the file at
+	// GitHubAppPrivateKeyPath when the env var is empty. Empty when neither
+	// is configured — the github adapter operates in stub mode in that case.
+	GitHubAppPrivateKeyPEM       []byte
+	// GitHubAppSlug is the slug from the GitHub App settings page (e.g.
+	// "nexis-recovery"). Used to build the install-redirect URL surfaced via
+	// Status.Metadata.app_slug so the UI can deep-link to the App settings.
+	GitHubAppSlug                string
+	// GitHubWebhookSecret is the per-App webhook secret configured in the
+	// GitHub App UI. Distinct from GitHubDefaultWebhookSecret, which is the
+	// dev-only fallback used before any tenant has connected — once the App
+	// is wired this becomes the canonical secret for HMAC verification.
+	GitHubWebhookSecret          []byte
 	FixtureRepoOwner             string
 	FixtureRepoName              string
 	FixtureRepoDefaultBranch     string
 	FixtureRepoInstallationID    int64
 	SlackEnabled                 bool
 	ApprovalMediumTimeoutSeconds int
+
+	// Slack OAuth v2 install + interactivity (Task 5 of real-integrations).
+	//
+	//   SlackClientID / SlackClientSecret — workspace-app credentials from
+	//     the Slack app console. Used by oauth.v2.access to exchange the
+	//     install code for a bot token.
+	//
+	//   SlackSigningSecret — workspace-app Signing Secret (distinct from the
+	//     OAuth client secret). Used to verify the X-Slack-Signature header
+	//     on POST /v1/integrations/slack/interactivity. Kept as []byte so the
+	//     hmac.New call doesn't have to convert on every request.
+	//
+	//   SlackAppRedirectURI — the OAuth callback URL registered with Slack.
+	//     Defaults to {APP_BASE_URL}/v1/integrations/slack/callback at Load
+	//     time when the env var is unset, so dev wiring "just works".
+	SlackClientID       string
+	SlackClientSecret   []byte
+	SlackSigningSecret  []byte
+	SlackAppRedirectURI string
 
 	// Phase 7 — cloud cutover selectors. Defaults are dev-safe; the
 	// FatalIfLocalInCloud assertion fires at boot when AppEnv in
@@ -181,10 +229,20 @@ type Config struct {
 	SentryProbeSecret            string
 	TemporalHealthzWindowSeconds int
 	TemporalHeartbeatIntervalMs  int
+
+	// PagerDuty integration. PagerDutyFromEmail is addressed in the
+	// `From:` header on every POST /incidents (PagerDuty rejects the call
+	// without it — the header names a real user creating the incident on
+	// behalf of the bot). PagerDutyWebhookSecrets is the rotation set used
+	// to verify X-PagerDuty-Signature on every inbound webhook —
+	// comma-separated in env so operators can roll the secret without
+	// dropping in-flight deliveries (we accept ANY match).
+	PagerDutyFromEmail      string
+	PagerDutyWebhookSecrets [][]byte
 }
 
 func Load() Config {
-	return Config{
+	c := Config{
 		Port:   env("PORT", "8080"),
 		AppEnv: env("APP_ENV", "dev"),
 
@@ -213,6 +271,10 @@ func Load() Config {
 
 		MasterKey:                  env("MASTER_KEY", ""),
 		GitHubDefaultWebhookSecret: env("GITHUB_WEBHOOK_SECRET", "dev-github-webhook-secret-32-byte"),
+
+		SentryBaseURL: env("SENTRY_BASE_URL", "https://sentry.io"),
+
+		DatadogWebhookSigningSecret: []byte(env("DATADOG_WEBHOOK_SIGNING_SECRET", "")),
 
 		BillingProvider:        env("BILLING_PROVIDER", "local"),
 		UsageTickSeconds:       envInt("USAGE_TICK_SECONDS", 60),
@@ -265,6 +327,9 @@ func Load() Config {
 		GitOpsToken:                  env("GITOPS_TOKEN", "dev-gitops-token-32byte"),
 		GitHubAppID:                  int64(envInt("GITHUB_APP_ID", 12345)),
 		GitHubAppPrivateKeyPath:      env("GITHUB_APP_PRIVATE_KEY_PATH", "/run/secrets/github-app.pem"),
+		GitHubAppPrivateKeyPEM:       loadGitHubAppPEM(env("GITHUB_APP_PRIVATE_KEY_PEM", ""), env("GITHUB_APP_PRIVATE_KEY_PATH", "")),
+		GitHubAppSlug:                env("GITHUB_APP_SLUG", ""),
+		GitHubWebhookSecret:          []byte(env("GITHUB_WEBHOOK_SECRET", "")),
 		FixtureRepoOwner:             env("FIXTURE_REPO_OWNER", "nexis-eco"),
 		FixtureRepoName:              env("FIXTURE_REPO_NAME", "fixture-recovery-demo"),
 		FixtureRepoDefaultBranch:     env("FIXTURE_REPO_DEFAULT_BRANCH", "main"),
@@ -318,7 +383,28 @@ func Load() Config {
 		SentryProbeSecret:            env("SENTRY_PROBE_SECRET", ""),
 		TemporalHealthzWindowSeconds: envInt("TEMPORAL_HEALTHZ_WINDOW_SECONDS", 60),
 		TemporalHeartbeatIntervalMs:  envInt("TEMPORAL_HEARTBEAT_INTERVAL_MS", 15000),
+
+		// PagerDuty.
+		PagerDutyFromEmail:      env("PAGERDUTY_FROM_EMAIL", "nexis-bot@nexis.dev"),
+		PagerDutyWebhookSecrets: parseSecretList(env("PAGERDUTY_WEBHOOK_SECRETS", "")),
+
+		// Slack OAuth v2 + interactivity (Task 5 of real-integrations).
+		// SlackAppRedirectURI defaults to {AppBaseURL}/v1/integrations/slack/callback
+		// after the struct is built; see the post-process below so the default
+		// can reference AppBaseURL.
+		SlackClientID:       env("SLACK_CLIENT_ID", ""),
+		SlackClientSecret:   []byte(env("SLACK_CLIENT_SECRET", "")),
+		SlackSigningSecret:  []byte(env("SLACK_SIGNING_SECRET", "")),
+		SlackAppRedirectURI: env("SLACK_APP_REDIRECT_URI", ""),
 	}
+	// SlackAppRedirectURI default depends on AppBaseURL, so fill it in after
+	// the struct literal has captured both. Keeping the default behaviour
+	// explicit avoids surprising operators who set APP_BASE_URL alone and
+	// expect the Slack callback to track it.
+	if c.SlackAppRedirectURI == "" && c.AppBaseURL != "" {
+		c.SlackAppRedirectURI = c.AppBaseURL + "/v1/integrations/slack/callback"
+	}
+	return c
 }
 
 // FatalIfLocalInCloud returns an error when AppEnv is staging or prod but
@@ -372,6 +458,31 @@ func parseBool(s string) bool {
 	}
 }
 
+// parseSecretList splits a comma-separated env value into a rotation set of
+// secret byte slices. Empty entries (a trailing comma, double comma,
+// whitespace-only) are dropped so operators can format the env value
+// however they like. Returns nil for an empty/blank input so callers can
+// distinguish "unset" from "set to []".
+func parseSecretList(raw string) [][]byte {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([][]byte, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		out = append(out, []byte(p))
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // envInt reads an int env var, returning def when the var is unset or unparseable.
 func envInt(k string, def int) int {
 	v, ok := os.LookupEnv(k)
@@ -383,6 +494,42 @@ func envInt(k string, def int) int {
 		return def
 	}
 	return n
+}
+
+// loadGitHubAppPEM resolves the GitHub App private key bytes from one of two
+// sources, with env-var-first precedence:
+//
+//  1. GITHUB_APP_PRIVATE_KEY_PEM — base64-encoded PEM. Convenient for
+//     12-factor deployments where the secret comes from a vault and lands in
+//     env. We base64-decode so newlines do not have to be escaped.
+//  2. GITHUB_APP_PRIVATE_KEY_PATH — file path. Convenient for Docker secrets
+//     and the dev compose file (/run/secrets/github-app.pem).
+//
+// Both unset → returns nil; the github adapter operates in stub mode then.
+// Decode failures fall through to the file path; file errors return nil so a
+// missing key does not crash boot — the adapter logs at init when it sees
+// nil PEM bytes.
+func loadGitHubAppPEM(b64, path string) []byte {
+	if b64 != "" {
+		// Try standard base64 first, then URL-encoded — operators copy-paste
+		// from various sources and we want both shapes to "just work".
+		if decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64)); err == nil && len(decoded) > 0 {
+			return decoded
+		}
+		if decoded, err := base64.URLEncoding.DecodeString(strings.TrimSpace(b64)); err == nil && len(decoded) > 0 {
+			return decoded
+		}
+		// Last resort: treat the env value as raw PEM (some operators paste
+		// the PEM with \n already in it — this preserves that path).
+		return []byte(b64)
+	}
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err == nil && len(data) > 0 {
+			return data
+		}
+	}
+	return nil
 }
 
 // envFloat reads a float env var, returning def when the var is unset or unparseable.

@@ -24,6 +24,10 @@ export type IntegrationCardProps = {
   status?: Integration["status"];
   comingSoon?: boolean;
   onConfigure?: () => void;
+  // Wave 1 — when supplied, replaces the legacy status badge entirely (e.g.
+  // with a <HealthPill/>). When omitted the original StatusBadge is rendered
+  // so legacy callers keep working unchanged.
+  statusSlot?: React.ReactNode;
 };
 
 const STATUS_STYLES: Record<NonNullable<Integration["status"]>, string> = {
@@ -70,6 +74,7 @@ export function IntegrationCard({
   status,
   comingSoon,
   onConfigure,
+  statusSlot,
 }: IntegrationCardProps) {
   const connected = status === "connected";
   return (
@@ -79,7 +84,7 @@ export function IntegrationCard({
           <h3 className="text-base font-semibold text-[var(--color-foreground)]">
             {name}
           </h3>
-          <StatusBadge status={status} comingSoon={comingSoon} />
+          {statusSlot ?? <StatusBadge status={status} comingSoon={comingSoon} />}
         </div>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           {description}

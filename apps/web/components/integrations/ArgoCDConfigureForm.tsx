@@ -35,7 +35,7 @@ export function ArgoCDConfigureForm({
     setPending(true);
     setError(null);
     try {
-      await integrations.connect("argocd", {
+      await integrations.connectRaw("argocd", {
         server_url: serverUrl,
         token,
       });

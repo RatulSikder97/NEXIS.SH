@@ -104,7 +104,7 @@ export function SentryConfigureForm({
     setPending(true);
     setError(null);
     try {
-      await integrations.connect("sentry", { dsn, webhook_secret: secret });
+      await integrations.connectRaw("sentry", { dsn, webhook_secret: secret });
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connect failed");

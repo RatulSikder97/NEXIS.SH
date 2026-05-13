@@ -11,12 +11,12 @@ import (
 type IntegrationProvider string
 
 const (
-	IntegrationGitHub IntegrationProvider = "github"
-	IntegrationSentry IntegrationProvider = "sentry"
-	IntegrationArgoCD IntegrationProvider = "argocd"
-	// Phase 6 — Slack joins the integrations trio. Migration 0016
-	// widens the CHECK constraint to include this value.
-	IntegrationSlack IntegrationProvider = "slack"
+	IntegrationGitHub    IntegrationProvider = "github"
+	IntegrationSentry    IntegrationProvider = "sentry"
+	IntegrationArgoCD    IntegrationProvider = "argocd"
+	IntegrationSlack     IntegrationProvider = "slack"
+	IntegrationDatadog   IntegrationProvider = "datadog"
+	IntegrationPagerDuty IntegrationProvider = "pagerduty"
 )
 
 // IntegrationStatus mirrors the CHECK constraint on integrations.status.

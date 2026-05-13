@@ -71,9 +71,15 @@ func IntegrationsConnect(reg *integration.Registry, aud domain.AuditWriter) http
 		}
 		var cfg dto.ConnectReq
 		if r.ContentLength > 0 {
-			if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			var raw map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 				httpJSON(w, http.StatusBadRequest, map[string]string{"error": "bad json"})
 				return
+			}
+			if inner, ok := raw["config"].(map[string]any); ok {
+				cfg = dto.ConnectReq(inner)
+			} else {
+				cfg = dto.ConnectReq(raw)
 			}
 		}
 		if cfg == nil {

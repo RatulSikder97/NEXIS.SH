@@ -1,35 +1,46 @@
 "use client";
 
-// Phase 3 Stage 7 — Integrations surface (client).
+// Phase 3 Stage 7 + Real-integrations Wave 1 — Integrations surface (client).
 //
-// Renders the 3×2 card grid + a Radix Dialog whose contents swap on
-// `activeProvider`. After a successful connect/disconnect the child form
-// calls router.refresh() so the parent server component re-fetches the
-// integrations list with fresh status.
+// Renders the 3×2 card grid and dispatches the generic ConfigureDialog when
+// a card's Configure CTA fires. Each card now shows a live HealthPill (Task
+// 1 of the real-integrations plan) instead of the legacy status badge.
+//
+// Wave 1 layout decisions:
+//   * The Configure dialog is now manifest-driven (ConfigureDialog +
+//     INTEGRATION_MANIFESTS) — the three legacy per-provider forms
+//     (GitHubConfigureForm/SentryConfigureForm/ArgoCDConfigureForm) are no
+//     longer mounted from here, but kept on disk pending Wave 2 cleanup.
+//   * Slack flips from `comingSoon: true` to live. Datadog and PagerDuty
+//     stay disabled until their backend adapters land in Wave 2.
+//   * Health is derived per-row with a fallback when the backend hasn't
+//     started returning the new `health` block yet (Wave 1 ships FE-first).
 //
 // The `?installed=github` query (set by the mock-install 302) is detected
 // once on mount and shown as a dismissible banner. We strip the query so a
 // reload doesn't replay the notice.
 
 import * as React from "react";
-import * as Dialog from "@radix-ui/react-dialog";
 import { CheckCircle2, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { IntegrationCard } from "@/components/integrations/IntegrationCard";
-import { GitHubConfigureForm } from "@/components/integrations/GitHubConfigureForm";
-import { SentryConfigureForm } from "@/components/integrations/SentryConfigureForm";
-import { ArgoCDConfigureForm } from "@/components/integrations/ArgoCDConfigureForm";
+import { ConfigureDialog } from "@/components/integrations/ConfigureDialog";
+import { HealthPill } from "@/components/integrations/HealthPill";
+import {
+  INTEGRATION_MANIFESTS,
+  type IntegrationProvider,
+} from "@/lib/integrations-config";
+import type { Integration, IntegrationHealth } from "@/lib/integrations";
 import { cn } from "@/lib/utils";
-import type { Integration } from "@/lib/integrations";
-
-type RealProvider = "github" | "sentry" | "argocd";
 
 type CardSpec = {
-  provider: RealProvider | "datadog" | "pagerduty" | "slack";
+  provider: IntegrationProvider;
   name: string;
   description: string;
-  comingSoon?: boolean;
+  // Wave 1: Slack is now live; Datadog + PagerDuty stay disabled until their
+  // backend adapters land in Wave 2.
+  available: boolean;
 };
 
 const CARDS: CardSpec[] = [
@@ -37,62 +48,74 @@ const CARDS: CardSpec[] = [
     provider: "github",
     name: "GitHub",
     description: "PR creation + repo metadata for code changes.",
+    available: true,
   },
   {
     provider: "sentry",
     name: "Sentry",
     description: "Incident ingestion via webhook.",
+    available: true,
   },
   {
     provider: "argocd",
     name: "ArgoCD",
     description: "Deployment + rollback orchestration.",
-  },
-  {
-    provider: "datadog",
-    name: "Datadog",
-    description: "Metric-driven anomaly detection.",
-    comingSoon: true,
-  },
-  {
-    provider: "pagerduty",
-    name: "PagerDuty",
-    description: "On-call routing + paging.",
-    comingSoon: true,
+    available: true,
   },
   {
     provider: "slack",
     name: "Slack",
     description: "Notify channels + DM approvers.",
-    comingSoon: true,
+    available: true,
+  },
+  {
+    provider: "datadog",
+    name: "Datadog",
+    description: "Metric-driven anomaly detection.",
+    available: false,
+  },
+  {
+    provider: "pagerduty",
+    name: "PagerDuty",
+    description: "On-call routing + paging.",
+    available: false,
   },
 ];
 
-function titleFor(provider: RealProvider): string {
-  switch (provider) {
-    case "github":
-      return "Configure GitHub";
-    case "sentry":
-      return "Configure Sentry";
-    case "argocd":
-      return "Configure ArgoCD";
-  }
+// Derives a HealthPill-ready health DTO from whatever the backend returned.
+// The Wave 1 backend (Task 1) will start populating `health`; until then we
+// fall back to "unknown" when connected, "disconnected" otherwise — matching
+// the contract assumption in the task spec.
+function healthFromIntegration(
+  row: Integration | undefined,
+  raw: unknown,
+): IntegrationHealth {
+  const r = (raw ?? {}) as { health?: IntegrationHealth; connected?: boolean };
+  if (r.health) return r.health;
+  const connected = row?.status === "connected" || r.connected === true;
+  return { state: connected ? "unknown" : "disconnected" };
 }
 
-export function IntegrationsClient({
-  initial,
-  orgId,
-  apiUrl: _apiUrl,
-}: {
+// The page.tsx server component still passes `orgId` + `apiUrl` because the
+// legacy per-provider forms consumed them. Wave 1's manifest-driven dialog
+// doesn't need either — the orgId is implied by the session cookie on the
+// server, and the API URL is read directly from NEXT_PUBLIC_API_URL inside
+// the SDK. We keep the props on the type so page.tsx compiles unchanged but
+// don't destructure them here.
+type IntegrationsClientProps = {
   initial: Integration[];
   orgId: string;
   apiUrl: string;
-}) {
+};
+
+export function IntegrationsClient({ initial }: IntegrationsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeProvider, setActiveProvider] = React.useState<RealProvider | null>(
+
+  const [activeProvider, setActiveProvider] = React.useState<IntegrationProvider | null>(
     null,
   );
+
   // Lazy useState initialiser reads searchParams once on first render and
   // seeds the banner; subsequent renders preserve the value through normal
   // setState flow. This keeps the "show on first paint" behaviour without
@@ -114,18 +137,27 @@ export function IntegrationsClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Build a quick lookup by provider so the cards can hand the live row to
-  // the Configure form.
+  // Index rows by provider so each card can hand a live row to its HealthPill
+  // + ConfigureDialog. We index against the raw response (cast to a loose
+  // record) so the health-derivation path can read the new `health` block if
+  // the backend has started returning it, while still letting the legacy
+  // `Integration` shape compile.
   const byProvider = React.useMemo(() => {
-    const m = new Map<RealProvider, Integration>();
-    for (const i of initial) m.set(i.provider, i);
+    const m = new Map<IntegrationProvider, Integration>();
+    for (const i of initial) {
+      m.set(i.provider as IntegrationProvider, i);
+    }
     return m;
   }, [initial]);
 
-  const active = activeProvider ? byProvider.get(activeProvider) : undefined;
-
   function closeDialog() {
     setActiveProvider(null);
+  }
+
+  function onConnectSuccess() {
+    // Re-fetch the integrations list so the HealthPill reflects the new
+    // connection state on the next render.
+    router.refresh();
   }
 
   return (
@@ -162,9 +194,8 @@ export function IntegrationsClient({
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {CARDS.map((c) => {
-          const row = c.comingSoon
-            ? undefined
-            : byProvider.get(c.provider as RealProvider);
+          const row = byProvider.get(c.provider);
+          const health = healthFromIntegration(row, row);
           return (
             <IntegrationCard
               key={c.provider}
@@ -172,62 +203,33 @@ export function IntegrationsClient({
               name={c.name}
               description={c.description}
               status={row?.status}
-              comingSoon={c.comingSoon}
-              onConfigure={
-                c.comingSoon
-                  ? undefined
-                  : () => setActiveProvider(c.provider as RealProvider)
+              comingSoon={!c.available}
+              onConfigure={c.available ? () => setActiveProvider(c.provider) : undefined}
+              statusSlot={
+                c.available ? (
+                  <HealthPill
+                    state={health.state}
+                    latency_ms={health.latency_ms}
+                    last_check_at={health.last_check_at}
+                    last_error={health.last_error}
+                  />
+                ) : undefined
               }
             />
           );
         })}
       </div>
 
-      <Dialog.Root
-        open={activeProvider !== null}
-        onOpenChange={(open) => {
-          if (!open) closeDialog();
-        }}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in data-[state=closed]:animate-out data-[state=closed]:fade-out" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-xl outline-none data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out">
-            <div className="flex items-start justify-between gap-4 pb-4">
-              <div>
-                <Dialog.Title className="text-lg font-semibold">
-                  {activeProvider ? titleFor(activeProvider) : ""}
-                </Dialog.Title>
-                <Dialog.Description className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                  Credentials are stored encrypted (AES-GCM).
-                </Dialog.Description>
-              </div>
-              <Dialog.Close asChild>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </Dialog.Close>
-            </div>
-
-            {activeProvider === "github" && (
-              <GitHubConfigureForm integration={active} onClose={closeDialog} />
-            )}
-            {activeProvider === "sentry" && (
-              <SentryConfigureForm
-                integration={active}
-                orgId={orgId}
-                onClose={closeDialog}
-              />
-            )}
-            {activeProvider === "argocd" && (
-              <ArgoCDConfigureForm integration={active} onClose={closeDialog} />
-            )}
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      {activeProvider !== null && (
+        <ConfigureDialog
+          manifest={INTEGRATION_MANIFESTS[activeProvider]}
+          open={activeProvider !== null}
+          onOpenChange={(open) => {
+            if (!open) closeDialog();
+          }}
+          onSuccess={onConnectSuccess}
+        />
+      )}
     </div>
   );
 }
