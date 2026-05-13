@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { WorkspaceSwitcher } from "@/components/workspaces/WorkspaceSwitcher";
 
 type NavItem = {
   href: string;
@@ -177,8 +178,9 @@ export function Sidebar() {
         </button>
       </div>
 
+      <WorkspaceSwitcher collapsed={collapsed} />
+
       <nav className="flex-1 overflow-y-auto px-2 py-2">
-        <SectionLabel label="Workspace" collapsed={collapsed} />
         <ul className="space-y-0.5">
           {WORKSPACE.map((item) => (
             <li key={item.href}>

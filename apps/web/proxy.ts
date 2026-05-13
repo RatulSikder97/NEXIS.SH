@@ -23,7 +23,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PROTECTED = ["/console", "/dashboard", "/mfa"];
+const PROTECTED = ["/console", "/dashboard", "/mfa", "/onboarding"];
 const AUTH_ONLY = ["/sign-in", "/sign-up"];
 
 function isProtected(path: string): boolean {
@@ -86,6 +86,7 @@ export const config = {
     "/console/:path*",
     "/mfa",
     "/mfa/:path*",
+    "/onboarding/:path*",
     "/sign-in",
     "/sign-up",
   ],

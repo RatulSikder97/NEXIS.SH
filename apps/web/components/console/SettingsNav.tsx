@@ -21,7 +21,9 @@ const ITEMS: Item[] = [
   { href: "/console/settings/profile", label: "Profile" },
   { href: "/console/settings/organization", label: "Organization" },
   { href: "/console/settings/members", label: "Members & Roles" },
+  { href: "/console/settings/workspaces", label: "Workspaces" },
   { href: "/console/settings/api-keys", label: "API Keys" },
+  { href: "/console/settings/billing", label: "Billing" },
   { href: "/console/settings/preferences", label: "Preferences" },
 ];
 

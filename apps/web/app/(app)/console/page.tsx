@@ -11,7 +11,9 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { KPICard } from "@/components/console/KPICard";
+import { WorkspaceCard } from "@/components/workspaces/WorkspaceCard";
 import type { MeResp } from "@/lib/auth";
+import type { Workspace } from "@/lib/workspaces";
 
 // Container-network URL for the control-plane (API_URL_INTERNAL) takes
 // precedence over the browser-facing NEXT_PUBLIC_API_URL. In pure-localhost
@@ -64,12 +66,16 @@ export default async function ConsoleHomePage() {
 
   const cookieHeader = `nexis_session=${session.value}`;
 
-  const [meRes, auditRes] = await Promise.all([
+  const [meRes, auditRes, wsRes] = await Promise.all([
     fetch(`${API}/v1/me`, {
       headers: { cookie: cookieHeader },
       cache: "no-store",
     }),
     fetch(`${API}/v1/audit?limit=10`, {
+      headers: { cookie: cookieHeader },
+      cache: "no-store",
+    }),
+    fetch(`${API}/v1/workspaces`, {
       headers: { cookie: cookieHeader },
       cache: "no-store",
     }),
@@ -82,6 +88,17 @@ export default async function ConsoleHomePage() {
   if (auditRes.ok) {
     audit = (await auditRes.json()) as AuditResp;
   }
+
+  // Resolve "current workspace" the same way the console layout does:
+  // cookie first, then first ready, then first row. Layout already
+  // guarantees workspaces.length > 0 before this page renders, so we
+  // don't need to handle the empty case.
+  const ws: Workspace[] = wsRes.ok ? ((await wsRes.json()) as Workspace[]) : [];
+  const currentCookie = c.get("nexis_workspace");
+  const currentWs =
+    ws.find((w) => w.id === currentCookie?.value) ??
+    ws.find((w) => w.status === "ready") ??
+    ws[0];
 
   const firstName = me.user.email.split("@")[0];
   const greeting = greetingForHour(new Date().getHours());
@@ -100,6 +117,30 @@ export default async function ConsoleHomePage() {
           <span className="uppercase">{me.role}</span>
         </p>
       </div>
+
+      <section aria-labelledby="overview-heading" className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <h2 id="overview-heading" className="sr-only">
+          Tenant overview
+        </h2>
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-5">
+          <p className="text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
+            Organization
+          </p>
+          <h2 className="mt-1 truncate text-lg font-semibold text-[var(--color-foreground)]">
+            {me.org.name}
+          </h2>
+          <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+            <span className="font-mono">{me.org.slug}</span> ·{" "}
+            <span className="uppercase">{me.role}</span>
+          </p>
+          <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+            {me.user.email}
+          </p>
+        </div>
+        {currentWs && (
+          <WorkspaceCard workspace={currentWs} isOwner={me.role === "owner"} />
+        )}
+      </section>
 
       <section aria-labelledby="kpis-heading">
         <h2 id="kpis-heading" className="sr-only">

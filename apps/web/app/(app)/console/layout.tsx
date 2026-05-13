@@ -11,6 +11,12 @@
 // Topbar. The main gutter is a static `ml-60` because the Sidebar
 // persists its collapsed/expanded state client-side and we accept the
 // fixed gutter to avoid hydration flicker — same compromise as Stage 6.
+//
+// Phase 3.5 Stage 7: also serves as the onboarding gate. If the user
+// has zero workspaces, bounce them to /onboarding/workspace before any
+// console page renders. The current-workspace is resolved from the
+// `nexis_workspace` cookie (set by WorkspaceSwitcher), falling back to
+// the first ready workspace or the first row.
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -18,6 +24,7 @@ import * as React from "react";
 
 import { Sidebar } from "@/components/console/Sidebar";
 import { Topbar } from "@/components/console/Topbar";
+import type { Workspace } from "@/lib/workspaces";
 
 const API =
   process.env.API_URL_INTERNAL ??
@@ -33,18 +40,45 @@ export default async function ConsoleLayout({
   const session = c.get("nexis_session");
   if (!session) redirect("/sign-in");
 
+  const cookieHeader = `nexis_session=${session.value}`;
+
   const res = await fetch(`${API}/v1/me`, {
-    headers: { cookie: `nexis_session=${session.value}` },
+    headers: { cookie: cookieHeader },
     cache: "no-store",
   });
   if (!res.ok) redirect("/sign-in");
   const me = (await res.json()) as { user: { email: string } };
 
+  // Workspaces list drives both the onboarding gate and the Topbar badge.
+  // A non-OK response degrades to an empty list; the onboarding redirect
+  // below catches that case (which is correct — a user we can't list
+  // workspaces for almost certainly hasn't completed onboarding).
+  const wsR = await fetch(`${API}/v1/workspaces`, {
+    headers: { cookie: cookieHeader },
+    cache: "no-store",
+  });
+  const workspaces: Workspace[] = wsR.ok ? await wsR.json() : [];
+  if (workspaces.length === 0) redirect("/onboarding/workspace");
+
+  // Resolve the current workspace from the cookie. If the cookie value
+  // doesn't match any row (stale or never written), fall back to the
+  // first ready workspace, then the first row.
+  const currentCookie = c.get("nexis_workspace");
+  const current =
+    workspaces.find((w) => w.id === currentCookie?.value) ??
+    workspaces.find((w) => w.status === "ready") ??
+    workspaces[0];
+
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-foreground)]">
       <Sidebar />
       <div className="ml-60">
-        <Topbar userEmail={me.user.email} />
+        <Topbar
+          userEmail={me.user.email}
+          currentWorkspace={
+            current ? { name: current.name, region: current.region } : undefined
+          }
+        />
         <main className="mx-auto max-w-[1440px] px-6 py-6">{children}</main>
       </div>
     </div>

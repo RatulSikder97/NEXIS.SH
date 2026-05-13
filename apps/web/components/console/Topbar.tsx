@@ -16,6 +16,7 @@ import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "@/components/console/CommandPalette";
 import { UserMenu } from "@/components/console/UserMenu";
+import { WorkspaceBadge } from "@/components/workspaces/WorkspaceBadge";
 
 function humanize(segment: string): string {
   if (!segment) return "";
@@ -70,11 +71,31 @@ function openPalette() {
   window.dispatchEvent(ev);
 }
 
-export function Topbar({ userEmail }: { userEmail: string }) {
+export function Topbar({
+  userEmail,
+  currentWorkspace,
+}: {
+  userEmail: string;
+  currentWorkspace?: { name: string; region: string };
+}) {
   return (
     <>
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-background)]/95 px-6 backdrop-blur">
-        <Breadcrumb />
+        <div className="flex items-center gap-3">
+          {currentWorkspace && (
+            <>
+              <WorkspaceBadge
+                name={currentWorkspace.name}
+                region={currentWorkspace.region}
+              />
+              <span
+                aria-hidden
+                className="h-5 w-px bg-[var(--color-border)]"
+              />
+            </>
+          )}
+          <Breadcrumb />
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
