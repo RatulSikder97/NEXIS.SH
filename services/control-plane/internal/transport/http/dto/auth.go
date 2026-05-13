@@ -26,10 +26,15 @@ type MagicReq struct {
 // AuthResp is the success body returned on Signup / Login / magic-link
 // consumption. The session cookie is also set; the body lets API consumers
 // extract user/org ids without re-decoding the JWT.
+//
+// Phase 3.5 adds HasWorkspace so the web onboarding gate can decide whether
+// to redirect to /onboarding/workspace immediately on signup without a
+// second round-trip.
 type AuthResp struct {
-	UserID    string `json:"user_id"`
-	OrgID     string `json:"org_id"`
-	ExpiresAt string `json:"expires_at"`
+	UserID       string `json:"user_id"`
+	OrgID        string `json:"org_id"`
+	ExpiresAt    string `json:"expires_at"`
+	HasWorkspace bool   `json:"has_workspace"`
 }
 
 // ErrorResp is the canonical error envelope returned for non-2xx responses.
@@ -101,8 +106,11 @@ type MeOrg struct {
 }
 
 // MeResp is the body returned by GET /v1/me — the resolved actor identity.
+// HasWorkspace lets the dashboard decide whether to bounce the caller to the
+// onboarding wizard before rendering any console pages.
 type MeResp struct {
-	User MeUser `json:"user"`
-	Org  MeOrg  `json:"org"`
-	Role string `json:"role"`
+	User         MeUser `json:"user"`
+	Org          MeOrg  `json:"org"`
+	Role         string `json:"role"`
+	HasWorkspace bool   `json:"has_workspace"`
 }

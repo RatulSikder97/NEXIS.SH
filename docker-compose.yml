@@ -211,6 +211,9 @@ services:
       DATABASE_URL_APP: postgres://nexis_app:nexis_app_dev_password@postgres:5432/nexis?sslmode=disable
       MASTER_KEY: ${MASTER_KEY:-dGVzdC1tYXN0ZXIta2V5LTMyLWJ5dGVzLWxvbmctYWFh}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-dev-github-webhook-secret-32-byte}
+      BILLING_PROVIDER: ${BILLING_PROVIDER:-local}
+      USAGE_TICK_SECONDS: ${USAGE_TICK_SECONDS:-60}
+      WORKSPACE_PROVISION_FAIL: ${WORKSPACE_PROVISION_FAIL:-0.0}
       OTEL_SERVICE_NAME: nexis-control-plane
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:

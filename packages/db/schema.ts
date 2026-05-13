@@ -10,6 +10,9 @@ import {
   boolean,
   primaryKey,
   customType,
+  bigint,
+  integer,
+  numeric,
 } from "drizzle-orm/pg-core";
 
 const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
@@ -55,10 +58,11 @@ export const waitlist = pgTable("waitlist", {
 });
 
 export const orgMembers = pgTable("org_members", {
-  orgId:     uuid("org_id").notNull().references(() => organizations.id),
-  userId:    uuid("user_id").notNull().references(() => users.id),
-  role:      text("role", { enum: ["owner", "admin", "member"] }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  orgId:            uuid("org_id").notNull().references(() => organizations.id),
+  userId:           uuid("user_id").notNull().references(() => users.id),
+  role:             text("role", { enum: ["owner", "admin", "member"] }).notNull(),
+  lastWorkspaceId:  uuid("last_workspace_id"),
+  createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => ({
   pk: primaryKey({ columns: [t.orgId, t.userId] }),
 }));
@@ -136,4 +140,62 @@ export const orgInvites = pgTable("org_invites", {
   claimedAt:     timestamp("claimed_at", { withTimezone: true }),
 }, t => ({
   orgEmailIdx: index("org_invites_org_email_idx").on(t.orgId, t.email),
+}));
+
+export const workspaces = pgTable("workspaces", {
+  id:                uuid("id").primaryKey().defaultRandom(),
+  orgId:             uuid("org_id").notNull().references(() => organizations.id),
+  name:              text("name").notNull(),
+  slug:              text("slug").notNull(),
+  region:            text("region").notNull(),
+  status:            text("status", { enum: ["provisioning", "ready", "error", "suspended"] }).notNull(),
+  statusMessage:     text("status_message"),
+  provisioningStep:  text("provisioning_step"),
+  createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  readyAt:           timestamp("ready_at", { withTimezone: true }),
+  updatedAt:         timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  uniqOrgSlug: uniqueIndex("workspaces_org_slug_uniq").on(t.orgId, t.slug),
+}));
+
+export const paymentMethods = pgTable("payment_methods", {
+  id:                       uuid("id").primaryKey().defaultRandom(),
+  orgId:                    uuid("org_id").notNull().references(() => organizations.id),
+  provider:                 text("provider").notNull(),
+  externalCustomerId:       text("external_customer_id"),
+  externalPaymentMethodId:  text("external_payment_method_id"),
+  brand:                    text("brand"),
+  last4:                    text("last4"),
+  expMonth:                 integer("exp_month"),
+  expYear:                  integer("exp_year"),
+  billingEmail:             text("billing_email"),
+  createdAt:                timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  uniqOrg: uniqueIndex("payment_methods_org_uniq").on(t.orgId),
+}));
+
+export const invoices = pgTable("invoices", {
+  id:           uuid("id").primaryKey().defaultRandom(),
+  orgId:        uuid("org_id").notNull().references(() => organizations.id),
+  periodStart:  timestamp("period_start", { withTimezone: true }).notNull(),
+  periodEnd:    timestamp("period_end", { withTimezone: true }).notNull(),
+  totalCents:   bigint("total_cents", { mode: "number" }).notNull().default(0),
+  status:       text("status", { enum: ["open", "paid", "void"] }).notNull(),
+  createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  uniqOrgPeriod: uniqueIndex("invoices_org_period_uniq").on(t.orgId, t.periodStart),
+}));
+
+export const usageRecords = pgTable("usage_records", {
+  id:              uuid("id").primaryKey().defaultRandom(),
+  orgId:           uuid("org_id").notNull().references(() => organizations.id),
+  workspaceId:     uuid("workspace_id").notNull().references(() => workspaces.id),
+  project:         text("project").notNull().default("default"),
+  kind:            text("kind").notNull(),
+  quantity:        numeric("quantity", { precision: 20, scale: 6 }).notNull(),
+  unitPriceCents:  numeric("unit_price_cents", { precision: 20, scale: 6 }).notNull(),
+  amountCents:     numeric("amount_cents", { precision: 20, scale: 6 }).notNull(),
+  recordedAt:      timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  orgRecordedIdx: index("usage_records_org_recorded_idx").on(t.orgId, t.recordedAt),
 }));

@@ -19,6 +19,7 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/llm"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/handler"
@@ -63,12 +64,16 @@ func (noopAudit) Write(_ context.Context, _ domain.Principal, _, _ string, _ map
 // interface (List). We keep two fields for cleanliness so the write-path
 // stays bound to the narrower domain.AuditWriter interface.
 type Deps struct {
-	Pool         *pgxpool.Pool
-	AppPool      *pgxpool.Pool
-	Auth         domain.AuthProvider
-	Audit        domain.AuditWriter
-	AuditLister  audit.Lister
-	Integrations *integration.Registry
+	Pool           *pgxpool.Pool
+	AppPool        *pgxpool.Pool
+	Auth           domain.AuthProvider
+	Audit          domain.AuditWriter
+	AuditLister    audit.Lister
+	Integrations   *integration.Registry
+	Workspaces     domain.WorkspaceService
+	WorkspacesRepo *repo.WorkspacesRepo
+	Billing        domain.BillingProvider
+	BillingRepo    *repo.BillingRepo
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
@@ -112,9 +117,16 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			aud = noopAudit{}
 		}
 
-		// Public auth routes.
-		r.Post("/v1/auth/signup", handler.Signup(deps.Auth, aud, cfg))
-		r.Post("/v1/auth/login", handler.Login(deps.Auth, aud, cfg))
+		// Public auth routes. WorkspacesRepo is wrapped as a WorkspaceChecker
+		// so the response can include HasWorkspace for the onboarding gate.
+		// nil is fine — the helper treats a missing checker as "no workspace
+		// yet" so existing tests + the dev-no-pool path keep working.
+		var wsChecker handler.WorkspaceChecker
+		if deps.WorkspacesRepo != nil {
+			wsChecker = deps.WorkspacesRepo
+		}
+		r.Post("/v1/auth/signup", handler.Signup(deps.Auth, aud, cfg, wsChecker))
+		r.Post("/v1/auth/login", handler.Login(deps.Auth, aud, cfg, wsChecker))
 		r.Post("/v1/auth/magic", handler.Magic(deps.Auth))
 		r.Get("/v1/auth/verify", handler.Verify(deps.Auth, aud, cfg))
 
@@ -145,7 +157,7 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			g.Delete("/v1/auth/mfa", handler.MFADisable(deps.Auth, aud))
 			g.Get("/v1/apikeys", handler.APIKeyList(deps.Auth))
 			g.Delete("/v1/apikeys/{id}", handler.APIKeyRevoke(deps.Auth, aud))
-			g.Get("/v1/me", handler.Me(deps.Auth))
+			g.Get("/v1/me", handler.Me(deps.Auth, wsChecker))
 			g.Get("/v1/me/preferences", handler.GetPreferences(deps.Auth))
 			g.Patch("/v1/me/preferences", handler.PatchPreferences(deps.Auth, aud))
 
@@ -157,6 +169,14 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 
 			if deps.Integrations != nil {
 				g.Get("/v1/integrations", handler.IntegrationsList(deps.Integrations))
+			}
+
+			// Workspace read paths — open to any authenticated principal.
+			if deps.Workspaces != nil {
+				g.Get("/v1/workspaces/regions", handler.WorkspaceRegions())
+				g.Get("/v1/workspaces", handler.WorkspacesList(deps.Workspaces))
+				g.Get("/v1/workspaces/{id}", handler.WorkspaceGet(deps.Workspaces))
+				g.Get("/v1/workspaces/{id}/events", handler.WorkspaceEvents(deps.Workspaces))
 			}
 
 			// Owner OR admin — Stage 5 RBAC. Owners and admins can manage
@@ -175,6 +195,23 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 					g2.Get("/v1/integrations/github/mock_install", handler.GitHubMockInstall(deps.Integrations, aud, cfg.AppBaseURL, cfg.AppEnv))
 				}
 				g2.Get("/v1/orgs/{id}/invites", handler.InviteList(deps.Auth))
+
+				// Workspaces — create is owner|admin per Phase 3.5 RBAC.
+				if deps.Workspaces != nil {
+					g2.Post("/v1/workspaces", handler.WorkspaceCreate(deps.Workspaces, aud))
+				}
+
+				// Billing read paths + dev recompute are owner|admin.
+				if deps.Billing != nil {
+					g2.Get("/v1/billing/payment-method", handler.BillingGetPaymentMethod(deps.Billing))
+				}
+				if deps.BillingRepo != nil {
+					g2.Get("/v1/billing/invoices", handler.BillingInvoices(deps.BillingRepo))
+					g2.Get("/v1/billing/usage", handler.BillingUsage(deps.BillingRepo))
+					if cfg.AppEnv == "dev" {
+						g2.Post("/v1/billing/invoices/recompute", handler.BillingRecompute(deps.BillingRepo))
+					}
+				}
 			})
 
 			// Owner only — issuing + revoking invites is reserved for the
@@ -183,6 +220,14 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				g2.Use(appmw.RequireRole(domain.RoleOwner))
 				g2.Post("/v1/orgs/{id}/invites", handler.InviteIssue(deps.Auth, aud))
 				g2.Delete("/v1/orgs/{id}/invites/{token_hash}", handler.InviteRevoke(deps.Auth, aud))
+
+				if deps.Workspaces != nil {
+					g2.Delete("/v1/workspaces/{id}", handler.WorkspaceSuspend(deps.Workspaces, aud))
+				}
+				if deps.Billing != nil {
+					g2.Post("/v1/billing/payment-method", handler.BillingAddPaymentMethod(deps.Billing, aud))
+					g2.Delete("/v1/billing/payment-method", handler.BillingDeletePaymentMethod(deps.Billing, aud))
+				}
 			})
 		})
 	}

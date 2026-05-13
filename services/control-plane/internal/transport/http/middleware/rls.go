@@ -108,6 +108,11 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 	return r.ResponseWriter.Write(b)
 }
 
+// Unwrap returns the underlying ResponseWriter so http.NewResponseController
+// can reach through to the otelhttp / net/http Flusher. SSE streaming relies
+// on this — without it the response controller returns ErrNotSupported.
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
 // writeJSONError keeps the RLS middleware's error responses shape-compatible
 // with the rest of the surface ("error": "..." JSON object).
 func writeJSONError(w http.ResponseWriter, code int, msg string) {

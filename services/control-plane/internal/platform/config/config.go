@@ -4,6 +4,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -44,6 +45,11 @@ type Config struct {
 	// Phase 3
 	MasterKey                  string // 32-byte base64 for LocalKeyVault
 	GitHubDefaultWebhookSecret string
+
+	// Phase 3.5
+	BillingProvider        string  // "local" | "stripe"
+	UsageTickSeconds       int     // default 60
+	WorkspaceProvisionFail float64 // default 0.0 — fraction of provisioning runs that should fail synthetically
 }
 
 func Load() Config {
@@ -76,6 +82,10 @@ func Load() Config {
 
 		MasterKey:                  env("MASTER_KEY", ""),
 		GitHubDefaultWebhookSecret: env("GITHUB_WEBHOOK_SECRET", "dev-github-webhook-secret-32-byte"),
+
+		BillingProvider:        env("BILLING_PROVIDER", "local"),
+		UsageTickSeconds:       envInt("USAGE_TICK_SECONDS", 60),
+		WorkspaceProvisionFail: envFloat("WORKSPACE_PROVISION_FAIL", 0.0),
 	}
 }
 
@@ -94,4 +104,30 @@ func parseBool(s string) bool {
 	default:
 		return false
 	}
+}
+
+// envInt reads an int env var, returning def when the var is unset or unparseable.
+func envInt(k string, def int) int {
+	v, ok := os.LookupEnv(k)
+	if !ok {
+		return def
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil {
+		return def
+	}
+	return n
+}
+
+// envFloat reads a float env var, returning def when the var is unset or unparseable.
+func envFloat(k string, def float64) float64 {
+	v, ok := os.LookupEnv(k)
+	if !ok {
+		return def
+	}
+	f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+	if err != nil {
+		return def
+	}
+	return f
 }

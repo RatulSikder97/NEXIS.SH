@@ -22,6 +22,13 @@
       "when": 1778568190097,
       "tag": "0002_phase3_console",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778642730548,
+      "tag": "0003_phase3_5_workspaces",
+      "breakpoints": true
     }
   ]
 }

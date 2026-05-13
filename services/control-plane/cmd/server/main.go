@@ -16,14 +16,19 @@ import (
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/billing"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/keyvault"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/workspace"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/cron"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
 	otelplatform "github.com/nexis-eco/nexis/services/control-plane/internal/platform/otel"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/sse"
 	httpserver "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
 )
 
 func main() {
@@ -130,13 +135,55 @@ func main() {
 		logger.Warn("integration registry disabled — DATABASE_URL_APP missing")
 	}
 
+	// Phase 3.5 — workspaces + billing.
+	//
+	// Workspaces: the repo is pinned to the application pool so RLS-scoped
+	// reads inside the per-request tx see app.current_org_id. The service
+	// owns an in-process SSE broker; HTTP handlers subscribe to it.
+	//
+	// Billing: same shape — repo on the app pool, provider built from cfg.
+	// Cron jobs (usage_ticker, invoice_roller) share the same repo; they call
+	// *Admin methods that bypass RLS since there's no principal in ctx at
+	// cron time.
+	//
+	// Both adapters are constructed only when the application pool is wired —
+	// otherwise the dev (LLM-only) path keeps booting without them.
+	var wsRepo *repo.WorkspacesRepo
+	var billingRepo *repo.BillingRepo
+	var wsService domain.WorkspaceService
+	var billingProvider domain.BillingProvider
+	if appPool != nil {
+		wsRepo = repo.NewWorkspacesRepo(appPool, adminPool)
+		billingRepo = repo.NewBillingRepo(appPool, adminPool)
+
+		wsService = workspace.New(workspace.Config{
+			Repo:     wsRepo,
+			Broker:   sse.New[domain.ProvisioningStep](),
+			FailRate: cfg.WorkspaceProvisionFail,
+		})
+
+		var err error
+		billingProvider, err = billing.NewFromConfig(cfg, billingRepo)
+		if err != nil {
+			logger.Error("billing provider", "err", err)
+			os.Exit(1)
+		}
+		logger.Info("billing provider initialised", "name", billingProvider.Name())
+	} else {
+		logger.Warn("workspaces + billing disabled — DATABASE_URL_APP missing")
+	}
+
 	srv := httpserver.New(cfg, logger, httpserver.Deps{
-		Pool:         adminPool,
-		AppPool:      appPool,
-		Auth:         authProvider,
-		Audit:        auditWriter,
-		AuditLister:  auditLister,
-		Integrations: registry,
+		Pool:           adminPool,
+		AppPool:        appPool,
+		Auth:           authProvider,
+		Audit:          auditWriter,
+		AuditLister:    auditLister,
+		Integrations:   registry,
+		Workspaces:     wsService,
+		WorkspacesRepo: wsRepo,
+		Billing:        billingProvider,
+		BillingRepo:    billingRepo,
 	})
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -155,10 +202,31 @@ func main() {
 	}()
 	logger.Info("control-plane listening", "addr", httpServer.Addr)
 
+	// Cron jobs — Phase 3.5 usage ticker + invoice roller. Run only when both
+	// repos exist. Cancelling cronCtx (on SIGTERM below) terminates the
+	// per-job goroutines cleanly.
+	cronCtx, cancelCrons := context.WithCancel(context.Background())
+	defer cancelCrons()
+	if wsRepo != nil && billingRepo != nil {
+		usageTicker := &usecase.UsageTicker{
+			Workspaces: wsRepo,
+			Billing:    billingRepo,
+			Interval:   time.Duration(cfg.UsageTickSeconds) * time.Second,
+			PriceCents: 10.0,
+		}
+		invoiceRoller := &usecase.InvoiceRoller{Billing: billingRepo}
+		cron.Start(cronCtx, logger, []cron.Job{
+			{Name: "usage_ticker", Interval: usageTicker.Interval, Run: usageTicker.Run},
+			{Name: "invoice_roller", Interval: 24 * time.Hour, Run: invoiceRoller.Run},
+		})
+		logger.Info("cron started", "usage_tick_seconds", cfg.UsageTickSeconds)
+	}
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 	logger.Info("control-plane shutting down")
+	cancelCrons()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,28 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/dto"
 	appmw "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/middleware"
 )
+
+// WorkspaceChecker is the narrow interface the auth handlers use to fill
+// AuthResp.HasWorkspace / MeResp.HasWorkspace. *repo.WorkspacesRepo satisfies
+// it via structural typing. The handler tolerates a nil checker (treats as
+// "no workspaces yet") so existing tests + the no-pool dev path keep working.
+type WorkspaceChecker interface {
+	HasAny(ctx context.Context, orgID string) (bool, error)
+}
+
+// hasWorkspace is the safe wrapper around WorkspaceChecker — nil is fine, DB
+// errors get logged but never block the auth response.
+func hasWorkspace(ctx context.Context, ws WorkspaceChecker, orgID string) bool {
+	if ws == nil || orgID == "" {
+		return false
+	}
+	ok, err := ws.HasAny(ctx, orgID)
+	if err != nil {
+		slog.Default().Error("workspace has-any", "org_id", orgID, "err", err)
+		return false
+	}
+	return ok
+}
 
 // sessionCookieName is the canonical cookie name for browser sessions. It is
 // duplicated from middleware/auth.go on purpose: handlers set; middleware
@@ -124,7 +147,7 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 // minted — the request hasn't carried one yet, so we synthesise it from the
 // signup result. Audit Write here runs OUTSIDE the RLS tx (the signup route
 // is unauthenticated), so the writer falls through to its owning pool.
-func Signup(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
+func Signup(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config, ws WorkspaceChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req dto.SignupReq
 		if !decodeBody(w, r, &req) {
@@ -149,9 +172,10 @@ func Signup(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) ht
 			"org":   res.Org.ID,
 		})
 		writeJSON(w, http.StatusCreated, dto.AuthResp{
-			UserID:    res.User.ID,
-			OrgID:     res.Org.ID,
-			ExpiresAt: res.Session.ExpiresAt.UTC().Format(time.RFC3339),
+			UserID:       res.User.ID,
+			OrgID:        res.Org.ID,
+			ExpiresAt:    res.Session.ExpiresAt.UTC().Format(time.RFC3339),
+			HasWorkspace: hasWorkspace(r.Context(), ws, res.Org.ID),
 		})
 	}
 }
@@ -162,7 +186,7 @@ func Signup(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) ht
 // back to a Principal — otherwise we'd have no org id to bind to. A failed
 // VerifyToken here is unusual (we just signed it) but if it does happen we
 // skip the audit append rather than blocking the login.
-func Login(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
+func Login(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config, ws WorkspaceChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req dto.LoginReq
 		if !decodeBody(w, r, &req) {
@@ -186,6 +210,7 @@ func Login(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) htt
 		if err == nil {
 			body.UserID = princ.UserID
 			body.OrgID = princ.OrgID
+			body.HasWorkspace = hasWorkspace(r.Context(), ws, princ.OrgID)
 			auditWrite(r, aud, princ, "user.login", princ.UserID, map[string]any{
 				"email": req.Email,
 			})
@@ -406,8 +431,10 @@ func APIKeyRevoke(p domain.AuthProvider, aud domain.AuditWriter) http.HandlerFun
 }
 
 // Me wires GET /v1/me. RequireAuth guarantees a principal is in ctx; we then
-// fetch the User + Organization records to enrich the response.
-func Me(p domain.AuthProvider) http.HandlerFunc {
+// fetch the User + Organization records to enrich the response. Phase 3.5
+// includes HasWorkspace so the dashboard can decide whether to bounce the
+// caller into the onboarding flow.
+func Me(p domain.AuthProvider, ws WorkspaceChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		user, err := p.GetUser(r.Context(), princ.UserID)
@@ -421,9 +448,10 @@ func Me(p domain.AuthProvider) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, dto.MeResp{
-			User: dto.MeUser{ID: user.ID, Email: user.Email},
-			Org:  dto.MeOrg{ID: org.ID, Name: org.Name, Slug: org.Slug},
-			Role: string(princ.Role),
+			User:         dto.MeUser{ID: user.ID, Email: user.Email},
+			Org:          dto.MeOrg{ID: org.ID, Name: org.Name, Slug: org.Slug},
+			Role:         string(princ.Role),
+			HasWorkspace: hasWorkspace(r.Context(), ws, princ.OrgID),
 		})
 	}
 }
