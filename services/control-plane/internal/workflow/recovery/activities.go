@@ -170,7 +170,21 @@ func (a *Activities) runAgent(ctx context.Context, name domain.AgentName, in Pip
 				err.Error(), "BudgetError", err,
 			)
 		}
-		return domain.ActivityResult{}, err
+		// Phase 5 stub fallback: any other agent error (LLM 401, network, schema
+		// retries exhausted, etc.) demotes to the Phase-4 stub so the demo loop
+		// still lights up end-to-end without a live LLM key. The stub payload
+		// includes the original error so the timeline UI can show "degraded".
+		res, stubErr := a.stub(ctx, agentRoleOf(name), string(name)+".Run")
+		if stubErr != nil {
+			return domain.ActivityResult{}, err
+		}
+		if res.Payload == nil {
+			res.Payload = map[string]any{}
+		}
+		res.Payload["degraded"] = true
+		res.Payload["degrade_reason"] = err.Error()
+		res.Message = fmt.Sprintf("agent=%s degraded (stub fallback)", name)
+		return res, nil
 	}
 	payload := map[string]any{
 		"tokens_in":     out.TokensIn,
