@@ -19,9 +19,56 @@ const API =
   process.env.NEXT_PUBLIC_API_URL ??
   "http://localhost:8080";
 
-type SystemHealthResp = {
-  rows: SubsystemRow[];
+// The BE returns a flat object: {control_plane:{status,latency_ms,checked_at,last_error?}, postgres:{...}, redis:{...}, neo4j:{...}, minio:{...}, temporal:{...}}.
+type Check = {
+  status: "healthy" | "degraded" | "down" | "disabled";
+  latency_ms: number;
+  checked_at: string;
+  last_error?: string;
 };
+type SystemHealthResp = {
+  control_plane?: Check;
+  postgres?: Check;
+  redis?: Check;
+  neo4j?: Check;
+  minio?: Check;
+  temporal?: Check;
+};
+
+const SUBSYSTEM_LABELS: Array<[keyof SystemHealthResp, string]> = [
+  ["control_plane", "Control plane"],
+  ["postgres", "Postgres"],
+  ["redis", "Redis"],
+  ["temporal", "Temporal"],
+  ["minio", "MinIO"],
+  ["neo4j", "Neo4j"],
+];
+
+function toSubsystemRows(body: SystemHealthResp): SubsystemRow[] {
+  return SUBSYSTEM_LABELS.map(([key, label]) => {
+    const c = body[key];
+    if (!c) {
+      return { key, label, state: "unknown" } satisfies SubsystemRow;
+    }
+    const state: SubsystemRow["state"] =
+      c.status === "healthy"
+        ? "healthy"
+        : c.status === "degraded"
+          ? "degraded"
+          : c.status === "down"
+            ? "down"
+            : "unknown";
+    return {
+      key,
+      label,
+      state,
+      latency_ms: c.latency_ms,
+      last_check_at: c.checked_at,
+      last_error: c.last_error,
+      detail: c.status === "disabled" ? "Probe disabled in this environment" : undefined,
+    } satisfies SubsystemRow;
+  });
+}
 
 export default async function HealthPage() {
   const c = await cookies();
@@ -37,7 +84,7 @@ export default async function HealthPage() {
     });
     if (r.ok) {
       const body = (await r.json()) as SystemHealthResp;
-      subsystems = body.rows ?? [];
+      subsystems = toSubsystemRows(body);
     }
   } catch {
     // ignore
