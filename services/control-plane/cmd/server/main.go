@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	neo4jdriver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	temporalsdk "go.temporal.io/sdk/client"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/architect"
@@ -48,6 +50,16 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
 	recoverywf "github.com/nexis-eco/nexis/services/control-plane/internal/workflow/recovery"
 )
+
+// redisAddrOrDefault reads REDIS_ADDR, falling back to the docker-compose
+// service name on the same internal network so /v1/system-health can probe
+// the local redis without any extra config.
+func redisAddrOrDefault() string {
+	if v := os.Getenv("REDIS_ADDR"); v != "" {
+		return v
+	}
+	return "redis:6379"
+}
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -188,6 +200,7 @@ func main() {
 	// driver is unreachable. We log the init outcome at boot so operators can
 	// tell whether Pathfinder will have real graph evidence.
 	var graphStore domain.Graph
+	var neo4jDriver neo4jdriver.DriverWithContext // hoisted so SystemHealth can probe it.
 	if cfg.Neo4jURI != "" {
 		drv, nerr := platformneo4j.New(ctx, platformneo4j.Config{
 			URI: cfg.Neo4jURI, User: cfg.Neo4jUser, Password: cfg.Neo4jPass,
@@ -200,6 +213,7 @@ func main() {
 				logger.Warn("neo4j verify failed; pathfinder graph evidence disabled", "err", vErr)
 			} else {
 				graphStore = neo4jstore.New(drv)
+				neo4jDriver = drv
 				logger.Info("neo4j initialised", "uri", cfg.Neo4jURI)
 			}
 		}
@@ -253,6 +267,7 @@ func main() {
 	// missing temporal service doesn't block the rest of the surface.
 	var wfService domain.WorkflowService
 	var wfRepo *repo.WorkflowRepo
+	var temporalClient temporalsdk.Client // hoisted so SystemHealth can probe.
 	if appPool != nil && adminPool != nil {
 		wfRepo = repo.NewWorkflowRepo(appPool, adminPool)
 		tc, err := temporalplatform.Dial(temporalplatform.Config{
@@ -266,6 +281,7 @@ func main() {
 			}
 			logger.Warn("temporal disabled (dev fallback)", "err", err)
 		} else {
+			temporalClient = tc
 			defer tc.Close()
 			wfBroker := sse.New[domain.ActivityEvent]()
 			stubSleep := time.Duration(cfg.WorkflowStubDurationMs) * time.Millisecond
@@ -447,15 +463,15 @@ func main() {
 		Projects:          projectsHandlerSvc,
 		SystemHealth: handler.SystemHealthDeps{
 			AdminPool: adminPool,
-			RedisAddr: os.Getenv("REDIS_ADDR"),
-			Neo4j:     nil, // surface as "disabled" when the Phase 6 driver isn't wired here
+			RedisAddr: redisAddrOrDefault(),
+			Neo4j:     neo4jDriver,
 			MinIO: integration.MinIOConfig{
 				Endpoint:  cfg.MinIOEndpoint,
 				AccessKey: cfg.MinIOAccessKey,
 				SecretKey: cfg.MinIOSecretKey,
 				UseSSL:    cfg.MinIOUseSSL,
 			},
-			Temporal: nil, // surface as "disabled" — temporal heartbeat already exposes /v1/healthz/temporal
+			Temporal: temporalClient,
 		},
 	})
 	httpServer := &http.Server{
