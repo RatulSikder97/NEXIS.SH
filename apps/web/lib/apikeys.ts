@@ -5,7 +5,10 @@
 // originating component's lifecycle. Errors propagate as plain Error so the
 // caller can render `.message` inline.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export type APIKey = {
   id: string;

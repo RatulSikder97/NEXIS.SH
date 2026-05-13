@@ -6,7 +6,10 @@
 // links to it via a plain <a target="_blank"> so the browser carries the
 // session cookie and triggers a download.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 // AuditRow mirrors the JSON shape emitted by handler.AuditList. Field names
 // are snake_case; metadata is opaque JSON.

@@ -18,7 +18,10 @@
 //     forms (GitHub/Sentry/ArgoCD) until they are folded into the generic
 //     ConfigureDialog in Wave 2.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 // IntegrationProvider mirrors `domain.IntegrationProvider` in the Go
 // control-plane. Six providers ship in the real-integrations rollout; keep

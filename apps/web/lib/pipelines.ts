@@ -21,7 +21,10 @@
 //     that — once the named "close" event fires, we close the EventSource
 //     deliberately so it does NOT reconnect.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 // WorkflowRunStatus tracks the lifecycle of a single pipeline run. Mirrors
 // domain.WorkflowRunStatus on the Go side.

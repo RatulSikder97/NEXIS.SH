@@ -19,7 +19,10 @@
 // never camelCases them. Optional selector fields are typed as `?:` so the
 // UI can render "—" placeholders for unconnected integrations.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export type ProjectEnvironment = "dev" | "staging" | "prod";
 

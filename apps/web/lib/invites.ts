@@ -10,7 +10,10 @@
 // The public claim endpoints accept no auth — the raw token in the URL is
 // the proof of intent.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 // PendingInvite mirrors the JSON returned by GET /v1/orgs/{id}/invites.
 // Fields match the snake_case the Go handler emits via json tags.

@@ -5,7 +5,10 @@
 // cookie. SSE provisioning events come back as JSON-encoded frames via
 // EventSource — withCredentials is required for the cookie to ride along.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export type Region = { id: string; name: string; continent: string };
 export type WorkspaceStatus =

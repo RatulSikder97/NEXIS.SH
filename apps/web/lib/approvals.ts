@@ -15,7 +15,10 @@
 // All requests carry the session cookie via `credentials: "include"` so
 // the workspace-scope RLS binding works exactly like the pipelines SDK.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 // Severity classes match the Phase 6 approval.Classify Go-side enum.
 export type ApprovalSeverity = "low" | "medium" | "high";

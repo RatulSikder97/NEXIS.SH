@@ -8,7 +8,10 @@
 //     user_id + org_id from the session; the client supplies the six
 //     21-point scores + an optional notes string + the recovery run id.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export type OrgStats = {
   successful_recoveries_count: number;

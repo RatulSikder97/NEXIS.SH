@@ -10,7 +10,10 @@
 //   - This module must never throw at import time — all network access is
 //     deferred until a method is called.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export type AuthUser = { id: string; email: string };
 export type AuthOrg = { id: string; name: string; slug: string };

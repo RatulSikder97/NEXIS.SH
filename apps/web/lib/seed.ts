@@ -6,7 +6,10 @@
 // caller can deep-link to its detail page (typically with `?live=1` to
 // flip the timeline into guided-demo mode).
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export type SeedSampleResp = { run_id: string };
 

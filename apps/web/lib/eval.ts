@@ -13,7 +13,10 @@
 // the *_cents_exact fields, matching the Phase 3.5 billing precision lesson)
 // so the table can render sub-cent runs without rounding to "$0.00".
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 // EvalRunStatus tracks each provider's leg of an eval run. The runner
 // records one status per provider (openai / ollama) so the matrix can show

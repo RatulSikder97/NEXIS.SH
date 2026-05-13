@@ -5,7 +5,10 @@
 // the control-plane stores the entire object. The PATCH replaces — the
 // browser sends the full preferences object on each save.
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const API =
+  typeof window === "undefined"
+    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export type Preferences = {
   theme?: "light" | "dark" | "system";
