@@ -107,6 +107,8 @@ func mapAuthError(w http.ResponseWriter, err error, op string) {
 		writeError(w, http.StatusUnauthorized, "session expired")
 	case errors.Is(err, domain.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not found")
+	case errors.Is(err, domain.ErrConflict):
+		writeError(w, http.StatusConflict, "email already registered")
 	default:
 		slog.Default().Error("auth handler", "op", op, "err", err)
 		writeError(w, http.StatusInternalServerError, "internal error")

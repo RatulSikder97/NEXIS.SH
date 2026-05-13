@@ -16,9 +16,28 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 )
+
+// isUniqueViolation returns true if err is a Postgres UNIQUE constraint
+// violation (SQLSTATE 23505). Used to drive slug-suffix retry on signup.
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	// memStore returns plain errors with the substring "duplicate" / "unique"
+	// — match defensively so tests work without pulling pg-specific symbols.
+	s := err.Error()
+	return strings.Contains(s, "23505") ||
+		strings.Contains(strings.ToLower(s), "duplicate") ||
+		strings.Contains(strings.ToLower(s), "unique")
+}
 
 // inviteTTL is how long a freshly-issued invite remains claimable. Mirrors the
 // 7-day window the spec calls out; constant rather than configurable to keep
@@ -83,11 +102,20 @@ func (p *Provider) Name() string { return "local" }
 // --- Signup / Login / VerifyToken / Logout ---------------------------------
 
 // Signup hashes the password, creates a user + org + owner membership + session,
-// and returns a signed JWT. All writes are issued through Store; this method
-// does NOT wrap them in a transaction — Store implementations may choose to.
+// and returns a signed JWT. Order is: validate email is free → create org
+// (with slug-suffix retry on collision) → create user → membership → session.
+// This ordering avoids orphan rows when org-slug collides without requiring
+// a transaction across Store calls.
 func (p *Provider) Signup(ctx context.Context, in domain.SignupInput) (domain.SignupResult, error) {
 	if in.Email == "" || in.Password == "" || in.OrgName == "" {
 		return domain.SignupResult{}, fmt.Errorf("signup: %w", domain.ErrInvalidCredentials)
+	}
+
+	// Reject duplicate email up-front with a meaningful error code. The
+	// caller (HTTP handler) maps this to 409 Conflict; without this check
+	// the user would see the raw pg unique-violation message.
+	if existing, err := p.store.GetUserByEmail(ctx, in.Email); err == nil && existing != nil {
+		return domain.SignupResult{}, fmt.Errorf("signup: %w", domain.ErrConflict)
 	}
 
 	hash, err := hashPassword(in.Password)
@@ -100,6 +128,33 @@ func (p *Provider) Signup(ctx context.Context, in domain.SignupInput) (domain.Si
 	orgID := uuid.NewString()
 	sessionID := uuid.NewString()
 
+	// Create org FIRST with slug-suffix retry. If this fails we haven't
+	// created any other rows yet.
+	baseSlug := slugify(in.OrgName)
+	org := domain.Organization{
+		ID:          orgID,
+		Name:        in.OrgName,
+		Slug:        baseSlug,
+		OwnerUserID: userID,
+		CreatedAt:   now,
+	}
+	var createErr error
+	for attempt := 0; attempt < 6; attempt++ {
+		if attempt > 0 {
+			org.Slug = fmt.Sprintf("%s-%d", baseSlug, attempt+1)
+		}
+		createErr = p.store.CreateOrganization(ctx, &org)
+		if createErr == nil {
+			break
+		}
+		if !isUniqueViolation(createErr) {
+			break
+		}
+	}
+	if createErr != nil {
+		return domain.SignupResult{}, fmt.Errorf("signup: create org: %w", createErr)
+	}
+
 	user := domain.User{
 		ID:           userID,
 		Email:        in.Email,
@@ -108,17 +163,6 @@ func (p *Provider) Signup(ctx context.Context, in domain.SignupInput) (domain.Si
 	}
 	if err := p.store.CreateUser(ctx, &user); err != nil {
 		return domain.SignupResult{}, fmt.Errorf("signup: create user: %w", err)
-	}
-
-	org := domain.Organization{
-		ID:          orgID,
-		Name:        in.OrgName,
-		Slug:        slugify(in.OrgName),
-		OwnerUserID: userID,
-		CreatedAt:   now,
-	}
-	if err := p.store.CreateOrganization(ctx, &org); err != nil {
-		return domain.SignupResult{}, fmt.Errorf("signup: create org: %w", err)
 	}
 
 	if err := p.store.CreateMembership(ctx, orgID, userID, domain.RoleOwner); err != nil {
