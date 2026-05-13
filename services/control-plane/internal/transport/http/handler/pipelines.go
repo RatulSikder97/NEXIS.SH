@@ -45,6 +45,16 @@ func toWorkflowRunResp(w domain.WorkflowRun) dto.WorkflowRunResp {
 	if w.DurationMs != nil {
 		resp.DurationMs = *w.DurationMs
 	}
+	// Surface the Temporal-assigned WorkflowID + RunID so the dashboard can
+	// deep-link to the Temporal Web UI. The service stamps "pending" on the
+	// run row before ExecuteWorkflow returns; filter that placeholder out so
+	// the wire shape stays clean.
+	if w.TemporalWfID != "" && w.TemporalWfID != "pending" {
+		resp.TemporalWorkflowID = w.TemporalWfID
+	}
+	if w.TemporalRunID != "" && w.TemporalRunID != "pending" {
+		resp.TemporalRunID = w.TemporalRunID
+	}
 	return resp
 }
 
@@ -165,16 +175,53 @@ func PipelineCreate(svc domain.WorkflowService, aud domain.AuditWriter) http.Han
 	}
 }
 
+// demoScenarios is the whitelist of accepted `scenario` values. Anything else
+// is rejected with 400 so we never forward arbitrary user input into the
+// workflow payload.
+var demoScenarios = map[string]struct{}{
+	"schema-drift": {},
+	"null-deref":   {},
+	"oom":          {},
+	"synthetic":    {},
+}
+
 // PipelineDemo wires POST /v1/workspaces/{ws_id}/pipelines/demo. Identical
 // to PipelineCreate but stamps triggered_by=demo so the dashboard can filter
 // demo runs from real ones. Gated to cfg.AppEnv == "dev" by the router.
+//
+// Body is optional. When present it may carry a `scenario` field which is
+// whitelisted (see demoScenarios) and stamped onto the workflow input so the
+// recovery DAG can branch on the seeded failure type. An empty/absent body
+// defaults to "synthetic".
 func PipelineDemo(svc domain.WorkflowService, aud domain.AuditWriter, _ config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		wsID := chi.URLParam(r, "ws_id")
+
+		// Decode best-effort: empty body / no body should default the scenario
+		// instead of erroring. Reject only when the body is present but
+		// malformed or carries unknown fields.
+		var req dto.PipelineDemoReq
+		if r.Body != nil && r.ContentLength != 0 {
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid request body")
+				return
+			}
+		}
+		if req.Scenario == "" {
+			req.Scenario = "synthetic"
+		}
+		if _, ok := demoScenarios[req.Scenario]; !ok {
+			writeError(w, http.StatusBadRequest, "invalid scenario")
+			return
+		}
+
 		inputBytes, _ := json.Marshal(map[string]string{
-			"triggered_by": "demo",
 			"incident_id":  "demo",
+			"triggered_by": "demo",
+			"scenario":     req.Scenario,
 		})
 		run, err := svc.Start(r.Context(), princ, wsID, "RecoveryPipeline", inputBytes)
 		if err != nil {
@@ -187,6 +234,7 @@ func PipelineDemo(svc domain.WorkflowService, aud domain.AuditWriter, _ config.C
 		}
 		auditWrite(r, aud, princ, "pipelines.demo", run.ID, map[string]any{
 			"workspace_id": wsID,
+			"scenario":     req.Scenario,
 		})
 		writeJSON(w, http.StatusAccepted, toWorkflowRunResp(run))
 	}
