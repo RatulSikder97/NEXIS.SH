@@ -1,12 +1,21 @@
 import { describe, it, expect, vi } from "vitest";
 
+// The route only reads { email, source } off the insert input, so the
+// mock surface stays narrowly typed to that shape rather than `any`.
+type WaitlistRow = { email: string; source: string | null };
+
 vi.mock("@/lib/db", () => {
-  const calls: any[] = [];
+  const calls: WaitlistRow[] = [];
   return {
     db: {
       insert: () => ({
-        values: (v: any) => ({
-          onConflictDoNothing: () => ({ returning: async () => { calls.push(v); return [{ id: "uuid-x", email: v.email }]; } }),
+        values: (v: WaitlistRow) => ({
+          onConflictDoNothing: () => ({
+            returning: async () => {
+              calls.push(v);
+              return [{ id: "uuid-x", email: v.email }];
+            },
+          }),
         }),
       }),
     },

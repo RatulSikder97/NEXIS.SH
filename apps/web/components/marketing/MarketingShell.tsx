@@ -10,7 +10,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
   return (
     <>
       <Navbar />
-      <main className="bg-[var(--color-background)]">{children}</main>
+      <main id="main" className="bg-[var(--color-background)]">{children}</main>
       <Footer />
     </>
   );

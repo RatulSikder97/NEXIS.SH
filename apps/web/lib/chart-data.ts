@@ -145,10 +145,11 @@ export function openIncidentSeverityBreakdown(runs: WorkflowRun[]): SeveritySlic
 // buckets: succeeded / failed / degraded. "degraded" covers timed_out +
 // cancelled. running / queued rows are excluded — they don't have an
 // outcome yet.
-export type RecoveryOutcomeBucket = {
-  ts: string;
-  ts_ms: number;
-  label: string;
+//
+// The type extends StackedBucket so it's directly assignable to
+// StackedBarChart's `data` prop without an `as unknown as` cast. The
+// index signature is the same shape (string | number) the chart consumes.
+export type RecoveryOutcomeBucket = StackedBucket & {
   succeeded: number;
   failed: number;
   degraded: number;

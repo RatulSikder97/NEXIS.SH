@@ -9,6 +9,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Cancel pending pushes when a newer commit arrives on the same ref. Build
+# matrices below rely on per-image caches so a cancellation midway doesn't
+# corrupt anything that survives across runs.
+
 jobs:
   web:
     runs-on: ubuntu-latest
@@ -20,7 +24,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          # The `cache: pnpm` flag below tells setup-node to hash
+          # pnpm-lock.yaml and key the store automatically — that's the
+          # supported pnpm-store caching path for setup-node@v4 + pnpm@9.
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @nexis/web typecheck
       - run: pnpm --filter @nexis/web lint
@@ -39,6 +47,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
+          # actions/setup-go@v5 already wires the Go module + build cache
+          # under ~/.cache/go-build and ~/go/pkg/mod. Keying on the per-
+          # service go.sum gives each matrix shard its own cache slot so a
+          # control-plane dep change doesn't invalidate validator/gitops.
           cache-dependency-path: services/${{ matrix.service }}/go.sum
       - working-directory: services/${{ matrix.service }}
         run: |
@@ -47,15 +59,145 @@ jobs:
           go test -race -timeout 120s ./...
           go build ./...
 
+  # Postgres-migrations gate: spin up a disposable pg16 + pgvector, replay
+  # every up migration in lexical order, then replay every down migration in
+  # reverse. Any non-zero exit fails the job. This catches the class of bug
+  # where a hand-written down migration drops a column the next up migration
+  # depends on. The job is gated on the schema directory so unrelated PRs
+  # skip it; manual runs are always allowed.
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: nexis
+          POSTGRES_USER: nexis
+          POSTGRES_PASSWORD: nexis_dev_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexis -d nexis"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replay up → down → up
+        env:
+          PGPASSWORD: nexis_dev_password
+        run: |
+          set -euo pipefail
+          MIGS=services/control-plane/migrations
+          if [ ! -d "$MIGS" ]; then
+            echo "no migrations directory; skipping"; exit 0
+          fi
+          # Up sweep
+          for f in $(ls "$MIGS"/*.up.sql | sort); do
+            echo "[up] $f"
+            psql -h localhost -U nexis -d nexis -v ON_ERROR_STOP=1 -f "$f"
+          done
+          # Down sweep (reverse)
+          for f in $(ls "$MIGS"/*.down.sql | sort -r); do
+            echo "[down] $f"
+            psql -h localhost -U nexis -d nexis -v ON_ERROR_STOP=1 -f "$f"
+          done
+          # Up again to prove round-trip
+          for f in $(ls "$MIGS"/*.up.sql | sort); do
+            echo "[up:2nd] $f"
+            psql -h localhost -U nexis -d nexis -v ON_ERROR_STOP=1 -f "$f"
+          done
+
   docker:
     runs-on: ubuntu-latest
     needs: [web, go-services]
+    permissions:
+      # `id-token: write` is required for the OIDC trust path with AWS
+      # (`aws-actions/configure-aws-credentials`) when the ECR push step is
+      # eventually enabled. Held now as a no-op so the workflow contract is
+      # already in place once the IAM role exists.
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: nexis/web
+            context: .
+            dockerfile: apps/web/Dockerfile
+          - image: nexis/control-plane
+            context: services/control-plane
+            dockerfile: services/control-plane/Dockerfile
+          - image: nexis/validator
+            context: services/validator
+            dockerfile: services/validator/Dockerfile
+          - image: nexis/gitops
+            context: services/gitops
+            dockerfile: services/gitops/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Build all images
+
+      # gha cache backend ships layer cache directly through the GitHub
+      # Actions cache API. Per-image scope means a control-plane rebuild
+      # never invalidates the web image cache. mode=max writes every layer
+      # in the multi-stage build, not just the final stage — critical for
+      # Go builds that change one source file but reuse the dep layer.
+      - name: Build image (with gha cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          tags: ${{ matrix.image }}:ci
+          push: false
+          load: true
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      # Trivy scans the just-built image for CVEs. Fails the job on Critical
+      # or High severity vulnerabilities with a known fix — unfixed vulns
+      # don't block (ignore-unfixed: true) because there is nothing we can
+      # do until upstream ships a patch. SARIF output uploads on failure so
+      # we can browse findings in the Security tab when GHAS is enabled.
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ matrix.image }}:ci
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      # ECR push is staged but inactive until AWS creds + the IAM OIDC role
+      # are wired in Phase 7. Keeping it inside an `if:` lets us merge the
+      # workflow shape now and flip it on with a single repo-secret edit
+      # later — no CI churn at cutover time.
+      - name: Configure AWS credentials (main only)
+        if: github.ref == 'refs/heads/main' && env.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Push to ECR (main only)
+        if: github.ref == 'refs/heads/main' && env.AWS_ROLE_ARN != ''
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
         run: |
-          docker build -t nexis/web:ci             -f apps/web/Dockerfile .
-          docker build -t nexis/control-plane:ci   services/control-plane
-          docker build -t nexis/validator:ci       services/validator
-          docker build -t nexis/gitops:ci          services/gitops
+          set -euo pipefail
+          if [ -z "${ECR_REGISTRY:-}" ]; then
+            echo "ECR_REGISTRY secret not set — skipping push"
+            exit 0
+          fi
+          aws ecr get-login-password --region "${AWS_REGION:-us-east-1}" \
+            | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          SHA="${GITHUB_SHA::7}"
+          REMOTE="${ECR_REGISTRY}/${{ matrix.image }}"
+          docker tag "${{ matrix.image }}:ci" "${REMOTE}:${SHA}"
+          docker tag "${{ matrix.image }}:ci" "${REMOTE}:main"
+          docker push "${REMOTE}:${SHA}"
+          docker push "${REMOTE}:main"

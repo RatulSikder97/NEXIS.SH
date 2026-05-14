@@ -1,0 +1,2 @@
+- [DevOps Wave 2 shipped 2026-05-14](project_devops_wave2_2026-05-14.md) — graceful shutdown, --healthcheck flag, compose profiles, log rotation, DB backup scripts, CI cache+trivy+ECR
+- [Distroless healthcheck via --healthcheck flag](feedback_distroless_healthcheck_flag.md) — never add curl/wget to distroless images; the main binary is the probe

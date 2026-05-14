@@ -8,7 +8,13 @@
   --background: hsl(0 0% 100%);
   --foreground: hsl(222 47% 11%);            /* #0B1220 navy */
   --muted: hsl(210 20% 96%);
-  --muted-foreground: hsl(215 16% 47%);
+  /* Darkened from hsl(215 16% 47%) — the prior value computed to ~4.75:1 on
+     --card / --background (right at the WCAG AA 4.5:1 minimum). Bumping
+     saturation a notch and dropping lightness to 42% lifts contrast to
+     ~5.7:1, giving headroom across the muted-foreground usages in chips,
+     captions, and form helper text. Dark mode is unaffected — its
+     muted-foreground sits at 6.9:1 already. */
+  --muted-foreground: hsl(215 19% 42%);
   --border: hsl(214 32% 91%);
   --card: hsl(0 0% 100%);
   --card-foreground: hsl(222 47% 11%);

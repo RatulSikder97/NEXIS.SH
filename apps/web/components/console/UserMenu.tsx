@@ -7,14 +7,12 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, LogOut, Settings, User } from "lucide-react";
 
 import { auth } from "@/lib/auth";
 
 export function UserMenu({ email }: { email: string }) {
-  const router = useRouter();
   const [busy, setBusy] = React.useState(false);
 
   const initial = email.charAt(0).toUpperCase();

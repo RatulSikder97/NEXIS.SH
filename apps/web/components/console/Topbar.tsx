@@ -166,11 +166,16 @@ function MobileSidebarSheet() {
   // Close the sheet whenever the route changes — every Link inside the
   // sidebar already fires `onNavigate` for this, but path changes from
   // other sources (workspace switcher, redirect, back/forward) should
-  // also dismiss it.
+  // also dismiss it. React-19's react-hooks/set-state-in-effect rule
+  // forbids the effect-driven reset pattern, so we use the React-blessed
+  // "adjust state during render by comparing to previous prop" idiom:
+  //   https://react.dev/learn/you-might-not-need-an-effect
   const pathname = usePathname();
-  React.useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  const [prevPathname, setPrevPathname] = React.useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    if (open) setOpen(false);
+  }
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -189,9 +194,27 @@ function MobileSidebarSheet() {
         />
         <Dialog.Content
           aria-describedby={undefined}
+          onOpenAutoFocus={(event) => {
+            // Redirect Radix's "focus first tabbable" away from the Close
+            // (X) button to the first useful control inside the Sidebar
+            // (workspace switcher button, or first nav link if it's still
+            // loading). Scoped to the Dialog content's own subtree so we
+            // never reach into other parts of the page. WCAG 2.4.3.
+            const root = event.currentTarget as HTMLElement;
+            const target = root.querySelector<HTMLElement>(
+              "aside button:not([aria-label='Close navigation']), aside a[href]",
+            );
+            if (target) {
+              event.preventDefault();
+              target.focus();
+            }
+          }}
           className="fixed inset-y-0 left-0 z-50 flex h-full w-[80vw] max-w-[300px] flex-col bg-[var(--color-card)] shadow-xl outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left data-[state=open]:duration-200 md:hidden"
         >
           <Dialog.Title className="sr-only">Console navigation</Dialog.Title>
+          {/* Sidebar renders first so the Close button is not the first
+              tabbable element when the sheet opens — see onOpenAutoFocus. */}
+          <Sidebar variant="mobile" onNavigate={() => setOpen(false)} />
           <Dialog.Close asChild>
             <button
               type="button"
@@ -201,7 +224,6 @@ function MobileSidebarSheet() {
               <X className="h-4 w-4" aria-hidden />
             </button>
           </Dialog.Close>
-          <Sidebar variant="mobile" onNavigate={() => setOpen(false)} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

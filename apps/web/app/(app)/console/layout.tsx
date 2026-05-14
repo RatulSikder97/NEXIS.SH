@@ -94,6 +94,15 @@ export default async function ConsoleLayout({
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-foreground)]">
+      {/* Skip link — first focusable element on every console page, lets
+          keyboard / screen-reader users bypass the sidebar + topbar and jump
+          straight to the route's main content. Visually hidden until focused. */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-[var(--color-primary)] focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-[var(--color-primary-foreground)] focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:ring-offset-2"
+      >
+        Skip to content
+      </a>
       <Sidebar />
       <div className="md:ml-60">
         <Topbar
@@ -102,7 +111,13 @@ export default async function ConsoleLayout({
             current ? { name: current.name, region: current.region } : undefined
           }
         />
-        <main className="mx-auto max-w-[1440px] px-4 py-6 md:px-6">{children}</main>
+        <main
+          id="main"
+          tabIndex={-1}
+          className="mx-auto max-w-[1440px] px-4 py-6 md:px-6 focus:outline-none"
+        >
+          {children}
+        </main>
       </div>
       {!tourCompleted && <TourMount />}
     </div>

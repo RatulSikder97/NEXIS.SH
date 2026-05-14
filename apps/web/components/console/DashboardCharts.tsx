@@ -300,7 +300,7 @@ export function DashboardCharts({
           ariaLabel="Daily recovery outcomes"
         >
           <StackedBarChart
-            data={recovery14d as unknown as Array<Record<string, string | number>>}
+            data={recovery14d}
             keys={["succeeded", "failed", "degraded"]}
             colors={[palette.success, palette.destructive, palette.warning]}
             xKey="label"
@@ -320,7 +320,7 @@ export function DashboardCharts({
           }
         >
           <StackedBarChart
-            data={tokenUsage.buckets as unknown as Array<Record<string, string | number>>}
+            data={tokenUsage.buckets}
             keys={tokenUsage.keys}
             colors={palette.series}
             xKey="label"

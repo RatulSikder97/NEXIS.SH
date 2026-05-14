@@ -62,10 +62,12 @@ function FieldInput({
   field,
   value,
   onChange,
+  inputRef,
 }: {
   field: ConfigureField;
   value: string;
   onChange: (next: string) => void;
+  inputRef?: React.Ref<HTMLInputElement | HTMLSelectElement>;
 }) {
   const id = `cfg-${field.name}`;
   const common =
@@ -88,6 +90,7 @@ function FieldInput({
           required={field.required}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          ref={inputRef as React.Ref<HTMLSelectElement>}
           className={common}
         >
           {(field.options ?? []).map((opt) => (
@@ -106,6 +109,7 @@ function FieldInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
+          ref={inputRef as React.Ref<HTMLInputElement>}
           className={common}
         />
       )}
@@ -129,6 +133,14 @@ export function ConfigureDialog({ manifest, open, onOpenChange, onSuccess }: Pro
   );
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // Refs used by Dialog.Content's onOpenAutoFocus to redirect initial focus
+  // away from the Close button (which Radix would otherwise pick because it
+  // is the first focusable child in source order). Per WCAG 2.4.3, initial
+  // focus on a destructive control is hostile UX — focus the primary action
+  // / first form field instead.
+  const firstFieldRef = React.useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+  const primaryActionRef = React.useRef<HTMLButtonElement | null>(null);
 
   // Reset state when the manifest swaps. We use the React-blessed "adjust
   // state during render by comparing to previous prop" pattern instead of an
@@ -179,7 +191,20 @@ export function ConfigureDialog({ manifest, open, onOpenChange, onSuccess }: Pro
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in data-[state=closed]:animate-out data-[state=closed]:fade-out" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-xl outline-none data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out">
+        <Dialog.Content
+          onOpenAutoFocus={(event) => {
+            // Redirect Radix's default "focus first tabbable" (which is the
+            // Close button) to the first form field (form flow) or the
+            // primary CTA (OAuth flow). Falls back to the default if neither
+            // ref is mounted yet.
+            const target = isOAuth ? primaryActionRef.current : firstFieldRef.current;
+            if (target) {
+              event.preventDefault();
+              target.focus();
+            }
+          }}
+          className="fixed left-1/2 top-1/2 z-50 w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-xl outline-none data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out"
+        >
           <div className="flex items-start justify-between gap-4 pb-4">
             <div>
               <Dialog.Title className="text-lg font-semibold">
@@ -231,7 +256,12 @@ export function ConfigureDialog({ manifest, open, onOpenChange, onSuccess }: Pro
                   >
                     Cancel
                   </Button>
-                  <Button type="button" onClick={startOAuth} disabled={pending}>
+                  <Button
+                    type="button"
+                    onClick={startOAuth}
+                    disabled={pending}
+                    ref={primaryActionRef}
+                  >
                     {pending && <Loader2 className="h-4 w-4 animate-spin" />}
                     Continue with {manifest.label}
                   </Button>
@@ -256,12 +286,13 @@ export function ConfigureDialog({ manifest, open, onOpenChange, onSuccess }: Pro
               )}
 
               <div className="space-y-3">
-                {(manifest.fields ?? []).map((f) => (
+                {(manifest.fields ?? []).map((f, idx) => (
                   <FieldInput
                     key={f.name}
                     field={f}
                     value={values[f.name] ?? ""}
                     onChange={(v) => setField(f.name, v)}
+                    inputRef={idx === 0 ? firstFieldRef : undefined}
                   />
                 ))}
               </div>

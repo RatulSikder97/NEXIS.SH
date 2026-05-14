@@ -34,6 +34,14 @@ export default function Navbar() {
 
   return (
     <>
+      {/* Skip link — visually hidden until keyboard-focused, lets keyboard /
+          screen-reader users jump past the navbar to <main>. */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-[var(--color-primary)] focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-[var(--color-primary-foreground)] focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] focus:ring-offset-2"
+      >
+        Skip to content
+      </a>
       <header
         className={`sticky top-0 z-40 h-16 backdrop-blur-md transition-[background-color,box-shadow,border-color] duration-150 ${
           scrolled

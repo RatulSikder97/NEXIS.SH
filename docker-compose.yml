@@ -5,6 +5,21 @@
 #   cp secrets/github-app.pem.example secrets/github-app.pem
 #   docker compose up -d
 #
+# Profiles:
+#   - default (unprofiled): core data plane + control-plane + web + temporal
+#     + neo4j + minio. Enough to run the E2E test from a cold clone.
+#   - observability: prometheus, grafana, loki, tempo, otel-collector. Opt in
+#     when you actually need to inspect traces/dashboards.
+#   - agents: validator, gitops, causal-inference. Opt in when you need to
+#     exercise the recovery pipeline end-to-end (PR creation, sandbox runs,
+#     causal inference). The control-plane tolerates each of these being
+#     absent — it falls back to stub/disabled paths and logs a warning.
+#
+# Usage:
+#   docker compose up -d                                       # slim stack
+#   docker compose --profile observability up -d               # + telemetry
+#   docker compose --profile observability --profile agents up # everything
+#
 # Secrets policy:
 #   - All sensitive env vars use ${VAR:?...} so missing values fail fast at
 #     `docker compose up`, instead of silently booting with a known-weak
@@ -14,17 +29,28 @@
 #     the bridge network but not from the host LAN. Dev UIs the operator
 #     actually opens in a browser (web 3000, control-plane 8080, mailhog
 #     8025, grafana 3030, temporal-ui 8233) stay publicly bound.
-#   - Distroless services (control-plane, validator, gitops) have no curl,
-#     so their healthchecks have been removed for now. Liveness can be
-#     verified externally via the HTTP `/healthz` endpoint each service
-#     exposes.
+#   - Distroless Go services expose a built-in `--healthcheck` flag so the
+#     same image can satisfy in-container HEALTHCHECKs without shipping
+#     curl/wget. See services/control-plane/cmd/server/main.go.
 
 name: nexis
+
+# Default JSON-file log driver caps. Without this, a chatty INFO line or the
+# OTel debug exporter will fill /var/lib/docker/containers/*.log until the
+# disk fills. `<<: *default-logging` applies to every long-running service.
+# One-shot init containers (minio-init) don't need rotation.
+x-logging: &default-logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "50m"
+      max-file: "5"
 
 services:
   postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    <<: *default-logging
     environment:
       POSTGRES_DB: nexis
       POSTGRES_USER: nexis
@@ -48,6 +74,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    <<: *default-logging
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:
@@ -64,6 +91,7 @@ services:
   minio:
     image: minio/minio:latest
     restart: unless-stopped
+    <<: *default-logging
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -105,6 +133,7 @@ services:
   mailhog:
     image: mailhog/mailhog:latest
     restart: unless-stopped
+    <<: *default-logging
     ports:
       - "127.0.0.1:1025:1025"   # SMTP — internal only
       - "8025:8025"             # web UI — dev convenience
@@ -117,6 +146,7 @@ services:
   temporal:
     image: temporalio/auto-setup:1.25.2
     restart: unless-stopped
+    <<: *default-logging
     environment:
       DB: postgres12
       DB_PORT: "5432"
@@ -142,6 +172,7 @@ services:
   temporal-ui:
     image: temporalio/ui:2.31.2
     restart: unless-stopped
+    <<: *default-logging
     environment:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_CORS_ORIGINS: http://localhost:8233
@@ -155,6 +186,7 @@ services:
   neo4j:
     image: neo4j:5-community
     restart: unless-stopped
+    <<: *default-logging
     environment:
       NEO4J_AUTH: neo4j/nexis_dev_password
       NEO4J_PLUGINS: '["apoc"]'
@@ -179,6 +211,8 @@ services:
       context: services/causal-inference
       dockerfile: Dockerfile
     restart: unless-stopped
+    <<: *default-logging
+    profiles: ["agents"]
     environment:
       PORT: "8090"
       PYTHONUNBUFFERED: "1"
@@ -198,6 +232,8 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.115.1
     restart: unless-stopped
+    <<: *default-logging
+    profiles: ["observability"]
     command: ["--config=/etc/otel-collector.yaml"]
     volumes:
       - ./infra/observability/otel-collector.yaml:/etc/otel-collector.yaml:ro
@@ -213,6 +249,8 @@ services:
   prometheus:
     image: prom/prometheus:v3.0.1
     restart: unless-stopped
+    <<: *default-logging
+    profiles: ["observability"]
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=24h"
@@ -229,6 +267,8 @@ services:
   loki:
     image: grafana/loki:3.3.2
     restart: unless-stopped
+    <<: *default-logging
+    profiles: ["observability"]
     command: ["-config.file=/etc/loki/local-config.yaml"]
     volumes:
       - ./infra/observability/loki-config.yaml:/etc/loki/local-config.yaml:ro
@@ -243,6 +283,8 @@ services:
   tempo:
     image: grafana/tempo:2.7.0
     restart: unless-stopped
+    <<: *default-logging
+    profiles: ["observability"]
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./infra/observability/tempo-config.yaml:/etc/tempo.yaml:ro
@@ -257,6 +299,8 @@ services:
   grafana:
     image: grafana/grafana:11.4.0
     restart: unless-stopped
+    <<: *default-logging
+    profiles: ["observability"]
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
@@ -282,6 +326,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
+    <<: *default-logging
     environment:
       DATABASE_URL: postgres://nexis:nexis_dev_password@postgres:5432/nexis?sslmode=disable
       NEXT_PUBLIC_APP_URL: http://localhost:3000
@@ -311,6 +356,7 @@ services:
       context: services/control-plane
       dockerfile: Dockerfile
     restart: unless-stopped
+    <<: *default-logging
     environment:
       PORT: "8080"
       APP_ENV: dev
@@ -389,16 +435,24 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "8080:8080"
-    # Liveness check intentionally omitted: control-plane runs on a
-    # distroless base image with no curl/wget. Probe the HTTP /healthz
-    # endpoint from outside (e.g. ALB target group) instead. TODO: add a
-    # tiny `/healthz` binary or use gRPC health probe to restore in-container
-    # checks.
+    # Liveness check uses the binary's built-in `--healthcheck` subcommand,
+    # which dials http://127.0.0.1:$PORT/healthz and exits 0/1. This is the
+    # distroless-friendly alternative to curl/wget: same binary, no extra
+    # tools in the image. See cmd/server/main.go::runHealthcheck.
+    healthcheck:
+      test: ["CMD", "/app/server", "--healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    # otel-collector + causal-inference are conditional (profile=observability
+    # and profile=agents respectively). They are not listed as depends_on
+    # here — the control-plane already tolerates each being absent and logs
+    # a warning at startup. Adding them as hard deps would force every
+    # `docker compose up` to pull those images even with no profile active.
     depends_on:
       postgres:
         condition: service_healthy
-      otel-collector:
-        condition: service_started
       mailhog:
         condition: service_started
       temporal:
@@ -407,8 +461,6 @@ services:
         condition: service_healthy
       neo4j:
         condition: service_healthy
-      causal-inference:
-        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
     secrets:
@@ -424,6 +476,8 @@ services:
       context: services/validator
       dockerfile: Dockerfile
     restart: unless-stopped
+    <<: *default-logging
+    profiles: ["agents"]
     environment:
       PORT: "8081"
       VALIDATOR_TOKEN: ${VALIDATOR_TOKEN:?VALIDATOR_TOKEN required — see .env.example}
@@ -433,8 +487,15 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "127.0.0.1:8081:8081"
-    # Liveness check intentionally omitted: validator runs on a distroless
-    # base image with no curl/wget. Probe /healthz over HTTP externally.
+    # The validator image is python:3.12-slim with curl installed (see its
+    # Dockerfile) so a vanilla curl-based healthcheck works here. Liveness
+    # confirms both the Go server and the Hypothesis sidecar boot ladder.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
     deploy:
       resources:
         limits:
@@ -446,6 +507,8 @@ services:
       context: services/gitops
       dockerfile: Dockerfile
     restart: unless-stopped
+    <<: *default-logging
+    profiles: ["agents"]
     environment:
       PORT: "8082"
       DATABASE_URL: postgres://nexis_gitops:nexis_dev_password@postgres:5432/nexis?sslmode=disable
@@ -456,7 +519,8 @@ services:
     ports:
       - "127.0.0.1:8082:8082"
     # Liveness check intentionally omitted: gitops runs on a distroless
-    # base image with no curl/wget. Probe /healthz over HTTP externally.
+    # base image with no curl/wget and its main.go is out of scope for this
+    # change (see Wave 2 brief). Probe /healthz over HTTP externally for now.
     depends_on:
       postgres:
         condition: service_healthy

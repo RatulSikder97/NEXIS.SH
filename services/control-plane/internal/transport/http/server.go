@@ -280,13 +280,22 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		r.Group(func(g chi.Router) {
 			g.Use(appmw.BodyLimit(1 * 1024 * 1024))
 			g.Use(appmw.RequireAuth)
+			// Per-org rate limit (SQA F-7). Mounted after RequireAuth so the
+			// principal is in ctx; the middleware keys by principal.OrgID and
+			// is a no-op when cfg.RateLimitEnabled is false or the params are
+			// zero-shaped (test-friendly).
+			g.Use(appmw.RateLimit(appmw.RateLimitConfig{
+				RPS:     cfg.RateLimitPerOrgRPS,
+				Burst:   cfg.RateLimitBurst,
+				Enabled: cfg.RateLimitEnabled,
+			}))
 			if deps.AppPool != nil {
 				g.Use(appmw.RLS(deps.AppPool))
 			}
 
 			// Routes open to any authenticated principal regardless of role.
 			g.Post("/v1/auth/logout", handler.Logout(deps.Auth, aud, cfg))
-			g.Post("/v1/auth/mfa/enroll", handler.MFAEnroll(deps.Auth, aud))
+			g.Post("/v1/auth/mfa/enroll", handler.MFAEnroll(deps.Auth, aud, cfg))
 			g.Post("/v1/auth/mfa/verify", handler.MFAVerify(deps.Auth, aud))
 			g.Delete("/v1/auth/mfa", handler.MFADisable(deps.Auth, aud))
 			g.Get("/v1/apikeys", handler.APIKeyList(deps.Auth))

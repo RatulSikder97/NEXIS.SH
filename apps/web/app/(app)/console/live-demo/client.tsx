@@ -327,11 +327,18 @@ function RunningModal({
   // is to confirm the click landed — full real-time feedback is the
   // incident timeline the user is about to be redirected to.
   const [step, setStep] = React.useState(0);
+  // Reset the ticker to step 0 whenever the modal closes. React-19's
+  // react-hooks/set-state-in-effect rule forbids the effect-driven reset
+  // pattern, so we use the React-blessed "adjust state during render by
+  // comparing to previous prop" idiom:
+  //   https://react.dev/learn/you-might-not-need-an-effect
+  const [prevOpen, setPrevOpen] = React.useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (!open) setStep(0);
+  }
   React.useEffect(() => {
-    if (!open) {
-      setStep(0);
-      return;
-    }
+    if (!open) return;
     const id = window.setInterval(() => {
       setStep((s) => Math.min(s + 1, TICKER_STEPS.length - 1));
     }, 800);

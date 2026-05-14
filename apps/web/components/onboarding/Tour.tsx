@@ -130,6 +130,10 @@ export default function Tour() {
         ]);
         if (cancelled) return;
 
+        // Shepherd.js runtime API broader than .d.ts — the published
+        // typings only surface a partial of the Tour class (no on/off,
+        // narrow addStep signature), so we cast through `unknown` to the
+        // local TourLike contract.
         tour = new Shepherd.Tour({
           useModalOverlay: true,
           defaultStepOptions: {
@@ -166,8 +170,10 @@ export default function Tour() {
                 action: () => {
                   if (isLast) tour?.complete();
                   else {
-                    // Shepherd's button action receives the tour as `this`;
-                    // calling next() on the closure-bound instance works.
+                    // Shepherd.js runtime API broader than .d.ts —
+                    // Tour.next() exists at runtime but isn't exported on
+                    // the typed surface, so cast through unknown to call
+                    // it on the closure-bound instance.
                     (tour as unknown as { next: () => void }).next();
                   }
                 },

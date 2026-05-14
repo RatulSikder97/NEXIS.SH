@@ -246,6 +246,33 @@ type Config struct {
 	// dropping in-flight deliveries (we accept ANY match).
 	PagerDutyFromEmail      string
 	PagerDutyWebhookSecrets [][]byte
+
+	// Per-org rate limiting (SQA F-7). The middleware uses a
+	// token-bucket per principal.OrgID. Defaults are tuned for the
+	// public-beta surface: ~100 req/min steady state with a burst of
+	// 200 to absorb a UI page-load that fires many parallel reads.
+	//
+	//   RateLimitPerOrgRPS    — steady-state requests/sec (default 1.67 → 100/min)
+	//   RateLimitBurst        — token-bucket burst capacity (default 200)
+	//   RateLimitEnabled      — operator escape hatch; defaults to true.
+	//                           Set RATE_LIMIT_ENABLED=0 to disable the
+	//                           middleware entirely.
+	//
+	// On exceed the middleware emits 429 + Retry-After (seconds until
+	// the next token replenishes, rounded up to 1).
+	RateLimitPerOrgRPS float64
+	RateLimitBurst     int
+	RateLimitEnabled   bool
+
+	// DefaultBudgetTokensPerDay — operator-tunable token cap per org
+	// per day. Mirrors TokenBudgetTokensIn for surfaces that want a
+	// "per-day" framing; the actual enforcement still runs through
+	// TokenLedgerRepo's period rows so the existing budget pill and
+	// per-period rotation logic keep working.
+	//
+	// Default: 1_000_000 tokens/day. Sourced from
+	// DEFAULT_BUDGET_TOKENS_PER_DAY.
+	DefaultBudgetTokensPerDay int64
 }
 
 func Load() Config {
@@ -404,6 +431,19 @@ func Load() Config {
 		SlackSigningSecret:  []byte(env("SLACK_SIGNING_SECRET", "")),
 		SlackAppRedirectURI: env("SLACK_APP_REDIRECT_URI", ""),
 		SlackDefaultChannel: env("SLACK_DEFAULT_CHANNEL", ""),
+
+		// Per-org rate limit (SQA F-7). Defaults yield 100 req/min steady
+		// state with a 200 burst — a comfortable headroom for a page-load
+		// that fires several parallel reads.
+		RateLimitPerOrgRPS: envFloat("RATE_LIMIT_PER_ORG_RPS", 100.0/60.0),
+		RateLimitBurst:     envInt("RATE_LIMIT_BURST", 200),
+		RateLimitEnabled:   parseBool(env("RATE_LIMIT_ENABLED", "1")),
+
+		// Default per-org per-day token budget. 1M tokens covers ~20
+		// full recovery runs at current per-run cost. Operators raise
+		// this for paying customers via the per-org override row in
+		// token_budgets.
+		DefaultBudgetTokensPerDay: int64(envInt("DEFAULT_BUDGET_TOKENS_PER_DAY", 1_000_000)),
 	}
 	// SlackAppRedirectURI default depends on AppBaseURL, so fill it in after
 	// the struct literal has captured both. Keeping the default behaviour

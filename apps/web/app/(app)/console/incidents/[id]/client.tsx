@@ -239,7 +239,10 @@ export function TimelineClient({
   const tlxCheckedRef = React.useRef(false);
   // bannerStartedAt is frozen on mount so the live banner shows the user's
   // own click time even if the workflow row's started_at drifts forward.
-  const bannerStartedAtRef = React.useRef<number>(Date.now());
+  // useState with a lazy initializer is the React-19-safe form — useRef
+  // with Date.now() as the initial arg trips react-hooks/refs-during-render
+  // (impure init), and reading .current during render trips the same rule.
+  const [bannerStartedAt] = React.useState<number>(() => Date.now());
 
   // 1s heartbeat for live durations.
   React.useEffect(() => {
@@ -453,7 +456,7 @@ export function TimelineClient({
             />
             <span className="font-medium">
               Live demo — {titleForScenario(scenario)} at{" "}
-              {formatTime(new Date(bannerStartedAtRef.current).toISOString())}
+              {formatTime(new Date(bannerStartedAt).toISOString())}
             </span>
           </div>
           {!finished && (

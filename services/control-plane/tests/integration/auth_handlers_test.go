@@ -280,8 +280,46 @@ func TestAuth_MFA_EnrollReturnsDataURL(t *testing.T) {
 	if body.RecoveryCodes == nil {
 		t.Errorf("recovery_codes is nil, want empty slice")
 	}
+	// Secret-gating: newAuthServer uses AppEnv="test" (non-dev), so the
+	// handler omits the raw TOTP secret to prevent a phishing-replay
+	// scenario in production. The QR data URL is sufficient for a real
+	// authenticator app; tooling that needs the secret should hit a
+	// dev-mode server or read the value via the local.Provider directly.
+	if body.Secret != "" {
+		t.Errorf("secret should be empty for non-dev AppEnv; got %q", body.Secret)
+	}
+}
+
+// TestAuth_MFA_EnrollLeaksSecretInDev asserts the dev escape hatch: when
+// AppEnv == "dev" the raw TOTP secret IS surfaced so the E2E harness can
+// deterministically compute a TOTP code without decoding the QR PNG. This
+// guards the other direction of the gating: a refactor that accidentally
+// strips the secret unconditionally would break the test harness.
+func TestAuth_MFA_EnrollLeaksSecretInDev(t *testing.T) {
+	store := local.NewMemStore()
+	p := local.New(local.Config{
+		Store:         store,
+		SessionSecret: []byte("test-secret-not-for-prod-12345678"),
+		Mailer:        &local.TestMailer{},
+		BaseURL:       "http://localhost:3000",
+		Clock:         func() time.Time { return time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC) },
+	})
+	srv := httpserver.New(
+		config.Config{AppEnv: "dev", AppBaseURL: "http://localhost:3000"},
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		httpserver.Deps{Auth: p},
+	)
+	c := signup(t, srv, "erin-dev@example.com", "x", "EDev")
+	rec := doJSON(t, srv, http.MethodPost, "/v1/auth/mfa/enroll", nil, c)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var body dto.MFAEnrollResp
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
 	if body.Secret == "" {
-		t.Errorf("secret is empty; expected raw base32 TOTP secret for client-side code generation")
+		t.Errorf("AppEnv=dev should surface the raw TOTP secret for E2E tooling; got empty")
 	}
 }
 

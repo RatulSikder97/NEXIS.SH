@@ -183,11 +183,23 @@ export function AgentRunsTable({
                 <React.Fragment key={r.run_id}>
                   <tr
                     className={cn(
-                      "border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)]/30",
+                      "border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)]/30 focus-visible:bg-[var(--color-muted)]/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-ring)]",
                       open && "bg-[var(--color-muted)]/40",
                     )}
                     onClick={() => toggle(r.run_id)}
+                    onKeyDown={(e) => {
+                      // Keyboard activation for the row's role="button"
+                      // contract: Enter or Space should toggle the
+                      // disclosure. Without this the row is reachable via
+                      // Tab (tabIndex={0}) but cannot actually be activated
+                      // from the keyboard.
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggle(r.run_id);
+                      }
+                    }}
                     role="button"
+                    tabIndex={0}
                     aria-expanded={open}
                     aria-controls={`run-events-${r.run_id}`}
                   >

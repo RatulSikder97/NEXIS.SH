@@ -131,14 +131,20 @@ function NewEvalDialog({
   const [error, setError] = React.useState<string | null>(null);
 
   // Reset the form whenever the dialog opens so a previously-submitted
-  // scenario doesn't ghost into the next attempt.
-  React.useEffect(() => {
+  // scenario doesn't ghost into the next attempt. React-19's
+  // react-hooks/set-state-in-effect rule forbids the effect-driven reset
+  // pattern, so we use the React-blessed "adjust state during render by
+  // comparing to previous prop" idiom:
+  //   https://react.dev/learn/you-might-not-need-an-effect
+  const [prevOpen, setPrevOpen] = React.useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) {
       setScenario(SCENARIOS[0]);
       setError(null);
       setPending(false);
     }
-  }, [open]);
+  }
 
   async function submit() {
     if (!workspaceId) return;

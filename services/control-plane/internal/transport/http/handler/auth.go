@@ -347,7 +347,15 @@ func Logout(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) ht
 }
 
 // MFAEnroll wires POST /v1/auth/mfa/enroll. Returns the QR as a data URL.
-func MFAEnroll(p domain.AuthProvider, aud domain.AuditWriter) http.HandlerFunc {
+//
+// SECURITY: the raw TOTP `secret` is gated behind cfg.AppEnv == "dev". In
+// staging/prod the response surface omits the secret — the QR data URL is
+// sufficient for a real user enrolling via an authenticator app. The raw
+// secret is only useful to test harnesses that generate a deterministic
+// TOTP code without decoding a PNG. Leaving the secret in the response in
+// production would let any caller who phishes the enroll response replay
+// the TOTP factor indefinitely. (SQA: MFA secret leak.)
+func MFAEnroll(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		qr, secret, err := p.EnrollMFA(r.Context(), princ.UserID)
@@ -356,13 +364,17 @@ func MFAEnroll(p domain.AuthProvider, aud domain.AuditWriter) http.HandlerFunc {
 			return
 		}
 		dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(qr)
-		// secret is also embedded inside the otpauth URL of the QR PNG; we
-		// surface it explicitly here so deterministic E2E tests can generate
-		// a TOTP code without decoding a PNG. Do not log this value.
+		// Gate the raw secret to dev so test harnesses can still generate a
+		// TOTP code without decoding the PNG. Real users in staging/prod
+		// scan the QR; the secret never leaves the server.
+		exposedSecret := ""
+		if cfg.AppEnv == "dev" {
+			exposedSecret = secret
+		}
 		auditWrite(r, aud, princ, "user.mfa_enroll_started", princ.UserID, map[string]any{})
 		writeJSON(w, http.StatusOK, dto.MFAEnrollResp{
 			QRDataURL:     dataURL,
-			Secret:        secret,
+			Secret:        exposedSecret,
 			RecoveryCodes: []string{}, // reserved for Phase 3
 		})
 	}

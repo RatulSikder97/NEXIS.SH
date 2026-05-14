@@ -5,10 +5,26 @@ import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/Button";
 
+// useHydrated returns false on the server + first client render, then
+// true after hydration. Using useSyncExternalStore keeps the "render
+// nothing meaningful until mount" pattern without tripping React 19's
+// react-hooks/set-state-in-effect rule, which (rightly) forbids the
+// classic `useEffect(() => setMounted(true), [])` idiom.
+const subscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
+function useHydrated(): boolean {
+  return React.useSyncExternalStore(
+    subscribe,
+    getClientSnapshot,
+    getServerSnapshot,
+  );
+}
+
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
   if (!mounted) return <Button variant="ghost" size="icon" aria-label="Toggle theme" />;
   const isDark = theme === "dark";
   return (

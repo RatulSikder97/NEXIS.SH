@@ -41,11 +41,23 @@ export function DecisionDialog({
 }) {
   const [notes, setNotes] = React.useState("");
 
+  // Initial focus target — the notes textarea. Without this Radix would
+  // land focus on the Close button (the first tabbable child in source
+  // order), putting a destructive control under the keyboard cursor the
+  // moment the dialog opens. WCAG 2.4.3.
+  const notesRef = React.useRef<HTMLTextAreaElement | null>(null);
+
   // Reset notes whenever the dialog re-opens so a previous reject's
-  // explanation doesn't leak into a fresh approve.
-  React.useEffect(() => {
+  // explanation doesn't leak into a fresh approve. React-19's
+  // react-hooks/set-state-in-effect rule forbids the effect-driven reset
+  // pattern, so we use the React-blessed "adjust state during render by
+  // comparing to previous prop" idiom instead.
+  //   https://react.dev/learn/you-might-not-need-an-effect
+  const [prevOpen, setPrevOpen] = React.useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (open) setNotes("");
-  }, [open]);
+  }
 
   const title =
     kind === "approve"
@@ -61,7 +73,17 @@ export function DecisionDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(480px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-xl outline-none">
+        <Dialog.Content
+          onOpenAutoFocus={(event) => {
+            // Redirect initial focus from the Close button to the notes
+            // textarea — the primary input for both approve and reject.
+            if (notesRef.current) {
+              event.preventDefault();
+              notesRef.current.focus();
+            }
+          }}
+          className="fixed left-1/2 top-1/2 z-50 w-[min(480px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-xl outline-none"
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <Dialog.Title className="text-lg font-semibold">
@@ -101,6 +123,7 @@ export function DecisionDialog({
             <label className="block text-xs font-medium text-[var(--color-muted-foreground)]">
               Notes <span className="font-normal">(optional)</span>
               <textarea
+                ref={notesRef}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}

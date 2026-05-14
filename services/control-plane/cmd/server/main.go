@@ -5,6 +5,9 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"flag"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -62,7 +65,46 @@ func redisAddrOrDefault() string {
 	return "redis:6379"
 }
 
+// runHealthcheck is the body of the --healthcheck subcommand. It dials
+// http://localhost:$PORT/healthz with a short timeout and exits 0 on a 2xx
+// response, 1 otherwise. Designed for `HEALTHCHECK CMD ["/app/server",
+// "--healthcheck"]` on the distroless image (which has no curl/wget). The
+// function never returns — it always calls os.Exit.
+func runHealthcheck() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	url := "http://127.0.0.1:" + port + "/healthz"
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "healthcheck: GET %s: %v\n", url, err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		fmt.Fprintf(os.Stderr, "healthcheck: GET %s: status %d\n", url, resp.StatusCode)
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
 func main() {
+	// --healthcheck short-circuits the boot path so the same binary can
+	// serve as the in-container liveness probe on distroless images.
+	// Parsed off a dedicated FlagSet so it does not interfere with the
+	// rest of main's argv assumptions (none today).
+	hcFlags := flag.NewFlagSet("control-plane", flag.ContinueOnError)
+	hcFlags.SetOutput(io.Discard)
+	healthcheck := hcFlags.Bool("healthcheck", false, "probe http://localhost:$PORT/healthz and exit 0/1")
+	_ = hcFlags.Parse(os.Args[1:])
+	if *healthcheck {
+		runHealthcheck()
+		return
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
@@ -74,6 +116,15 @@ func main() {
 		os.Exit(2)
 	}
 	logger.Info("control-plane starting", "port", cfg.Port, "env", cfg.AppEnv, "auth_provider", cfg.AuthProvider)
+
+	// appCtx is the lifetime context shared by every long-running goroutine
+	// in the process: the Temporal worker, the Sentinel detector, the cron
+	// loop, and any future stream consumers. We cancel it from the SIGTERM
+	// handler so all background work unwinds on shutdown before the HTTP
+	// server is drained. Bootstrap-only work (db dial, otel init) continues
+	// to use `ctx` below — those calls have their own timeouts.
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
 
 	ctx := context.Background()
 
@@ -453,7 +504,11 @@ func main() {
 				Logger:     logger,
 			})
 			go func() {
-				if err := temporalplatform.Start(context.Background(), tc,
+				// appCtx cancellation drives a clean worker drain on SIGTERM
+				// — Start blocks until the context fires or the worker
+				// fails. Without this the worker would keep polling Temporal
+				// after the HTTP server has been shut down.
+				if err := temporalplatform.Start(appCtx, tc,
 					temporalplatform.WorkerSpec{
 						TaskQueue:  cfg.TemporalTaskQueue,
 						Workflows:  []any{recoverywf.RecoveryPipeline},
@@ -623,19 +678,9 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	go func() {
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("http server error", "err", err)
-			os.Exit(1)
-		}
-	}()
-	logger.Info("control-plane listening", "addr", httpServer.Addr)
-
-	// Cron jobs — Phase 3.5 usage ticker + invoice roller. Run only when both
-	// repos exist. Cancelling cronCtx (on SIGTERM below) terminates the
-	// per-job goroutines cleanly.
-	cronCtx, cancelCrons := context.WithCancel(context.Background())
-	defer cancelCrons()
+	// Cron jobs — Phase 3.5 usage ticker + invoice roller. Bound to appCtx
+	// so SIGTERM cancels them in lockstep with the rest of the long-running
+	// goroutines (Temporal worker, Sentinel detector).
 	if wsRepo != nil && billingRepo != nil {
 		usageTicker := &usecase.UsageTicker{
 			Workspaces: wsRepo,
@@ -644,7 +689,7 @@ func main() {
 			PriceCents: 10.0,
 		}
 		invoiceRoller := &usecase.InvoiceRoller{Billing: billingRepo}
-		cron.Start(cronCtx, logger, []cron.Job{
+		cron.Start(appCtx, logger, []cron.Job{
 			{Name: "usage_ticker", Interval: usageTicker.Interval, Run: usageTicker.Run},
 			{Name: "invoice_roller", Interval: 24 * time.Hour, Run: invoiceRoller.Run},
 		})
@@ -655,22 +700,49 @@ func main() {
 	// RecoveryPipeline run per detected fatal/spike row. The struct itself
 	// is constructed above (before the HTTP server) so the admin trigger
 	// handler can reuse the same instance; here we just start the polling
-	// goroutine, sharing cronCtx so a SIGTERM cancels it alongside the cron
-	// jobs.
+	// goroutine on appCtx so a SIGTERM cancels it cleanly.
 	if sentinelDetector != nil {
-		go sentinelDetector.Run(cronCtx)
+		go sentinelDetector.Run(appCtx)
 		logger.Info("sentinel started", "interval_ms", cfg.SentinelPollIntervalMs)
 	}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	<-stop
-	logger.Info("control-plane shutting down")
-	cancelCrons()
+	// Signal-driven graceful shutdown.
+	//
+	// On SIGINT/SIGTERM:
+	//   1. Cancel appCtx so the Temporal worker, Sentinel detector, and
+	//      cron loop unwind. The Temporal SDK drains in-flight activities
+	//      bounded by its own WorkerOptions timeouts; the polling loops
+	//      observe ctx.Done() at the top of each tick.
+	//   2. Call httpServer.Shutdown with a 30s deadline. New connections
+	//      are refused immediately; in-flight requests are given that
+	//      window to complete before we return. http.ErrServerClosed from
+	//      the ListenAndServe call below is treated as a clean exit.
+	//
+	// All defers (db pool Close, otel shutdown, temporal client Close,
+	// neo4j driver Close) fire after the shutdown returns, so the order
+	// is: signal → background goroutines drain → HTTP drain → deferred
+	// resource cleanup → process exit.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-quit
+		logger.Info("shutdown signal received", "signal", sig.String())
+		// Cancel long-running goroutines first so they stop scheduling
+		// new work while the HTTP layer drains.
+		appCancel()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			logger.Error("http shutdown failed", "err", err)
+		}
+	}()
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	_ = httpServer.Shutdown(shutdownCtx)
+	logger.Info("control-plane listening", "addr", httpServer.Addr)
+	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("http listen failed", "err", err)
+		os.Exit(1)
+	}
+	logger.Info("control-plane shutdown complete")
 }
 
 // mustPool returns a connected pgx pool, or nil + a warning if the URL is

@@ -103,23 +103,35 @@ export function NasaTlxModal({
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // First slider receives initial focus on open (via Dialog.Content's
+  // onOpenAutoFocus). Without this Radix would land focus on the Close
+  // button — the first tabbable child in source order — which is hostile
+  // UX for a survey modal asking the operator to answer six questions.
+  const firstSliderRef = React.useRef<HTMLInputElement | null>(null);
+
   // Reset state every time the modal re-opens. A user who skips and then
   // somehow opens it again (e.g. via Help) shouldn't see their last
-  // partial entry.
-  React.useEffect(() => {
-    if (!open) return;
-    setScores({
-      mental_demand: 10,
-      physical_demand: 10,
-      temporal_demand: 10,
-      performance: 10,
-      effort: 10,
-      frustration: 10,
-    });
-    setNotes("");
-    setSubmitting(false);
-    setError(null);
-  }, [open]);
+  // partial entry. React-19's react-hooks/set-state-in-effect rule
+  // forbids the effect-driven reset pattern, so we use the React-blessed
+  // "adjust state during render by comparing to previous prop" idiom:
+  //   https://react.dev/learn/you-might-not-need-an-effect
+  const [prevOpen, setPrevOpen] = React.useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setScores({
+        mental_demand: 10,
+        physical_demand: 10,
+        temporal_demand: 10,
+        performance: 10,
+        effort: 10,
+        frustration: 10,
+      });
+      setNotes("");
+      setSubmitting(false);
+      setError(null);
+    }
+  }
 
   async function submit() {
     setSubmitting(true);
@@ -146,7 +158,18 @@ export function NasaTlxModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-xl outline-none">
+        <Dialog.Content
+          onOpenAutoFocus={(event) => {
+            // Redirect Radix's "focus first tabbable" away from the Close
+            // button to the first slider — the actual primary input on the
+            // survey. WCAG 2.4.3.
+            if (firstSliderRef.current) {
+              event.preventDefault();
+              firstSliderRef.current.focus();
+            }
+          }}
+          className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-xl outline-none"
+        >
           <div className="flex items-start justify-between gap-4 pb-4">
             <div>
               <Dialog.Title className="text-lg font-semibold">
@@ -169,7 +192,7 @@ export function NasaTlxModal({
           </div>
 
           <div className="space-y-5">
-            {AXES.map((axis) => (
+            {AXES.map((axis, idx) => (
               <Slider
                 key={axis.key}
                 axis={axis}
@@ -177,6 +200,7 @@ export function NasaTlxModal({
                 onChange={(v) =>
                   setScores((prev) => ({ ...prev, [axis.key]: v }))
                 }
+                inputRef={idx === 0 ? firstSliderRef : undefined}
               />
             ))}
 
@@ -231,10 +255,12 @@ function Slider({
   axis,
   value,
   onChange,
+  inputRef,
 }: {
   axis: Axis;
   value: number;
   onChange: (v: number) => void;
+  inputRef?: React.Ref<HTMLInputElement>;
 }) {
   const inputId = `tlx-${axis.key}`;
   return (
@@ -258,6 +284,7 @@ function Slider({
       </p>
       <input
         id={inputId}
+        ref={inputRef}
         type="range"
         min={0}
         max={20}

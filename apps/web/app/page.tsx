@@ -27,7 +27,7 @@ export default async function Page() {
   return (
     <>
       <Navbar />
-      <main>
+      <main id="main">
         <Hero signedIn={signedIn} />
         <TrustedStrip />
         <Problem />
