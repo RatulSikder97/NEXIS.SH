@@ -200,7 +200,7 @@ export function DashboardKpiStrip() {
           href="/console/cost"
           icon={DollarSign}
           tone="default"
-          hint={stats.mtd_spend_usd < 0 ? "No data yet" : "Month-to-date"}
+          hint={stats.mtd_spend_usd < 0 ? "Awaiting data" : "Month-to-date"}
         />
       </div>
     </section>

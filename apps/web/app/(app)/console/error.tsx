@@ -18,7 +18,6 @@ export default function ConsoleError({
   reset: () => void;
 }) {
   React.useEffect(() => {
-    // eslint-disable-next-line no-console
     console.error("Console error boundary captured:", error);
   }, [error]);
 

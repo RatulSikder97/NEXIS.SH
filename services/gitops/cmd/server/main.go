@@ -6,6 +6,9 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,7 +25,47 @@ import (
 	"github.com/nexis-eco/nexis/services/gitops/internal/usecase"
 )
 
+// runHealthcheck is the body of the --healthcheck subcommand. It dials
+// http://127.0.0.1:$PORT/healthz with a short timeout and exits 0 on a 2xx
+// response, 1 otherwise. Designed for `HEALTHCHECK CMD ["/app/server",
+// "--healthcheck"]` on the distroless image (which has no curl/wget). The
+// function never returns — it always calls os.Exit. Mirrors the same shape
+// as services/control-plane/cmd/server/main.go::runHealthcheck.
+func runHealthcheck() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8082"
+	}
+	url := "http://127.0.0.1:" + port + "/healthz"
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "healthcheck: GET %s: %v\n", url, err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		fmt.Fprintf(os.Stderr, "healthcheck: GET %s: status %d\n", url, resp.StatusCode)
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
 func main() {
+	// --healthcheck short-circuits the boot path so the same binary can
+	// serve as the in-container liveness probe on distroless images.
+	// Parsed off a dedicated FlagSet so it does not interfere with the
+	// rest of main's argv assumptions (none today).
+	hcFlags := flag.NewFlagSet("gitops", flag.ContinueOnError)
+	hcFlags.SetOutput(io.Discard)
+	healthcheck := hcFlags.Bool("healthcheck", false, "probe http://localhost:$PORT/healthz and exit 0/1")
+	_ = hcFlags.Parse(os.Args[1:])
+	if *healthcheck {
+		runHealthcheck()
+		return
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 	cfg := config.Load()

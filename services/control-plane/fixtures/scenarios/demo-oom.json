@@ -1,0 +1,17 @@
+{
+  "label": "demo-oom",
+  "title": "OutOfMemoryError: Heap space exhausted",
+  "service": "cache-warmer",
+  "environment": "production",
+  "stacktrace": "java.lang.OutOfMemoryError: Java heap space\n\tat com.nexis.cachewarmer.HotsetLoader.loadShard(HotsetLoader.java:142)\n\tat com.nexis.cachewarmer.HotsetLoader.warmAll(HotsetLoader.java:87)\n\tat com.nexis.cachewarmer.WarmScheduler.tick(WarmScheduler.java:54)\n\tat java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)",
+  "logs": "ts=2026-05-13T11:42:08Z level=fatal service=cache-warmer msg=heap_exhausted heap_used_bytes=2113929216 heap_max_bytes=2147483648 shard=user-hotset-7\nts=2026-05-13T11:42:08Z level=error service=cache-warmer msg=gc_overhead_limit_exceeded last_gc_pause_ms=18420",
+  "metadata": {
+    "service_name": "cache-warmer",
+    "heap_used_bytes": 2113929216,
+    "heap_max_bytes": 2147483648,
+    "gc_overhead_pct": 98.4,
+    "container_memory_limit_bytes": 2147483648,
+    "shard_id": "user-hotset-7",
+    "incident_kind": "oom"
+  }
+}

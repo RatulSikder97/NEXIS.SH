@@ -7,6 +7,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Install curl so the docker-compose HTTP healthcheck (curl -fsS /healthz)
+# has a probe binary in the image. python:3.12-slim ships without it.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install runtime + dev deps in one layer. pytest + httpx are shipped here
 # so `make test` can run inside the same image during CI without a second
 # image build. Phase 7 splits runtime vs dev when DoWhy lands.

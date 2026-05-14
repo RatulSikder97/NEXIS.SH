@@ -19,7 +19,6 @@ export default function RootError({
   reset: () => void;
 }) {
   React.useEffect(() => {
-    // eslint-disable-next-line no-console
     console.error("Root error boundary captured:", error);
   }, [error]);
 

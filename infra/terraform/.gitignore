@@ -1,0 +1,15 @@
+# Local Terraform state + cache (never commit).
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+
+# Per-developer overrides (often sensitive — keep out of git).
+*.auto.tfvars
+terraform.tfvars.local
+terraform.tfvars.json.local
+
+# Provider lock files (.terraform.lock.hcl) ARE intentionally NOT ignored —
+# pin them so all collaborators + CI get the same provider versions.

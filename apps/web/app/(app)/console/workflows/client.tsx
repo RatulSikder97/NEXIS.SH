@@ -323,7 +323,8 @@ export function WorkflowsClient({
         />
       ) : (
         <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] text-sm">
             <thead className="bg-[var(--color-muted)]/40 text-left text-[10px] uppercase tracking-widest text-[var(--color-muted-foreground)]">
               <tr>
                 <th className="w-8 px-3 py-2" aria-label="Expand" />
@@ -350,6 +351,7 @@ export function WorkflowsClient({
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

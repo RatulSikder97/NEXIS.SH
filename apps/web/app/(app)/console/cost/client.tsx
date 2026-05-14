@@ -335,7 +335,8 @@ export function CostClient({
             Per-agent spend
           </h2>
         </header>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-[var(--color-muted)]/40 text-left text-[10px] uppercase tracking-widest text-[var(--color-muted-foreground)]">
             <tr>
               <th className="px-3 py-2 font-medium">Agent</th>
@@ -406,6 +407,7 @@ export function CostClient({
               })}
           </tbody>
         </table>
+        </div>
       </section>
 
       <OperationalSegments

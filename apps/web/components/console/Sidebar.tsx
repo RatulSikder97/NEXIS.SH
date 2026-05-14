@@ -346,7 +346,7 @@ function BadgePill({
     info: "bg-blue-500",
     warn: "bg-amber-500",
     ok: "bg-emerald-500",
-    muted: "bg-zinc-400",
+    muted: "bg-[var(--color-muted-foreground)]/60",
   };
   if (collapsed) {
     return (

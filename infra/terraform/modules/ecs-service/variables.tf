@@ -100,6 +100,12 @@ variable "secrets" {
   default     = {}
 }
 
+variable "health_check_command" {
+  description = "Container HEALTHCHECK command (CMD-SHELL form). Distroless images should pass [\"CMD\", \"/<binary>\", \"--healthcheck\"]; images with curl can use the default."
+  type        = list(string)
+  default     = ["CMD-SHELL", "curl -fsS http://localhost:8080/healthz || exit 1"]
+}
+
 variable "tags" {
   description = "Tags merged into all ECS resources."
   type        = map(string)

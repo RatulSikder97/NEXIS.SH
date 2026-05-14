@@ -218,11 +218,16 @@ services:
       PYTHONUNBUFFERED: "1"
     ports:
       - "127.0.0.1:8090:8090"
+    # Phase 6 ships an HTTP (uvicorn/FastAPI) service exposing GET /healthz —
+    # see services/causal-inference/src/app.py. The earlier grpc probe was
+    # a Phase 7 forward-look that never matched the actual runtime. curl is
+    # installed in the image (see services/causal-inference/Dockerfile).
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import grpc, sys; ch=grpc.insecure_channel('localhost:8090'); grpc.channel_ready_future(ch).result(timeout=2); sys.exit(0)\" || exit 1"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/healthz"]
       interval: 10s
       timeout: 5s
       retries: 6
+      start_period: 10s
     deploy:
       resources:
         limits:
@@ -518,9 +523,16 @@ services:
       LOG_LEVEL: info
     ports:
       - "127.0.0.1:8082:8082"
-    # Liveness check intentionally omitted: gitops runs on a distroless
-    # base image with no curl/wget and its main.go is out of scope for this
-    # change (see Wave 2 brief). Probe /healthz over HTTP externally for now.
+    # Liveness check uses the binary's built-in `--healthcheck` subcommand,
+    # which dials http://127.0.0.1:$PORT/healthz and exits 0/1. This is the
+    # distroless-friendly alternative to curl/wget: same binary, no extra
+    # tools in the image. See cmd/server/main.go::runHealthcheck.
+    healthcheck:
+      test: ["CMD", "/app/server", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy

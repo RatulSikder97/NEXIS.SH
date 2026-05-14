@@ -321,7 +321,8 @@ export function PerformanceClient({ agents }: { agents: PerformanceAgent[] }) {
             Per-agent rollup
           </h2>
         </header>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-[var(--color-muted)]/40 text-left text-[10px] uppercase tracking-widest text-[var(--color-muted-foreground)]">
             <tr>
               <th className="px-3 py-2 font-medium">Agent</th>
@@ -385,6 +386,7 @@ export function PerformanceClient({ agents }: { agents: PerformanceAgent[] }) {
               ))}
           </tbody>
         </table>
+        </div>
       </section>
 
       <OperationalSegments

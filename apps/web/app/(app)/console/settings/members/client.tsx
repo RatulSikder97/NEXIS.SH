@@ -118,7 +118,8 @@ export function MembersClient({
           Members
         </h2>
         <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-sm">
             <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
               <tr>
                 <th className="px-4 py-2 font-medium">Email</th>
@@ -138,6 +139,7 @@ export function MembersClient({
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
         <p className="text-[11px] text-[var(--color-muted-foreground)]">
           Full member list lands in Phase 4. Until then, invite acceptance is
@@ -156,7 +158,8 @@ export function MembersClient({
                 No pending invites.
               </p>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-sm">
                 <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
                   <tr>
                     <th className="px-4 py-2 font-medium">Email</th>
@@ -198,6 +201,7 @@ export function MembersClient({
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </section>

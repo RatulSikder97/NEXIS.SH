@@ -44,6 +44,15 @@ function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
+// TanStack Table v8's `useReactTable` returns functions whose identities
+// the React Compiler can't memoize without risking stale UI (the table's
+// internal cache outlives a single render). The official escape hatch is
+// the `"use no memo"` directive, which opts this component out of compiler
+// memoization. The compiler still emits an informational
+// `react-hooks/incompatible-library` warning at the call site even with
+// the directive in place — it's an FYI rule, not gated by opt-out — so we
+// disable that specific lint line with a pointer to the TanStack guidance.
+// See https://tanstack.com/table/v8/docs/framework/react/react-compiler
 export function AuditTable({
   rows,
   onInspect,
@@ -51,6 +60,7 @@ export function AuditTable({
   rows: AuditRow[];
   onInspect: (row: AuditRow) => void;
 }) {
+  "use no memo";
   const columns = React.useMemo<ColumnDef<AuditRow>[]>(
     () => [
       {
@@ -106,6 +116,7 @@ export function AuditTable({
     [onInspect],
   );
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table v8: "use no memo" directive above opts the component out of compiler memoization; this rule still flags the call site as informational.
   const table = useReactTable({
     data: rows,
     columns,
@@ -114,7 +125,8 @@ export function AuditTable({
 
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-sm">
         <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
@@ -154,6 +166,7 @@ export function AuditTable({
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

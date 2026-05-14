@@ -41,7 +41,8 @@ export function InvoicesTable({ invoices }: { invoices: Invoice[] }) {
   }
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[480px] text-sm">
         <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
           <tr>
             <th className="px-4 py-2 font-medium">Period</th>
@@ -65,6 +66,7 @@ export function InvoicesTable({ invoices }: { invoices: Invoice[] }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

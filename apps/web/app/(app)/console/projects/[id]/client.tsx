@@ -217,7 +217,7 @@ function OverviewTab({
           <KpiBlock
             label="7d MTTR"
             value="—"
-            hint="No data yet"
+            hint="Awaiting data"
             icon={TimerReset}
           />
           <KpiBlock
@@ -239,7 +239,7 @@ function OverviewTab({
           <KpiBlock
             label="Mean tokens / run"
             value="—"
-            hint="No data yet"
+            hint="Awaiting data"
             icon={Wallet}
           />
         </div>
@@ -286,7 +286,8 @@ function OverviewTab({
           />
         ) : (
           <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
                 <tr>
                   <th className="px-4 py-2 font-medium">When</th>
@@ -339,6 +340,7 @@ function OverviewTab({
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </section>

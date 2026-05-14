@@ -364,7 +364,8 @@ export function EvalClient({
         />
       ) : (
         <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[840px] text-sm">
             <thead className="border-b border-[var(--color-border)] bg-[var(--color-muted)]/40">
               <tr className="text-left text-[10px] uppercase tracking-widest text-[var(--color-muted-foreground)]">
                 <th className="px-4 py-2 font-medium">Started</th>
@@ -455,6 +456,7 @@ export function EvalClient({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

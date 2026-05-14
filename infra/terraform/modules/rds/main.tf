@@ -62,9 +62,9 @@ resource "aws_db_instance" "this" {
   storage_encrypted     = true
   kms_key_id            = var.kms_key_arn
 
-  db_name                     = "nexis"
-  username                    = "nexis_admin"
-  manage_master_user_password = true
+  db_name                       = "nexis"
+  username                      = "nexis_admin"
+  manage_master_user_password   = true
   master_user_secret_kms_key_id = var.kms_key_arn
 
   multi_az            = var.multi_az
@@ -74,13 +74,13 @@ resource "aws_db_instance" "this" {
   db_subnet_group_name   = aws_db_subnet_group.this.name
   parameter_group_name   = aws_db_parameter_group.this.name
 
-  backup_retention_period      = var.backup_retention_days
-  backup_window                = "06:00-06:30"
-  copy_tags_to_snapshot        = true
-  deletion_protection          = var.env == "prod"
-  skip_final_snapshot          = var.env == "dev"
-  final_snapshot_identifier    = var.env == "dev" ? null : "nexis-${var.env}-rds-final-${formatdate("YYYYMMDD-hhmmss", timestamp())}"
-  performance_insights_enabled = true
+  backup_retention_period         = var.backup_retention_days
+  backup_window                   = "06:00-06:30"
+  copy_tags_to_snapshot           = true
+  deletion_protection             = var.env == "prod"
+  skip_final_snapshot             = var.env == "dev"
+  final_snapshot_identifier       = var.env == "dev" ? null : "nexis-${var.env}-rds-final-${formatdate("YYYYMMDD-hhmmss", timestamp())}"
+  performance_insights_enabled    = true
   performance_insights_kms_key_id = var.kms_key_arn
 
   enabled_cloudwatch_logs_exports = ["postgresql"]

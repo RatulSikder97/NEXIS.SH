@@ -188,20 +188,27 @@ var demoScenarios = map[string]struct{}{
 }
 
 // scenarioToFixture maps a demo scenario to the fixture incident JSON file.
-// When the file is present, the demo handler embeds its contents in the
-// workflow input as `incident: {...}` so the L1 agents have real payload.
+// Each scenario points at its OWN file so a demo run for "oom" is visibly
+// distinct from "null-deref" or "schema-drift" in the events stream. When the
+// file is present, the demo handler embeds its contents in the workflow input
+// as `incident: {...}` so the L1 agents have real payload to reason over.
+// `synthetic` aliases to the null-pointer fixture as a generic placeholder.
 var scenarioToFixture = map[string]string{
-	"schema-drift": "schema-drift.json",
+	"schema-drift": "demo-schema-drift.json",
 	"null-deref":   "demo-null-pointer.json",
 	"synthetic":    "demo-null-pointer.json",
-	"oom":          "demo-null-pointer.json",
+	"oom":          "demo-oom.json",
 }
 
-// loadFixtureIncident reads services/validator/fixtures/incidents/<file>.
-// Returns nil when the file is missing — agents fall back to a placeholder
-// incident in that case. The fixture base is configurable via the
-// FIXTURE_INCIDENTS_DIR env var so the binary stays portable across compose
-// vs. local runs.
+// loadFixtureIncident reads the per-scenario fixture from one of a small set
+// of well-known directories. Returns nil when the file is missing — agents
+// fall back to a placeholder incident in that case. The fixture base is
+// configurable via the FIXTURE_INCIDENTS_DIR env var so the binary stays
+// portable across compose vs. local runs.
+//
+// Control-plane-owned demo fixtures live under
+// services/control-plane/fixtures/scenarios. Legacy validator fixtures are
+// still searched so demos that pre-date the migration keep working.
 func loadFixtureIncident(scenario string) map[string]any {
 	file, ok := scenarioToFixture[scenario]
 	if !ok {
@@ -209,6 +216,9 @@ func loadFixtureIncident(scenario string) map[string]any {
 	}
 	candidates := []string{
 		os.Getenv("FIXTURE_INCIDENTS_DIR"),
+		"services/control-plane/fixtures/scenarios",
+		"/app/fixtures/scenarios",
+		"../../services/control-plane/fixtures/scenarios",
 		"services/validator/fixtures/incidents",
 		"/app/fixtures/incidents",
 		"../../services/validator/fixtures/incidents",

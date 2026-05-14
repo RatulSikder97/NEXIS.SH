@@ -162,7 +162,8 @@ export function AgentRunsTable({
   return (
     <div className="space-y-3">
       <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
             <tr>
               <th className="px-3 py-2 font-medium" aria-label="Toggle" />
@@ -278,6 +279,7 @@ export function AgentRunsTable({
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {error && (

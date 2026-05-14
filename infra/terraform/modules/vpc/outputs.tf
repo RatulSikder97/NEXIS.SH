@@ -22,3 +22,8 @@ output "nat_gateway_ids" {
   description = "NAT gateway IDs (one per public subnet)."
   value       = [for n in aws_nat_gateway.this : n.id]
 }
+
+output "private_route_table_ids" {
+  description = "Private route table IDs (one per AZ). Consumed by the S3 gateway VPC endpoint."
+  value       = [for rt in aws_route_table.private : rt.id]
+}

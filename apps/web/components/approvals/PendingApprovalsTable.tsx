@@ -82,7 +82,8 @@ export function PendingApprovalsTable({
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-sm">
         <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
           <tr>
             <th className="px-4 py-2 font-medium">Severity</th>
@@ -156,6 +157,7 @@ export function PendingApprovalsTable({
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
