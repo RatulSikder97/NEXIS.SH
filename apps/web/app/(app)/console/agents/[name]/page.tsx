@@ -196,7 +196,7 @@ export default async function AgentDetailPage({
           />
         ) : (
           <EmptyState
-            icon={Wrench}
+            iconNode={<Wrench className="h-5 w-5" aria-hidden />}
             title="No runs yet"
             description="This agent hasn't executed in the last 7 days. Trigger a synthetic demo to walk it through the recovery loop."
             cta={

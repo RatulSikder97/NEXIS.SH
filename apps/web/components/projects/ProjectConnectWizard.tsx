@@ -516,7 +516,6 @@ export function ProjectConnectWizard({
     try {
       const input: CreateProjectInput = {
         name: form.name.trim(),
-        slug: genSlug(form.name),
         description: form.description.trim(),
         environment: form.environment,
         owner_user_id: form.owner_user_id || undefined,

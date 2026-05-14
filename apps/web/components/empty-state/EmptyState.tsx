@@ -24,13 +24,19 @@ import { cn } from "@/lib/utils";
 
 export function EmptyState({
   icon: Icon,
+  iconNode,
   title,
   description,
   cta,
   secondary,
   className,
 }: {
-  icon: LucideIcon;
+  // icon takes a lucide-react component reference. ONLY usable from client
+  // components — passing a component reference from a server component to
+  // this (client) component is a React 19 / Next 16 boundary violation.
+  // For server components, use `iconNode` and render JSX inline.
+  icon?: LucideIcon;
+  iconNode?: React.ReactNode;
   title: string;
   description?: string;
   cta?: React.ReactNode;
@@ -46,7 +52,7 @@ export function EmptyState({
       )}
     >
       <div className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-[var(--color-muted)]/60 text-[var(--color-muted-foreground)]">
-        <Icon className="h-5 w-5" aria-hidden />
+        {iconNode ?? (Icon ? <Icon className="h-5 w-5" aria-hidden /> : null)}
       </div>
       <div className="space-y-1">
         <p className="text-base font-medium text-[var(--color-foreground)]">

@@ -322,10 +322,14 @@ func loadAgentRuns(ctx context.Context, pool *pgxpool.Pool, orgID, workspaceID, 
 		  FROM workflow_runs
 		),
 		severity AS (
-		  SELECT workflow_run_id AS run_id,
+		  SELECT DISTINCT ON (workflow_run_id)
+		         workflow_run_id AS run_id,
 		         (payload->>'severity')                                AS severity
 		  FROM activity_events
 		  WHERE agent_role='approval_gate' AND status='succeeded'
+		    AND (payload->>'severity') IS NOT NULL
+		    AND (payload->>'severity') <> ''
+		  ORDER BY workflow_run_id, ts DESC
 		)
 		SELECT
 		  ar.run_id::text, ar.started_at, ar.finished_at, ar.event_count,

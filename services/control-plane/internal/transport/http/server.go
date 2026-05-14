@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/approval"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/llm"
@@ -120,6 +121,20 @@ type Deps struct {
 	// incidents to the right repo/app/channel. Optional — when nil the
 	// /v1/(workspaces|projects)/* routes are not mounted.
 	Projects handler.ProjectsService
+
+	// Approvals — Phase 6 approval-decisions read API.
+	//
+	// Powers GET /v1/workspaces/{ws}/pipelines/{run}/decision so the FE can
+	// poll for the pending/decided state of a paused recovery. Optional —
+	// when nil the route is not mounted.
+	Approvals domain.ApprovalRepository
+
+	// ApprovalSignaler — Phase 6 approve/reject write API.
+	//
+	// Powers POST /v1/workspaces/{ws}/pipelines/{run}/approve|reject. Fires
+	// the Temporal signal so the paused workflow advances + persists the
+	// terminal decision row. Optional — when nil the routes are not mounted.
+	ApprovalSignaler *approval.SignalerService
 
 	// Operational-surfaces stage — repos + probe deps for the read-only
 	// operator endpoints (activity feed, system-health, integration log,
@@ -368,6 +383,10 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				g.Get("/v1/workspaces/{ws_id}/pipelines/{run_id}", handler.PipelineGet(deps.Workflows))
 				g.Get("/v1/workspaces/{ws_id}/pipelines/{run_id}/events",
 					handler.PipelineEvents(deps.Workflows, deps.WorkflowsRepo, deps.WorkspacesRepo))
+				if deps.Approvals != nil {
+					g.Get("/v1/workspaces/{ws_id}/pipelines/{run_id}/decision",
+						handler.PipelineDecisionGet(deps.Approvals))
+				}
 			}
 
 			// Phase 5 Stage 7 — eval read paths + token-budget pill. Open
@@ -419,6 +438,12 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			// read-only on their own profile.
 			g.Group(func(g2 chi.Router) {
 				g2.Use(appmw.RequireRole(domain.RoleOwner, domain.RoleAdmin))
+				if deps.ApprovalSignaler != nil {
+					g2.Post("/v1/workspaces/{ws_id}/pipelines/{run_id}/approve",
+						handler.PipelineApprove(deps.ApprovalSignaler))
+					g2.Post("/v1/workspaces/{ws_id}/pipelines/{run_id}/reject",
+						handler.PipelineReject(deps.ApprovalSignaler))
+				}
 				g2.Post("/v1/apikeys", handler.APIKeyCreate(deps.Auth, aud))
 				if deps.AuditLister != nil {
 					g2.Get("/v1/audit", handler.AuditList(deps.AuditLister))

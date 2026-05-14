@@ -359,6 +359,8 @@ func main() {
 	var temporalClient temporalsdk.Client // hoisted so SystemHealth can probe.
 	var approvalSvc *approval.Service
 	var slackDecider *approval.SlackDecider
+	var approvalRepo *repo.ApprovalRepo
+	var approvalSignaler *approval.SignalerService
 	if appPool != nil && adminPool != nil {
 		wfRepo = repo.NewWorkflowRepo(appPool, adminPool)
 		tc, err := temporalplatform.Dial(temporalplatform.Config{
@@ -467,7 +469,7 @@ func main() {
 			// channels are configured. Wiring Slack/email fan-out is the
 			// notifier package's job; we keep the boot path tight.
 			if adminPool != nil {
-				approvalRepo := repo.NewApprovalRepo(appPool, adminPool)
+				approvalRepo = repo.NewApprovalRepo(appPool, adminPool)
 				approvalSvc = approval.New(approvalRepo, nil, auditWriter)
 				acts.Approval = approvalSvc
 
@@ -476,13 +478,16 @@ func main() {
 				// — same Temporal signal, same audit chain, same row state
 				// transitions. Stays nil if no signing secret is set; the
 				// handler-mount guard in server.go also requires the secret.
+				// SignalerService is always built (HTTP approve/reject endpoint
+				// depends on it). SlackDecider wrapper only fires when Slack
+				// signing secret is configured.
+				approvalSignaler = approval.NewSignalerService(
+					approvalRepo,
+					approval.NewClientSignaler(tc),
+					approvalSvc,
+				)
 				if len(cfg.SlackSigningSecret) > 0 {
-					signaler := approval.NewSignalerService(
-						approvalRepo,
-						approval.NewClientSignaler(tc),
-						approvalSvc,
-					)
-					slackDecider = approval.NewSlackDecider(approvalRepo, signaler)
+					slackDecider = approval.NewSlackDecider(approvalRepo, approvalSignaler)
 				}
 			}
 
@@ -651,6 +656,8 @@ func main() {
 		TokenLedgerRepo:   tokenLedgerRepoForHTTP,
 		WebhookDeliveries: webhookDeliveriesRepo,
 		Projects:          projectsHandlerSvc,
+		Approvals:         approvalRepo,
+		ApprovalSignaler:  approvalSignaler,
 		InviteCodes:       inviteCodesRepo,
 		NASATLX:           nasaTLXRepo,
 		OrgStats:          orgStatsRepo,
