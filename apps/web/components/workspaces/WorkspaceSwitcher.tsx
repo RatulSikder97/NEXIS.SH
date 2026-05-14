@@ -13,6 +13,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronsUpDown, Plus } from "lucide-react";
@@ -38,7 +39,7 @@ const DOT_COLOR: Record<WorkspaceStatus, string> = {
   ready: "bg-emerald-500",
   provisioning: "bg-amber-500",
   error: "bg-red-500",
-  suspended: "bg-gray-400",
+  suspended: "bg-[var(--color-muted-foreground)]/40",
 };
 
 function StatusDot({ status }: { status: WorkspaceStatus }) {
@@ -100,7 +101,7 @@ export function WorkspaceSwitcher({ collapsed = false }: { collapsed?: boolean }
           collapsed ? "h-10 justify-center" : "h-12 px-3",
         )}
       >
-        <span className="inline-block h-2 w-2 rounded-full bg-gray-300" aria-hidden />
+        <span className="inline-block h-2 w-2 rounded-full bg-[var(--color-border)]" aria-hidden />
       </div>
     );
   }
@@ -117,7 +118,7 @@ export function WorkspaceSwitcher({ collapsed = false }: { collapsed?: boolean }
           )}
         >
           {current ? <StatusDot status={current.status} /> : (
-            <span className="inline-block h-2 w-2 rounded-full bg-gray-400" />
+            <span className="inline-block h-2 w-2 rounded-full bg-[var(--color-muted-foreground)]/40" />
           )}
           {!collapsed && (
             <>
@@ -172,7 +173,7 @@ export function WorkspaceSwitcher({ collapsed = false }: { collapsed?: boolean }
           <DropdownMenu.Separator className="my-1 h-px bg-[var(--color-border)]" />
           <DropdownMenu.Item asChild>
             <Link
-              href={"/console/settings/workspaces" as unknown as never}
+              href={"/console/settings/workspaces" as Route}
               className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm outline-none hover:bg-[var(--color-muted)] focus:bg-[var(--color-muted)]"
             >
               <Plus className="h-4 w-4" />

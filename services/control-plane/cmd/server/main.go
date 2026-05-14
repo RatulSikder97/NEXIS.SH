@@ -23,6 +23,7 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/data_engineer"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/devops"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/qa"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/approval"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
 	neo4jstore "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/graphstore/neo4j"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth"
@@ -66,6 +67,12 @@ func main() {
 	slog.SetDefault(logger)
 
 	cfg := config.Load()
+	// Phase 7 cutover guard (Risk 16.14): refuse to boot a staging/prod
+	// env that still has local providers wired. No-op in dev.
+	if err := cfg.FatalIfLocalInCloud(); err != nil {
+		logger.Error("cloud env misconfigured", "err", err)
+		os.Exit(2)
+	}
 	logger.Info("control-plane starting", "port", cfg.Port, "env", cfg.AppEnv, "auth_provider", cfg.AuthProvider)
 
 	ctx := context.Background()
@@ -260,14 +267,47 @@ func main() {
 		logger.Warn("workspaces + billing disabled — DATABASE_URL_APP missing")
 	}
 
+	// Phase 7 — Projects (self-healing targets). Repo runs dual-pool so
+	// Sentinel's cross-tenant MatchByFingerprint sweeps via admin; the
+	// usecase enforces per-tier caps + the GitHub binding rule and audits
+	// every mutation under project.*. Wired only when both pools exist
+	// (the dev LLM-only path keeps booting without it).
+	//
+	// Hoisted above the Temporal worker so the same repo can satisfy
+	// BOTH the Sentinel router's ProjectMatcher port AND the activity-side
+	// ProjectsReader port consumed by Activities.LoadProject. Without
+	// this hoist, the Activities struct would be constructed before the
+	// projects repo exists and a.Projects would stay nil — the kill-switch
+	// + auto-merge branches in ApprovalGateRoute would all silently fall
+	// back to the fixture path.
+	//
+	// projectsHandlerSvc is the handler-facing interface form. We keep the
+	// concrete pointer + the interface separate so a nil concrete value
+	// becomes a clean nil interface (avoiding the "non-nil interface
+	// containing nil pointer" Go gotcha that would defeat the
+	// deps.Projects != nil guard inside server.go).
+	var projectsRepo *repo.ProjectsRepo
+	var projectsHandlerSvc handler.ProjectsService
+	if appPool != nil && adminPool != nil {
+		projectsRepo = repo.NewProjectsRepoWithAdmin(appPool, adminPool)
+		projectsHandlerSvc = usecase.NewProjectsService(projectsRepo, intRepo, auditWriter, nil)
+	}
+
 	// Phase 4 — Temporal worker + WorkflowService. The worker registers the
 	// 9-stub RecoveryPipeline + the Activities struct (10 methods). Both
 	// pools must exist (worker uses adminPool; HTTP handlers use appPool via
 	// the request tx). Temporal-dial failures are tolerated in dev so a
 	// missing temporal service doesn't block the rest of the surface.
+	//
+	// approvalSvc + approvalSignaler are exported back out of the temporal
+	// init block so the HTTP server can wire the Slack interactivity decider
+	// alongside the existing approval API. Both stay nil when the admin pool
+	// or the temporal client is missing.
 	var wfService domain.WorkflowService
 	var wfRepo *repo.WorkflowRepo
 	var temporalClient temporalsdk.Client // hoisted so SystemHealth can probe.
+	var approvalSvc *approval.Service
+	var slackDecider *approval.SlackDecider
 	if appPool != nil && adminPool != nil {
 		wfRepo = repo.NewWorkflowRepo(appPool, adminPool)
 		tc, err := temporalplatform.Dial(temporalplatform.Config{
@@ -366,6 +406,44 @@ func main() {
 				acts.IncidentsAdmin = incRepo
 			}
 
+			// Phase 6 — Approval Gate wiring. ApprovalGateRoute checks
+			// a.Approval != nil before running the real flow (and falls back
+			// to the stub when unwired). Repo runs dual-pool because the
+			// activity body executes outside any request tx; HTTP reads use
+			// the per-request RLS tx via db.FromCtx.
+			//
+			// Notifier left nil here — Notify() becomes a no-op when no
+			// channels are configured. Wiring Slack/email fan-out is the
+			// notifier package's job; we keep the boot path tight.
+			if adminPool != nil {
+				approvalRepo := repo.NewApprovalRepo(appPool, adminPool)
+				approvalSvc = approval.New(approvalRepo, nil, auditWriter)
+				acts.Approval = approvalSvc
+
+				// SlackDecider lets the Slack interactivity webhook reuse
+				// the existing SignalerService for approve/reject decisions
+				// — same Temporal signal, same audit chain, same row state
+				// transitions. Stays nil if no signing secret is set; the
+				// handler-mount guard in server.go also requires the secret.
+				if len(cfg.SlackSigningSecret) > 0 {
+					signaler := approval.NewSignalerService(
+						approvalRepo,
+						approval.NewClientSignaler(tc),
+						approvalSvc,
+					)
+					slackDecider = approval.NewSlackDecider(approvalRepo, signaler)
+				}
+			}
+
+			// Phase 7 — Projects + Slack defaults on the activity bag. The
+			// activity body short-circuits to the fixture path when Projects
+			// is nil; SlackDefaultChannel is the workspace-wide fallback for
+			// runs without a bound project (or projects with an empty channel).
+			if projectsRepo != nil {
+				acts.Projects = projectsRepo
+			}
+			acts.SlackDefaultChannel = cfg.SlackDefaultChannel
+
 			wfService = adapterworkflow.New(adapterworkflow.Config{
 				Repo:       wfRepo,
 				Workspaces: wsRepo,
@@ -426,21 +504,78 @@ func main() {
 		webhookDeliveriesRepo = repo.NewWebhookDeliveriesRepo(appPool, adminPool)
 	}
 
-	// Phase 7 — Projects (self-healing targets). Repo runs dual-pool so
-	// Sentinel's cross-tenant MatchByFingerprint sweeps via admin; the
-	// usecase enforces per-tier caps + the GitHub binding rule and audits
-	// every mutation under project.*. Wired only when both pools exist
-	// (the dev LLM-only path keeps booting without it).
-	//
-	// projectsHandlerSvc is the handler-facing interface form. We keep the
-	// concrete pointer + the interface separate so a nil concrete value
-	// becomes a clean nil interface (avoiding the "non-nil interface
-	// containing nil pointer" Go gotcha that would defeat the
-	// deps.Projects != nil guard inside server.go).
-	var projectsHandlerSvc handler.ProjectsService
+	// Phase 8 — public-beta repos. All admin-pool-only because the read
+	// paths don't carry a request tx (org_stats is /v1/me/org-stats, which
+	// runs before workspace selection; invite_codes is owner-only and
+	// org-scoped via the principal); nasa_tlx writes outside any RLS tx.
+	// Nil-tolerant — the handler-mount guards in server.go skip wiring
+	// when the repos aren't constructed (LLM-only dev path).
+	var inviteCodesRepo *repo.InviteCodesRepo
+	var nasaTLXRepo *repo.NASATLXRepo
+	var orgStatsRepo *repo.OrgStatsRepo
+	if adminPool != nil {
+		inviteCodesRepo = repo.NewInviteCodesRepo(adminPool)
+		orgStatsRepo = repo.NewOrgStatsRepo(adminPool)
+	}
 	if appPool != nil && adminPool != nil {
-		projectsRepo := repo.NewProjectsRepoWithAdmin(appPool, adminPool)
-		projectsHandlerSvc = usecase.NewProjectsService(projectsRepo, intRepo, auditWriter, nil)
+		nasaTLXRepo = repo.NewNASATLXRepo(appPool, adminPool)
+	}
+
+	// Phase 6 — Sentinel detector. Constructed BEFORE the HTTP server so the
+	// /v1/admin/sentinel/trigger handler can call TriggerOne via the
+	// SentinelTriggerer port. The Run goroutine starts further down once
+	// cronCtx exists, so this only wires the in-memory struct + its router.
+	//
+	// Router: Phase 7 self-healing target resolution. For every emitted
+	// trigger with a Sentry/Datadog/PagerDuty/GitHub fingerprint, the router
+	// asks the projects repo for a project_id and stamps trigger.ProjectID
+	// in-place. Nil-tolerant — when projectsRepo is unwired the router
+	// becomes a no-op and every trigger fires with ProjectID="".
+	var sentinelDetector *sentinel.Detector
+	if cfg.SentinelEnabled && wfService != nil && incRepo != nil && wsRepo != nil && intRepo != nil {
+		var sentinelRouter *sentinel.Router
+		if projectsRepo != nil {
+			sentinelRouter = sentinel.NewRouter(sentinel.RouterConfig{
+				Matcher:  projectsRepo,
+				Incident: incRepo,
+				Logger:   logger,
+			})
+			logger.Info("sentinel router initialised", "matcher", "projects_repo")
+		} else {
+			logger.Warn("sentinel router disabled — projects repo unwired")
+		}
+		sentinelDetector = sentinel.New(sentinel.Config{
+			Incidents:    incRepo,
+			Workflows:    wfService,
+			Workspaces:   wsRepo,
+			Integrations: intRepo,
+			Audit:        auditWriter,
+			Router:       sentinelRouter,
+			WorkflowType: "RecoveryPipeline",
+			Interval:     time.Duration(cfg.SentinelPollIntervalMs) * time.Millisecond,
+			Logger:       logger,
+		})
+	} else if cfg.SentinelEnabled {
+		logger.Warn("sentinel disabled — required deps missing",
+			"wfService", wfService != nil,
+			"incRepo", incRepo != nil,
+			"wsRepo", wsRepo != nil,
+			"intRepo", intRepo != nil,
+		)
+	}
+
+	// SentinelTriggerer port for the admin trigger handler. A nil concrete
+	// detector becomes a clean nil interface here so the server.go guard
+	// (`deps.Sentinel != nil`) actually short-circuits.
+	var sentinelHandlerSvc handler.SentinelTriggerer
+	if sentinelDetector != nil {
+		sentinelHandlerSvc = sentinelDetector
+	}
+
+	// SlackApprovalsService port — same nil-interface dance as Sentinel.
+	var slackDeciderSvc handler.SlackApprovalsService
+	if slackDecider != nil {
+		slackDeciderSvc = slackDecider
 	}
 
 	srv := httpserver.New(cfg, logger, httpserver.Deps{
@@ -461,6 +596,11 @@ func main() {
 		TokenLedgerRepo:   tokenLedgerRepoForHTTP,
 		WebhookDeliveries: webhookDeliveriesRepo,
 		Projects:          projectsHandlerSvc,
+		InviteCodes:       inviteCodesRepo,
+		NASATLX:           nasaTLXRepo,
+		OrgStats:          orgStatsRepo,
+		Sentinel:          sentinelHandlerSvc,
+		SlackDecider:      slackDeciderSvc,
 		SystemHealth: handler.SystemHealthDeps{
 			AdminPool: adminPool,
 			RedisAddr: redisAddrOrDefault(),
@@ -512,32 +652,14 @@ func main() {
 	}
 
 	// Phase 6 — Sentinel detector goroutine. Polls incidents_raw + triggers a
-	// RecoveryPipeline run per detected fatal/spike row. Shares cronCtx so a
-	// SIGTERM cancels it alongside the cron jobs.
-	//
-	// All deps must be available — the dev fallback path (LLM-only boot) has
-	// no workflowService / incidents repo, so the goroutine simply doesn't
-	// start. Toggle via SENTINEL_ENABLED=0 to skip even when deps exist.
-	if cfg.SentinelEnabled && wfService != nil && incRepo != nil && wsRepo != nil && intRepo != nil {
-		det := sentinel.New(sentinel.Config{
-			Incidents:    incRepo,
-			Workflows:    wfService,
-			Workspaces:   wsRepo,
-			Integrations: intRepo,
-			Audit:        auditWriter,
-			WorkflowType: "RecoveryPipeline",
-			Interval:     time.Duration(cfg.SentinelPollIntervalMs) * time.Millisecond,
-			Logger:       logger,
-		})
-		go det.Run(cronCtx)
+	// RecoveryPipeline run per detected fatal/spike row. The struct itself
+	// is constructed above (before the HTTP server) so the admin trigger
+	// handler can reuse the same instance; here we just start the polling
+	// goroutine, sharing cronCtx so a SIGTERM cancels it alongside the cron
+	// jobs.
+	if sentinelDetector != nil {
+		go sentinelDetector.Run(cronCtx)
 		logger.Info("sentinel started", "interval_ms", cfg.SentinelPollIntervalMs)
-	} else if cfg.SentinelEnabled {
-		logger.Warn("sentinel disabled — required deps missing",
-			"wfService", wfService != nil,
-			"incRepo", incRepo != nil,
-			"wsRepo", wsRepo != nil,
-			"intRepo", intRepo != nil,
-		)
 	}
 
 	stop := make(chan os.Signal, 1)

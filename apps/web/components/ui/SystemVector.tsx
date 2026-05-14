@@ -10,7 +10,7 @@ export function SystemVector() {
 
   if (reduced) {
     return (
-      <div className="rounded-[12px] border border-border bg-surface p-4">
+      <div className="rounded-[12px] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
         <svg
           viewBox="0 0 560 220"
           className="h-auto w-full"
@@ -32,7 +32,7 @@ export function SystemVector() {
 
   return (
     <motion.div
-      className="rounded-[12px] border border-border bg-surface p-4"
+      className="rounded-[12px] border border-[var(--color-border)] bg-[var(--color-card)] p-4"
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.55, ease: easeSoftOut, delay: 0.45 }}
@@ -47,7 +47,7 @@ export function SystemVector() {
         <DiagramFrame />
         <motion.path
           d="M108 42h16"
-          stroke="var(--primary)"
+          stroke="var(--color-primary)"
           strokeWidth={2}
           strokeLinecap="round"
           initial={{ pathLength: 0, opacity: 0.35 }}
@@ -62,7 +62,7 @@ export function SystemVector() {
         />
         <motion.path
           d="M220 42h16"
-          stroke="var(--primary)"
+          stroke="var(--color-primary)"
           strokeWidth={2}
           strokeLinecap="round"
           initial={{ pathLength: 0, opacity: 0.35 }}
@@ -77,7 +77,7 @@ export function SystemVector() {
         />
         <motion.path
           d="M332 42h16"
-          stroke="var(--primary)"
+          stroke="var(--color-primary)"
           strokeWidth={2}
           strokeLinecap="round"
           initial={{ pathLength: 0, opacity: 0.35 }}
@@ -92,7 +92,7 @@ export function SystemVector() {
         />
         <motion.path
           d="M444 42h16"
-          stroke="var(--primary)"
+          stroke="var(--color-primary)"
           strokeWidth={2}
           strokeLinecap="round"
           initial={{ pathLength: 0, opacity: 0.35 }}
@@ -107,7 +107,7 @@ export function SystemVector() {
         />
         <motion.path
           d="M164 64v54"
-          stroke="var(--accent)"
+          stroke="var(--color-accent)"
           strokeWidth={1.5}
           strokeLinecap="round"
           initial={{ pathLength: 0 }}
@@ -116,7 +116,7 @@ export function SystemVector() {
         />
         <motion.path
           d="M398 64v54"
-          stroke="var(--accent)"
+          stroke="var(--color-accent)"
           strokeWidth={1.5}
           strokeLinecap="round"
           initial={{ pathLength: 0 }}
@@ -127,7 +127,7 @@ export function SystemVector() {
           cx={164}
           cy={122}
           r={4.5}
-          fill="var(--primary)"
+          fill="var(--color-primary)"
           initial={{ scale: 0.55, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 320, damping: 18, delay: 1.18 }}
@@ -136,7 +136,7 @@ export function SystemVector() {
           cx={398}
           cy={122}
           r={4.5}
-          fill="var(--secondary)"
+          fill="var(--color-secondary)"
           initial={{ scale: 0.55, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 320, damping: 18, delay: 1.26 }}
@@ -149,40 +149,40 @@ export function SystemVector() {
 function DiagramFrame() {
   return (
     <>
-      <rect x="12" y="20" width="96" height="44" rx="8" fill="var(--card)" stroke="var(--border)" />
-      <rect x="124" y="20" width="96" height="44" rx="8" fill="var(--card)" stroke="var(--border)" />
-      <rect x="236" y="20" width="96" height="44" rx="8" fill="var(--card)" stroke="var(--border)" />
-      <rect x="348" y="20" width="96" height="44" rx="8" fill="var(--card)" stroke="var(--border)" />
-      <rect x="460" y="20" width="88" height="44" rx="8" fill="var(--card)" stroke="var(--border)" />
+      <rect x="12" y="20" width="96" height="44" rx="8" fill="var(--color-card)" stroke="var(--color-border)" />
+      <rect x="124" y="20" width="96" height="44" rx="8" fill="var(--color-card)" stroke="var(--color-border)" />
+      <rect x="236" y="20" width="96" height="44" rx="8" fill="var(--color-card)" stroke="var(--color-border)" />
+      <rect x="348" y="20" width="96" height="44" rx="8" fill="var(--color-card)" stroke="var(--color-border)" />
+      <rect x="460" y="20" width="88" height="44" rx="8" fill="var(--color-card)" stroke="var(--color-border)" />
 
-      <text x="30" y="47" fill="var(--muted-foreground)" fontSize="11" fontFamily="monospace">
+      <text x="30" y="47" fill="var(--color-muted-foreground)" fontSize="11" fontFamily="monospace">
         DETECT
       </text>
-      <text x="140" y="47" fill="var(--muted-foreground)" fontSize="11" fontFamily="monospace">
+      <text x="140" y="47" fill="var(--color-muted-foreground)" fontSize="11" fontFamily="monospace">
         DIAGNOSE
       </text>
-      <text x="250" y="47" fill="var(--muted-foreground)" fontSize="11" fontFamily="monospace">
+      <text x="250" y="47" fill="var(--color-muted-foreground)" fontSize="11" fontFamily="monospace">
         SYNTHESISE
       </text>
-      <text x="364" y="47" fill="var(--muted-foreground)" fontSize="11" fontFamily="monospace">
+      <text x="364" y="47" fill="var(--color-muted-foreground)" fontSize="11" fontFamily="monospace">
         VALIDATE
       </text>
-      <text x="478" y="47" fill="var(--muted-foreground)" fontSize="11" fontFamily="monospace">
+      <text x="478" y="47" fill="var(--color-muted-foreground)" fontSize="11" fontFamily="monospace">
         EXECUTE
       </text>
 
-      <rect x="80" y="132" width="168" height="60" rx="10" fill="var(--card)" stroke="var(--border)" />
-      <rect x="314" y="132" width="168" height="60" rx="10" fill="var(--card)" stroke="var(--border)" />
-      <text x="102" y="158" fill="var(--foreground)" fontSize="13" fontWeight="500">
+      <rect x="80" y="132" width="168" height="60" rx="10" fill="var(--color-card)" stroke="var(--color-border)" />
+      <rect x="314" y="132" width="168" height="60" rx="10" fill="var(--color-card)" stroke="var(--color-border)" />
+      <text x="102" y="158" fill="var(--color-foreground)" fontSize="13" fontWeight="500">
         Layer 1: Execution
       </text>
-      <text x="336" y="158" fill="var(--foreground)" fontSize="13" fontWeight="500">
+      <text x="336" y="158" fill="var(--color-foreground)" fontSize="13" fontWeight="500">
         Layer 2: Self-Healing
       </text>
-      <text x="102" y="177" fill="var(--muted-foreground)" fontSize="11">
+      <text x="102" y="177" fill="var(--color-muted-foreground)" fontSize="11">
         detect · diagnose · patch
       </text>
-      <text x="336" y="177" fill="var(--muted-foreground)" fontSize="11">
+      <text x="336" y="177" fill="var(--color-muted-foreground)" fontSize="11">
         guardrails · rollback · audit
       </text>
     </>
@@ -192,14 +192,14 @@ function DiagramFrame() {
 function Wiring() {
   return (
     <>
-      <path d="M108 42h16" stroke="var(--primary)" strokeWidth={2} />
-      <path d="M220 42h16" stroke="var(--primary)" strokeWidth={2} />
-      <path d="M332 42h16" stroke="var(--primary)" strokeWidth={2} />
-      <path d="M444 42h16" stroke="var(--primary)" strokeWidth={2} />
-      <path d="M164 64v54" stroke="var(--accent)" strokeWidth={1.5} />
-      <path d="M398 64v54" stroke="var(--accent)" strokeWidth={1.5} />
-      <circle cx="164" cy="122" r="4.5" fill="var(--primary)" />
-      <circle cx="398" cy="122" r="4.5" fill="var(--primary)" />
+      <path d="M108 42h16" stroke="var(--color-primary)" strokeWidth={2} />
+      <path d="M220 42h16" stroke="var(--color-primary)" strokeWidth={2} />
+      <path d="M332 42h16" stroke="var(--color-primary)" strokeWidth={2} />
+      <path d="M444 42h16" stroke="var(--color-primary)" strokeWidth={2} />
+      <path d="M164 64v54" stroke="var(--color-accent)" strokeWidth={1.5} />
+      <path d="M398 64v54" stroke="var(--color-accent)" strokeWidth={1.5} />
+      <circle cx="164" cy="122" r="4.5" fill="var(--color-primary)" />
+      <circle cx="398" cy="122" r="4.5" fill="var(--color-primary)" />
     </>
   );
 }

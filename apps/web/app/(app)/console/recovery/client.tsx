@@ -10,6 +10,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -39,7 +40,7 @@ export type RecoveryRunSeed = {
 };
 
 const SEVERITY_PILL: Record<IncidentSeverity, string> = {
-  none: "bg-zinc-500/15 text-zinc-700 ring-zinc-500/30 dark:text-zinc-300",
+  none: "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] ring-[var(--color-border)]",
   low: "bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300",
   medium:
     "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300",
@@ -47,12 +48,12 @@ const SEVERITY_PILL: Record<IncidentSeverity, string> = {
 };
 
 const STATUS_DOT: Record<WorkflowRunStatus, string> = {
-  queued: "bg-zinc-400",
+  queued: "bg-[var(--color-muted-foreground)]/40",
   running: "bg-blue-500",
   succeeded: "bg-emerald-500",
   failed: "bg-red-500",
   timed_out: "bg-red-500",
-  cancelled: "bg-zinc-300",
+  cancelled: "bg-[var(--color-border)]",
 };
 
 function stageIndex(currentStep?: string): number {
@@ -209,7 +210,7 @@ function Row({ seed }: { seed: RecoveryRunSeed }) {
         </td>
         <td className="px-3 py-2 text-right">
           <Link
-            href={`/console/incidents/${run.id}` as never}
+            href={`/console/incidents/${run.id}` as Route}
             className="text-xs font-medium text-[var(--color-primary)] hover:underline"
           >
             Detail →

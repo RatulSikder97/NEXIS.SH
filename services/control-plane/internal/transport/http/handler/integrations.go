@@ -17,6 +17,7 @@ import (
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/dto"
 	appmw "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/middleware"
 )
@@ -60,7 +61,11 @@ func IntegrationsList(reg *integration.Registry) http.HandlerFunc {
 // is a free-form map fed to the adapter's Connect; each adapter validates its
 // own required keys (github wants installation_id, sentry wants webhook_secret).
 // On success an audit row is appended with the installation_id metadata.
-func IntegrationsConnect(reg *integration.Registry, aud domain.AuditWriter) http.HandlerFunc {
+//
+// appCfg is the process-wide config — used only to route the 400-arm
+// adapter error through safeErrorMessage so prod doesn't leak adapter
+// internals (e.g. raw HMAC mismatch strings, decode hints) to the wire.
+func IntegrationsConnect(reg *integration.Registry, aud domain.AuditWriter, appCfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		providerName := chi.URLParam(r, "provider")
@@ -69,7 +74,7 @@ func IntegrationsConnect(reg *integration.Registry, aud domain.AuditWriter) http
 			httpJSON(w, http.StatusNotFound, map[string]string{"error": "unknown provider"})
 			return
 		}
-		var cfg dto.ConnectReq
+		var connectCfg dto.ConnectReq
 		if r.ContentLength > 0 {
 			var raw map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
@@ -77,17 +82,17 @@ func IntegrationsConnect(reg *integration.Registry, aud domain.AuditWriter) http
 				return
 			}
 			if inner, ok := raw["config"].(map[string]any); ok {
-				cfg = dto.ConnectReq(inner)
+				connectCfg = dto.ConnectReq(inner)
 			} else {
-				cfg = dto.ConnectReq(raw)
+				connectCfg = dto.ConnectReq(raw)
 			}
 		}
-		if cfg == nil {
-			cfg = dto.ConnectReq{}
+		if connectCfg == nil {
+			connectCfg = dto.ConnectReq{}
 		}
-		c, err := p.Connect(r.Context(), princ, cfg)
+		c, err := p.Connect(r.Context(), princ, connectCfg)
 		if err != nil {
-			httpJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			httpJSON(w, http.StatusBadRequest, map[string]string{"error": safeErrorMessage(err, appCfg, "integrations.connect", "provider", providerName)})
 			return
 		}
 		if aud != nil {
@@ -103,7 +108,10 @@ func IntegrationsConnect(reg *integration.Registry, aud domain.AuditWriter) http
 // IntegrationsDisconnect wires DELETE /v1/integrations/{provider}. Idempotent
 // — the repo's Delete returns nil even if no row existed, so we always emit
 // 204 on a successful auth. The audit row is appended regardless.
-func IntegrationsDisconnect(reg *integration.Registry, aud domain.AuditWriter) http.HandlerFunc {
+//
+// appCfg routes the 500-arm error through safeErrorMessage so prod
+// returns "internal server error" instead of the raw cause.
+func IntegrationsDisconnect(reg *integration.Registry, aud domain.AuditWriter, appCfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		providerName := chi.URLParam(r, "provider")
@@ -113,7 +121,7 @@ func IntegrationsDisconnect(reg *integration.Registry, aud domain.AuditWriter) h
 			return
 		}
 		if err := p.Disconnect(r.Context(), princ); err != nil {
-			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": safeErrorMessage(err, appCfg, "integrations.disconnect", "provider", providerName)})
 			return
 		}
 		if aud != nil {

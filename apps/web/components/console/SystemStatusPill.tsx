@@ -18,6 +18,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 
 import { cn } from "@/lib/utils";
 import { integrations } from "@/lib/integrations";
@@ -105,7 +106,7 @@ export function SystemStatusPill({ collapsed }: { collapsed: boolean }) {
       label: `Down · ${s.down_count}`,
     },
     unknown: {
-      dot: "bg-zinc-400",
+      dot: "bg-[var(--color-muted-foreground)]/40",
       bg: "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] ring-[var(--color-border)]",
       label: "Status unknown",
     },
@@ -116,7 +117,7 @@ export function SystemStatusPill({ collapsed }: { collapsed: boolean }) {
   if (collapsed) {
     return (
       <Link
-        href={"/console/health" as never}
+        href={"/console/health" as Route}
         title={p.label}
         aria-label={`System status: ${p.label}`}
         className="flex items-center justify-center py-2"
@@ -135,7 +136,7 @@ export function SystemStatusPill({ collapsed }: { collapsed: boolean }) {
 
   return (
     <Link
-      href={"/console/health" as never}
+      href={"/console/health" as Route}
       aria-label={`System status: ${p.label}`}
       className={cn(
         "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium ring-1 transition-colors hover:bg-[var(--color-muted)]",

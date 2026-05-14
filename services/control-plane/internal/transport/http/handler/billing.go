@@ -18,6 +18,7 @@ import (
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/dto"
 	appmw "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/middleware"
@@ -113,7 +114,11 @@ func BillingAddPaymentMethod(provider domain.BillingProvider, aud domain.AuditWr
 // browser calls this before mounting Stripe Elements to obtain a
 // client_secret it can pass to stripe.confirmCardSetup. Owner-only via the
 // route registration in server.go.
-func BillingCreateSetupIntent(provider domain.BillingProvider, aud domain.AuditWriter) http.HandlerFunc {
+//
+// cfg is threaded so the 500-arm message respects safeErrorMessage's
+// dev/prod split — dev surfaces the Stripe error verbatim for debugging while
+// staging/prod returns "internal server error".
+func BillingCreateSetupIntent(provider domain.BillingProvider, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		secret, err := provider.CreateSetupIntent(r.Context(), princ)
@@ -122,7 +127,7 @@ func BillingCreateSetupIntent(provider domain.BillingProvider, aud domain.AuditW
 				writeError(w, http.StatusNotImplemented, "not implemented")
 				return
 			}
-			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": safeErrorMessage(err, cfg, "billing.create_setup_intent")})
 			return
 		}
 		// Audit only the intent creation — no payment method exists yet.
@@ -139,7 +144,13 @@ func BillingCreateSetupIntent(provider domain.BillingProvider, aud domain.AuditW
 // resulting pm_... id; the handler attaches the PM to the org's Stripe
 // customer, sets it as the default, and persists the brand/last4 projection.
 // Owner-only via the route registration in server.go.
-func BillingConfirmSetupIntent(provider domain.BillingProvider, aud domain.AuditWriter) http.HandlerFunc {
+//
+// cfg routes adapter errors through safeErrorMessage. The 400 branch is
+// preserved verbatim (Stripe surfaces user-actionable validation messages
+// like "card declined" that we want the client to display); only the 500
+// arm — which fires on adapter/network/unknown errors — is environment
+// gated.
+func BillingConfirmSetupIntent(provider domain.BillingProvider, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req dto.ConfirmSetupIntentReq
 		if !decodeBody(w, r, &req) {
@@ -156,7 +167,12 @@ func BillingConfirmSetupIntent(provider domain.BillingProvider, aud domain.Audit
 				writeError(w, http.StatusNotImplemented, "not implemented")
 				return
 			}
-			writeError(w, http.StatusBadRequest, err.Error())
+			// User-actionable validation messages flow through the 400 with the
+			// safe envelope: dev sees the underlying cause; prod sees only a
+			// generic "internal server error" string for unknown errors. A
+			// future refactor could classify Stripe declines (4xx) vs adapter
+			// failures (5xx) more precisely.
+			writeError(w, http.StatusBadRequest, safeErrorMessage(err, cfg, "billing.confirm_setup_intent"))
 			return
 		}
 		auditWrite(r, aud, princ, "billing.payment_method_attached", pm.ID, map[string]any{

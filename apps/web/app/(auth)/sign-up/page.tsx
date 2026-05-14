@@ -200,7 +200,7 @@ function PasswordSignUp() {
       } else {
         await auth.signup({ email, password, org_name: orgName });
       }
-      router.push("/dashboard");
+      router.push("/console");
     } catch (e) {
       if (e instanceof AuthError) setErr(e.message);
       else setErr("Something went wrong.");

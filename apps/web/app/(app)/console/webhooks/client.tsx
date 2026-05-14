@@ -52,7 +52,7 @@ const STATUS_PILL: Record<WebhookStatus, string> = {
   processed:
     "bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300",
   failed: "bg-red-500/15 text-red-700 ring-red-500/30 dark:text-red-300",
-  pending: "bg-zinc-500/15 text-zinc-700 ring-zinc-500/30 dark:text-zinc-300",
+  pending: "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] ring-[var(--color-border)]",
 };
 
 function StatusPill({ s }: { s: WebhookStatus }) {

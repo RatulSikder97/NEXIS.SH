@@ -198,14 +198,35 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		r.Get("/v1/invites/{token}", handler.InviteGet(deps.Auth))
 		r.Post("/v1/invites/{token}/claim", handler.InviteClaim(deps.Auth, cfg))
 
+		// Sentry probe — Phase 8 public-beta synthetic monitor. The
+		// signature IS the auth; no session is involved. Wires only when
+		// a secret is configured (env SENTRY_PROBE_SECRET or the legacy
+		// dev fallback GitHub default).
+		probeSecret := []byte(cfg.SentryProbeSecret)
+		if len(probeSecret) == 0 {
+			probeSecret = []byte(cfg.GitHubDefaultWebhookSecret)
+		}
+		if len(probeSecret) > 0 {
+			r.Post("/v1/integrations/sentry/probe", handler.SentryProbe(probeSecret))
+		}
+
 		// Public webhook ingest. HMAC-authenticated inside each adapter; no
 		// session cookie or bearer is involved. Pool argument is the admin
 		// pool — see handler.Webhook for the RLS pinning rationale.
 		//
 		// WebhookDeliveries (optional) records every attempt for the
 		// operator-side /v1/integrations/webhooks audit log.
+		//
+		// BodyLimit: webhook payloads can run larger than the protected /v1
+		// surface (Datadog/Sentry routinely ship multi-MB events). We cap at
+		// 5 MiB per delivery so a runaway upstream can't OOM the process;
+		// bodies bigger than the cap return 413 before the handler runs
+		// (SQA F-1).
 		if deps.Integrations != nil && deps.Pool != nil {
-			r.Post("/v1/webhooks/{provider}/{org_id}", handler.Webhook(deps.Integrations, deps.Pool, deps.WebhookDeliveries))
+			r.With(appmw.BodyLimit(5*1024*1024)).Post(
+				"/v1/webhooks/{provider}/{org_id}",
+				handler.Webhook(deps.Integrations, deps.Pool, deps.WebhookDeliveries, cfg),
+			)
 
 			// Task 8 — Datadog + PagerDuty webhook URLs are configured by the
 			// customer inside their own provider dashboard, so they cannot
@@ -213,10 +234,14 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			// `?org=<org_id>` query string instead. The handler is
 			// otherwise identical to Webhook above (same HMAC verify, same
 			// RLS pinning).
-			r.Post("/v1/integrations/datadog/webhook",
-				handler.WebhookByQuery(domain.IntegrationDatadog, deps.Integrations, deps.Pool, deps.WebhookDeliveries))
-			r.Post("/v1/integrations/pagerduty/webhook",
-				handler.WebhookByQuery(domain.IntegrationPagerDuty, deps.Integrations, deps.Pool, deps.WebhookDeliveries))
+			r.With(appmw.BodyLimit(5*1024*1024)).Post(
+				"/v1/integrations/datadog/webhook",
+				handler.WebhookByQuery(domain.IntegrationDatadog, deps.Integrations, deps.Pool, deps.WebhookDeliveries, cfg),
+			)
+			r.With(appmw.BodyLimit(5*1024*1024)).Post(
+				"/v1/integrations/pagerduty/webhook",
+				handler.WebhookByQuery(domain.IntegrationPagerDuty, deps.Integrations, deps.Pool, deps.WebhookDeliveries, cfg),
+			)
 		}
 
 		// Task 8 — Slack interactivity. Slack-signed POST; no session
@@ -245,7 +270,15 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		// Protected routes — RequireAuth issues 401 if no principal is in ctx;
 		// RLS (when an AppPool is wired) opens a per-request tx and binds
 		// app.current_org_id so tenant-table queries see only the caller's org.
+		//
+		// BodyLimit caps every protected request body at 1 MiB. The /v1
+		// surface is JSON-only with bounded shapes (auth bodies, project
+		// configs, eval payloads) so any caller pushing more than 1 MiB is
+		// either misconfigured or hostile. SSE streams and file-upload
+		// endpoints would need their own carve-outs; today none of the
+		// protected routes accept binary uploads. SQA F-1.
 		r.Group(func(g chi.Router) {
+			g.Use(appmw.BodyLimit(1 * 1024 * 1024))
 			g.Use(appmw.RequireAuth)
 			if deps.AppPool != nil {
 				g.Use(appmw.RLS(deps.AppPool))
@@ -261,6 +294,20 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			g.Get("/v1/me", handler.Me(deps.Auth, wsChecker))
 			g.Get("/v1/me/preferences", handler.GetPreferences(deps.Auth))
 			g.Patch("/v1/me/preferences", handler.PatchPreferences(deps.Auth, aud))
+
+			// Phase 8 — org stats. successful_recoveries_count for the
+			// current principal's org. Open to any authenticated principal
+			// so the dashboard topline tile renders for members.
+			if deps.OrgStats != nil {
+				g.Get("/v1/me/org-stats", handler.OrgStats(deps.OrgStats))
+			}
+
+			// Phase 8 — NASA-TLX workload survey. Per user × org (not per
+			// workspace). Any authenticated principal can submit after a
+			// recovery; the response body has the row id for follow-up edits.
+			if deps.NASATLX != nil {
+				g.Post("/v1/nasa-tlx", handler.NASATLXSubmit(deps.NASATLX, aud))
+			}
 
 			// Audit chain integrity verify endpoint. Reads the admin pool
 			// (deps.Pool) — see handler.AuditVerify for why it bypasses RLS.
@@ -369,8 +416,8 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 					g2.Get("/v1/audit.csv", handler.AuditCSV(deps.AuditLister))
 				}
 				if deps.Integrations != nil {
-					g2.Post("/v1/integrations/{provider}/connect", handler.IntegrationsConnect(deps.Integrations, aud))
-					g2.Delete("/v1/integrations/{provider}", handler.IntegrationsDisconnect(deps.Integrations, aud))
+					g2.Post("/v1/integrations/{provider}/connect", handler.IntegrationsConnect(deps.Integrations, aud, cfg))
+					g2.Delete("/v1/integrations/{provider}", handler.IntegrationsDisconnect(deps.Integrations, aud, cfg))
 					g2.Get("/v1/integrations/github/mock_install", handler.GitHubMockInstall(deps.Integrations, aud, cfg.AppBaseURL, cfg.AppEnv))
 
 					// Manual probe — operator forces a Status refresh on a
@@ -398,7 +445,7 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				// callers (future SDK / CLI / sentinel-triggered apply)
 				// pick up the same project.* audit actions.
 				if deps.Projects != nil {
-					g2.Post("/v1/workspaces/{ws_id}/projects", handler.ProjectsCreate(deps.Projects))
+					g2.Post("/v1/workspaces/{ws_id}/projects", handler.ProjectsCreate(deps.Projects, cfg))
 					g2.Patch("/v1/projects/{id}", handler.ProjectsPatch(deps.Projects))
 					g2.Delete("/v1/projects/{id}", handler.ProjectsArchive(deps.Projects))
 					g2.Put("/v1/projects/{id}/recovery-policy", handler.ProjectsPutPolicy(deps.Projects))
@@ -420,6 +467,14 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				// endpoint to watch openai_status + ollama_status.
 				if deps.EvalRunner != nil {
 					g2.Post("/v1/workspaces/{ws_id}/eval", handler.EvalRunCreate(deps.EvalRunner, aud))
+				}
+
+				// Phase 8 — seed-sample lets a freshly-onboarded org kick a
+				// recovery against the validator fixture without standing up
+				// a Sentry integration first. Owner|Admin so members can't
+				// fabricate runs against another tenant's workspace.
+				if deps.Workflows != nil {
+					g2.Post("/v1/workspaces/{ws_id}/seed-sample", handler.SeedSample(deps.Workflows, aud))
 				}
 
 				// Billing read paths + dev recompute are owner|admin.
@@ -451,8 +506,32 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 					// Phase 7 — Stripe SetupIntent flow used by Stripe Elements
 					// in the dashboard. Local provider serves synthetic secrets
 					// so the same wire surface works without STRIPE_SECRET_KEY.
-					g2.Post("/v1/billing/payment-method/intent", handler.BillingCreateSetupIntent(deps.Billing, aud))
-					g2.Post("/v1/billing/payment-method/confirm", handler.BillingConfirmSetupIntent(deps.Billing, aud))
+					g2.Post("/v1/billing/payment-method/intent", handler.BillingCreateSetupIntent(deps.Billing, aud, cfg))
+					g2.Post("/v1/billing/payment-method/confirm", handler.BillingConfirmSetupIntent(deps.Billing, aud, cfg))
+				}
+
+				// Phase 8 — owner-only admin surfaces.
+				//
+				//   /v1/invite-codes (POST/GET/DELETE) — system-wide invite
+				//     codes for the signup gate. Mint/list/revoke are owner-
+				//     elevated; redemption is wired into POST /v1/auth/signup
+				//     via the ?invite=<code> query param (public route).
+				//   /v1/admin/eval-export — CSV dump of the eval matrix.
+				//     Carries token + cost data not exposed to members.
+				//   /v1/admin/sentinel/trigger — manual sentinel escape hatch
+				//     so operators can demo a recovery without waiting for a
+				//     real Sentry fatal. Cannot target another org (the
+				//     handler also enforces the principal-org check).
+				if deps.InviteCodes != nil {
+					g2.Post("/v1/invite-codes", handler.InviteCodesCreate(deps.InviteCodes, aud))
+					g2.Get("/v1/invite-codes", handler.InviteCodesList(deps.InviteCodes))
+					g2.Delete("/v1/invite-codes/{code}", handler.InviteCodesRevoke(deps.InviteCodes, aud))
+				}
+				if deps.EvalRepo != nil {
+					g2.Get("/v1/admin/eval-export", handler.AdminEvalExport(deps.EvalRepo))
+				}
+				if deps.Sentinel != nil {
+					g2.Post("/v1/admin/sentinel/trigger", handler.SentinelTrigger(deps.Sentinel, aud))
 				}
 			})
 		})

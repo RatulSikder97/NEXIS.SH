@@ -13,6 +13,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { ArrowDownRight, ArrowRight, ArrowUpRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -161,7 +162,7 @@ export function KpiCard({
   if (href) {
     return (
       <Link
-        href={href as never}
+        href={href as Route}
         aria-label={ariaLabel ?? label}
         className={cn(shell, hoverable, "group", className)}
       >

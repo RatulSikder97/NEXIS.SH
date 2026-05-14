@@ -73,7 +73,7 @@ function SubsystemCard({ row }: { row: SubsystemRow }) {
         ? "bg-amber-500"
         : row.state === "down"
           ? "bg-red-500"
-          : "bg-zinc-400";
+          : "bg-[var(--color-muted-foreground)]/40";
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4">
       <div className="flex items-center justify-between">

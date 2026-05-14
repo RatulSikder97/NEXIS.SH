@@ -29,9 +29,9 @@ const KIND_PALETTE: Record<Kind, { bg: string; fg: string; ring: string; label: 
     label: "start",
   },
   log: {
-    bg: "bg-zinc-500/15",
-    fg: "text-zinc-700 dark:text-zinc-300",
-    ring: "ring-zinc-500/30",
+    bg: "bg-[var(--color-muted)]",
+    fg: "text-[var(--color-muted-foreground)]",
+    ring: "ring-[var(--color-border)]",
     label: "log",
   },
   finish: {

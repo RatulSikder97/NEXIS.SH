@@ -13,6 +13,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import {
   Activity,
   Database,
@@ -145,7 +146,7 @@ export function SystemStatusPanel() {
           </p>
         </div>
         <Link
-          href={"/console/health" as never}
+          href={"/console/health" as Route}
           className="text-xs font-medium text-[var(--color-primary)] hover:underline"
         >
           Full health board →
@@ -167,7 +168,7 @@ export function SystemStatusPanel() {
                     ? "bg-amber-500"
                     : s.state === "down"
                       ? "bg-red-500"
-                      : "bg-zinc-400";
+                      : "bg-[var(--color-muted-foreground)]/40";
               return (
                 <div
                   key={s.key}
@@ -204,7 +205,7 @@ export function SystemStatusPanel() {
           </p>
           {rows.length === 0 ? (
             <p className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-background)] px-3 py-3 text-xs text-[var(--color-muted-foreground)]">
-              No integration connections yet. Connect one from <Link href={"/console/integrations" as never} className="font-medium text-[var(--color-primary)] underline">Integrations</Link> to see live probe health.
+              No integration connections yet. Connect one from <Link href={"/console/integrations" as Route} className="font-medium text-[var(--color-primary)] underline">Integrations</Link> to see live probe health.
             </p>
           ) : (
             <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">

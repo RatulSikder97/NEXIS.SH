@@ -28,7 +28,7 @@ function formatUSD(cents: number): string {
 const STATUS_STYLE: Record<Invoice["status"], string> = {
   paid: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
   open: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30",
-  void: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30",
+  void: "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] border-[var(--color-border)]",
 };
 
 export function InvoicesTable({ invoices }: { invoices: Invoice[] }) {

@@ -11,6 +11,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { Bell, ExternalLink } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -182,7 +183,7 @@ export function NotificationsBell() {
             </ul>
           )}
           <Link
-            href={"/console/activity" as never}
+            href={"/console/activity" as Route}
             onClick={() => setOpen(false)}
             className="flex items-center justify-between gap-2 border-t border-[var(--color-border)] bg-[var(--color-muted)]/30 px-3 py-2 text-xs font-medium text-[var(--color-foreground)] hover:bg-[var(--color-muted)]"
           >

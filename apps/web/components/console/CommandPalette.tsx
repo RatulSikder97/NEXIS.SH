@@ -9,6 +9,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { Command } from "cmdk";
 import {
   AlertTriangle,
@@ -69,8 +70,8 @@ export function CommandPalette() {
 
   function go(href: string) {
     setOpen(false);
-    // typedRoutes accepts Route, our href is a known string; cast via unknown.
-    router.push(href as unknown as never);
+    // typedRoutes accepts Route, our href is a known string; cast via Route.
+    router.push(href as Route);
   }
 
   return (

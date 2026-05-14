@@ -523,16 +523,19 @@ func loadAgentStats(ctx context.Context, pool *pgxpool.Pool, orgID string, since
 
 	// Recent runs + token totals from activity_events.
 	// Each finish-frame carries the agent payload (tokens_in/tokens_out/cost_cents).
+	// Note: activity_events has a `status` column (started|succeeded|failed|
+	// timed_out), not `kind`. A "finish" frame is any row with
+	// status='succeeded' — the same predicate loadAgentRuns uses.
 	rows, err := pool.Query(ctx, `
 		SELECT agent_role,
-		       COUNT(*) FILTER (WHERE kind='finish') AS finishes,
-		       COUNT(*) FILTER (WHERE kind='finish' AND payload->>'degraded' = 'true') AS degraded,
-		       COALESCE(SUM((payload->>'tokens_in')::int) FILTER (WHERE kind='finish'), 0) AS tokens_in,
-		       COALESCE(SUM((payload->>'tokens_out')::int) FILTER (WHERE kind='finish'), 0) AS tokens_out,
-		       COALESCE(SUM((payload->>'cost_cents')::numeric) FILTER (WHERE kind='finish'), 0) AS cost_cents,
+		       COUNT(*) FILTER (WHERE status='succeeded') AS finishes,
+		       COUNT(*) FILTER (WHERE status='succeeded' AND payload->>'degraded' = 'true') AS degraded,
+		       COALESCE(SUM((payload->>'tokens_in')::int) FILTER (WHERE status='succeeded'), 0) AS tokens_in,
+		       COALESCE(SUM((payload->>'tokens_out')::int) FILTER (WHERE status='succeeded'), 0) AS tokens_out,
+		       COALESCE(SUM((payload->>'cost_cents')::numeric) FILTER (WHERE status='succeeded'), 0) AS cost_cents,
 		       MAX(ts) AS last_seen,
-		       COALESCE(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY (payload->>'duration_ms')::int) FILTER (WHERE kind='finish'), 0) AS p50,
-		       COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY (payload->>'duration_ms')::int) FILTER (WHERE kind='finish'), 0) AS p95
+		       COALESCE(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY (payload->>'duration_ms')::int) FILTER (WHERE status='succeeded'), 0) AS p50,
+		       COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY (payload->>'duration_ms')::int) FILTER (WHERE status='succeeded'), 0) AS p95
 		FROM activity_events ae
 		JOIN workflow_runs wr ON wr.id = ae.workflow_run_id
 		WHERE wr.org_id = $1 AND ae.ts >= $2

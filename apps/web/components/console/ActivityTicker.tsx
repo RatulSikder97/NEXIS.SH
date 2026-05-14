@@ -16,6 +16,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 
 import { cn } from "@/lib/utils";
 import { formatRelative } from "@/lib/agents-format";
@@ -93,7 +94,7 @@ export function ActivityTicker({ collapsed }: { collapsed: boolean }) {
 
   return (
     <Link
-      href={"/console/activity" as never}
+      href={"/console/activity" as Route}
       aria-label="View activity stream"
       className={cn(
         "block rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2.5 py-1.5 text-[11px] text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)]",

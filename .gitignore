@@ -17,6 +17,12 @@ dist/
 .env.*.local
 .envrc.local
 
+# secret material — only *.example placeholders may be checked in
+secrets/*.pem
+secrets/*.key
+secrets/*.crt
+!secrets/*.example
+
 # OS / editor
 .DS_Store
 .idea/

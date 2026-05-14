@@ -15,6 +15,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 
 import { cn } from "@/lib/utils";
 import { pipelines, type WorkflowRun } from "@/lib/pipelines";
@@ -148,7 +149,7 @@ export function RecoveryPipelineMini() {
           </p>
         </div>
         <Link
-          href={"/console/recovery" as never}
+          href={"/console/recovery" as Route}
           className="text-xs font-medium text-[var(--color-primary)] hover:underline"
         >
           {totalActive > 0
@@ -166,7 +167,7 @@ export function RecoveryPipelineMini() {
               <React.Fragment key={s.key}>
                 <li className="flex flex-col items-center">
                   <Link
-                    href={"/console/recovery" as never}
+                    href={"/console/recovery" as Route}
                     title={s.description}
                     className={cn(
                       "group flex h-12 w-24 flex-col items-center justify-center rounded-md border px-2 py-1 transition-colors",

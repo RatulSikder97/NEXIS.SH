@@ -237,7 +237,11 @@ func loadFixtureIncident(scenario string) map[string]any {
 // whitelisted (see demoScenarios) and stamped onto the workflow input so the
 // recovery DAG can branch on the seeded failure type. An empty/absent body
 // defaults to "synthetic".
-func PipelineDemo(svc domain.WorkflowService, aud domain.AuditWriter, _ config.Config) http.HandlerFunc {
+//
+// cfg is used to route the 500-arm error through safeErrorMessage so prod
+// returns a generic message even though this route is dev-gated today — keeps
+// the behaviour consistent with the rest of the surface.
+func PipelineDemo(svc domain.WorkflowService, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		wsID := chi.URLParam(r, "ws_id")
@@ -280,7 +284,7 @@ func PipelineDemo(svc domain.WorkflowService, aud domain.AuditWriter, _ config.C
 				writeError(w, http.StatusNotFound, "not found")
 				return
 			}
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, http.StatusInternalServerError, safeErrorMessage(err, cfg, "pipelines.demo", "workspace_id", wsID, "scenario", req.Scenario))
 			return
 		}
 		auditWrite(r, aud, princ, "pipelines.demo", run.ID, map[string]any{

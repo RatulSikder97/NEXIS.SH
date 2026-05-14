@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/dto"
 	appmw "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/middleware"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
@@ -34,7 +35,11 @@ type ProjectsService interface {
 }
 
 // ProjectsCreate wires POST /v1/workspaces/{ws_id}/projects. Owner|Admin.
-func ProjectsCreate(svc ProjectsService) http.HandlerFunc {
+//
+// cfg routes the unknown-error arm through safeErrorMessage so dev surfaces
+// the underlying cause and staging/prod return only "internal server error".
+// The 4xx mappings in mapProjectError are user-actionable and stay as-is.
+func ProjectsCreate(svc ProjectsService, cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		wsID := chi.URLParam(r, "ws_id")
 		if wsID == "" {
@@ -65,7 +70,7 @@ func ProjectsCreate(svc ProjectsService) http.HandlerFunc {
 		}
 		p, err := svc.Create(r.Context(), princ, in)
 		if err != nil {
-			mapProjectError(w, err)
+			mapProjectErrorSafe(w, err, cfg, "projects.create")
 			return
 		}
 		writeJSON(w, http.StatusCreated, toProjectResp(p))
@@ -216,8 +221,23 @@ func ProjectsPutPolicy(svc ProjectsService) http.HandlerFunc {
 
 // mapProjectError converts a domain/usecase error to an HTTP status + body.
 // Sentinel errors (ErrCapExceeded, ErrIntegrationRequired, ...) map to
-// specific 4xx codes; everything else lands on 500.
+// specific 4xx codes; everything else lands on 500 with the legacy generic
+// "internal error" message. Callers that thread a config.Config should use
+// mapProjectErrorSafe instead so dev surfaces the underlying cause.
 func mapProjectError(w http.ResponseWriter, err error) {
+	mapProjectErrorImpl(w, err, nil, "projects")
+}
+
+// mapProjectErrorSafe is the env-aware variant. The unknown-error arm routes
+// through safeErrorMessage so dev exposes the cause; staging/prod return only
+// "internal server error".
+func mapProjectErrorSafe(w http.ResponseWriter, err error, cfg config.Config, op string) {
+	mapProjectErrorImpl(w, err, &cfg, op)
+}
+
+// mapProjectErrorImpl is the shared body. cfg may be nil; when nil the
+// unknown arm falls back to the legacy "internal error" string.
+func mapProjectErrorImpl(w http.ResponseWriter, err error, cfg *config.Config, op string) {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not found")
@@ -232,6 +252,10 @@ func mapProjectError(w http.ResponseWriter, err error) {
 	case errors.Is(err, usecase.ErrSlugAllocationFailed):
 		writeError(w, http.StatusConflict, "slug allocation failed")
 	default:
+		if cfg != nil {
+			writeError(w, http.StatusInternalServerError, safeErrorMessage(err, *cfg, op))
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}
 }

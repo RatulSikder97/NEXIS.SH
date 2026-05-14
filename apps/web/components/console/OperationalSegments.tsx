@@ -65,8 +65,8 @@ const STATUS_DOT: Record<SegmentStatus, string> = {
   running: "bg-blue-500",
   succeeded: "bg-emerald-500",
   failed: "bg-red-500",
-  pending: "bg-zinc-400",
-  skipped: "bg-zinc-300",
+  pending: "bg-[var(--color-muted-foreground)]/40",
+  skipped: "bg-[var(--color-border)]",
 };
 
 const STATUS_PILL: Record<SegmentStatus, string> = {
@@ -77,9 +77,9 @@ const STATUS_PILL: Record<SegmentStatus, string> = {
   failed:
     "bg-red-500/15 text-red-700 ring-red-500/30 dark:text-red-300",
   pending:
-    "bg-zinc-500/15 text-zinc-700 ring-zinc-500/30 dark:text-zinc-300",
+    "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] ring-[var(--color-border)]",
   skipped:
-    "bg-zinc-500/10 text-zinc-600 ring-zinc-500/20 dark:text-zinc-400",
+    "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]/80 ring-[var(--color-border)]",
 };
 
 function PayloadBlock({ payload }: { payload: Record<string, unknown> }) {

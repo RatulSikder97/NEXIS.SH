@@ -30,7 +30,7 @@ const DOT_COLOR: Record<WorkspaceStatus, string> = {
   ready: "bg-emerald-500",
   provisioning: "bg-amber-500",
   error: "bg-red-500",
-  suspended: "bg-gray-400",
+  suspended: "bg-[var(--color-muted-foreground)]/40",
 };
 
 const STATUS_LABEL: Record<WorkspaceStatus, string> = {

@@ -16,6 +16,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
@@ -98,7 +99,7 @@ function ActionButton({
   }
   if (href && !disabled) {
     return (
-      <Link href={href as never} className="block">
+      <Link href={href as Route} className="block">
         {inner}
       </Link>
     );
@@ -133,7 +134,7 @@ export function QuickActionsRow() {
         scenario: "schema-drift",
         source: "dashboard",
       });
-      router.push(`/console/incidents/${run.id}` as never);
+      router.push(`/console/incidents/${run.id}` as Route);
     } catch (err) {
       setDemoError(err instanceof Error ? err.message : "Demo unavailable");
     } finally {

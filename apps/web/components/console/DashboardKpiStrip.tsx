@@ -17,6 +17,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import {
   AlertTriangle,
   CheckSquare,
@@ -106,7 +107,7 @@ function KpiCard({
   };
   return (
     <Link
-      href={href as never}
+      href={href as Route}
       className="group block rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4 transition-colors hover:border-[var(--color-primary)]/40 hover:bg-[var(--color-muted)]/30"
     >
       <div className="flex items-center justify-between">

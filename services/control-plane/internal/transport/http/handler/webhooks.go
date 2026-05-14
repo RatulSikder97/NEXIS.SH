@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
 )
 
@@ -147,6 +149,99 @@ func logDelivery(
 	}
 }
 
+// extractProviderEventID returns the provider-specific delivery id used for
+// idempotent webhook handling. Each provider has its own convention:
+//
+//   - GitHub:    X-GitHub-Delivery header (canonical id per delivery)
+//   - Sentry:    payload.event_id (top-level UUID)
+//   - Datadog:   X-Datadog-Request-Id header, falls back to payload.request_id
+//   - PagerDuty: payload.id (the top-level event id, also surfaced in v3 schema)
+//   - Slack:     payload.event_id (events API id, distinct from event.id)
+//
+// Returns "" when no recognisable id is present — the caller should skip the
+// idempotency dedupe in that case (write paths still complete, just without
+// dedupe protection — accepting the duplicate-write risk over rejecting a
+// well-formed but un-id'd delivery).
+//
+// The body parse is bounded by maxWebhookPayloadBytes so a runaway upstream
+// can't burn CPU on a JSON pass. We probe a fixed small shape instead of
+// unmarshalling into map[string]any to minimise allocations.
+func extractProviderEventID(provider string, hdrs map[string]string, body []byte) string {
+	// Header-only providers first — cheapest path. Header map keys are
+	// canonicalised via http.Header.Get-style title case in the caller's
+	// snapshot loop, so the lookups below match.
+	if provider == "github" {
+		if v := strings.TrimSpace(hdrs["X-Github-Delivery"]); v != "" {
+			return v
+		}
+		return ""
+	}
+	if provider == "datadog" {
+		if v := strings.TrimSpace(hdrs["X-Datadog-Request-Id"]); v != "" {
+			return v
+		}
+		// fall through to body probe for older Datadog templates
+	}
+
+	// Body-based providers: bounded JSON probe with a small shape so we
+	// don't allocate the full payload twice.
+	var probe struct {
+		EventID   string `json:"event_id"`
+		ID        string `json:"id"`
+		RequestID string `json:"request_id"`
+	}
+	if len(body) > 0 && len(body) < 256*1024 {
+		_ = json.Unmarshal(body, &probe)
+	}
+	switch provider {
+	case "sentry", "slack":
+		return strings.TrimSpace(probe.EventID)
+	case "pagerduty":
+		return strings.TrimSpace(probe.ID)
+	case "datadog":
+		return strings.TrimSpace(probe.RequestID)
+	}
+	return ""
+}
+
+// stashIdempotencyKey records the canonical event id on the headers map under
+// a uniform key so the SQL dedupe lookup (ExistsByProviderEventID) is
+// provider-agnostic. The original provider-specific header (if any) is
+// already inside hdrs verbatim — the canonical key is additive, never a
+// rename, so audit rows stay correct.
+func stashIdempotencyKey(hdrs map[string]string, eventID string) {
+	if hdrs == nil || eventID == "" {
+		return
+	}
+	hdrs["Idempotency-Key"] = eventID
+}
+
+// validateOrgID returns true when orgID parses as a UUID AND a matching row
+// exists in the organizations table. The handler rejects mismatched orgs
+// with 400 invalid_org_id so an attacker can't pivot a webhook URL to a
+// non-existent tenant and slip a row into webhook_deliveries under that id.
+//
+// pool may be nil (no-pool dev path); in that case we fall back to the
+// UUID-only check so unit tests stay green without a live DB.
+func validateOrgID(ctx context.Context, pool *pgxpool.Pool, orgID string) bool {
+	if _, err := uuid.Parse(orgID); err != nil {
+		return false
+	}
+	if pool == nil {
+		return true
+	}
+	var exists bool
+	if err := pool.QueryRow(ctx, `
+        SELECT EXISTS (SELECT 1 FROM organizations WHERE id=$1::uuid)`, orgID,
+	).Scan(&exists); err != nil {
+		slog.Default().Warn("webhook: org existence check", "org_id", orgID, "err", err)
+		// Fail closed on DB error — better to 4xx and let the upstream retry
+		// than to accept a delivery we can't tie back to a real tenant.
+		return false
+	}
+	return exists
+}
+
 // Webhook is the public ingest for provider webhooks. The URL carries the
 // provider name and the destination org_id so the adapter knows where to
 // charge persisted rows; there is no session cookie or bearer — the integrity
@@ -168,7 +263,7 @@ func logDelivery(
 // deliveries (optional) records every attempt — verified, rejected,
 // processed, failed — for the operator-facing /v1/integrations/webhooks log.
 // When nil the function still works (the dev no-pool boot path).
-func Webhook(reg *integration.Registry, pool *pgxpool.Pool, deliveries *repo.WebhookDeliveriesRepo) http.HandlerFunc {
+func Webhook(reg *integration.Registry, pool *pgxpool.Pool, deliveries *repo.WebhookDeliveriesRepo, appCfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
 		providerName := chi.URLParam(r, "provider")
@@ -180,6 +275,16 @@ func Webhook(reg *integration.Registry, pool *pgxpool.Pool, deliveries *repo.Web
 		hdrs := make(map[string]string, len(r.Header))
 		for k := range r.Header {
 			hdrs[k] = r.Header.Get(k)
+		}
+
+		// Validate org id BEFORE reading the body so a forged URL is rejected
+		// without burning the body buffer. UUID-shape + organizations.id
+		// existence check; 400 invalid_org_id on either failure (SQA F-3).
+		if !validateOrgID(r.Context(), pool, orgID) {
+			httpJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_org_id"})
+			logDelivery(r.Context(), deliveries, "", providerName,
+				providerName+".webhook", "rejected", time.Since(started), nil, hdrs, sourceIP, "invalid org_id")
+			return
 		}
 
 		body, berr := io.ReadAll(r.Body)
@@ -199,11 +304,31 @@ func Webhook(reg *integration.Registry, pool *pgxpool.Pool, deliveries *repo.Web
 			return
 		}
 
+		// Idempotency dedupe (SQA F-10). Extract the provider's canonical
+		// delivery id, stash it on the headers map under "Idempotency-Key" so
+		// the SQL lookup is uniform, then short-circuit if we've already
+		// processed (org_id, provider, eventID). Missing id → skip dedupe and
+		// accept the delivery (we can't dedupe what isn't there).
+		eventID := extractProviderEventID(providerName, hdrs, body)
+		stashIdempotencyKey(hdrs, eventID)
+		if eventID != "" {
+			alreadyProcessed, err := deliveries.ExistsByProviderEventID(r.Context(), orgID, providerName, eventID)
+			if err != nil {
+				slog.Default().Warn("webhook: idempotency lookup", "provider", providerName, "err", err)
+				// Fail-open on the lookup itself: the worst case is processing a
+				// duplicate, which is what we have today — refusing to accept any
+				// delivery because the dedupe table is unreachable would be a
+				// strictly worse availability story.
+			} else if alreadyProcessed {
+				httpJSON(w, http.StatusOK, map[string]string{"status": "already_processed"})
+				return
+			}
+		}
+
 		ctx := r.Context()
 		tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
-			slog.Default().Error("webhook: begin tx", "err", err)
-			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": safeErrorMessage(err, appCfg, "webhook.begin_tx", "provider", providerName)})
 			logDelivery(ctx, deliveries, orgID, providerName,
 				eventType, "failed", time.Since(started), body, hdrs, sourceIP, err.Error())
 			return
@@ -215,8 +340,7 @@ func Webhook(reg *integration.Registry, pool *pgxpool.Pool, deliveries *repo.Web
 		}()
 
 		if _, err := tx.Exec(ctx, "SELECT set_config('app.current_org_id', $1, true)", orgID); err != nil {
-			slog.Default().Error("webhook: set org_id", "err", err, "org_id", orgID)
-			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": safeErrorMessage(err, appCfg, "webhook.set_org_id", "provider", providerName, "org_id", orgID)})
 			logDelivery(ctx, deliveries, orgID, providerName,
 				eventType, "failed", time.Since(started), body, hdrs, sourceIP, err.Error())
 			return
@@ -228,15 +352,16 @@ func Webhook(reg *integration.Registry, pool *pgxpool.Pool, deliveries *repo.Web
 			// HMAC failures are the canonical 401 signal — every adapter
 			// returns an error containing "HMAC mismatch" or "missing
 			// signature" on auth failure. Map both to 401 so the client can
-			// distinguish from a transient 500.
+			// distinguish from a transient 500. The HMAC error string is
+			// safe to surface (it doesn't carry secrets) and the upstream
+			// hook config UI typically displays it.
 			if isHMACError(hErr) {
 				httpJSON(w, http.StatusUnauthorized, map[string]string{"error": hErr.Error()})
 				logDelivery(ctx, deliveries, orgID, providerName,
 					eventType, "rejected", time.Since(started), body, hdrs, sourceIP, hErr.Error())
 				return
 			}
-			slog.Default().Error("webhook handler", "provider", providerName, "err", hErr)
-			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": hErr.Error()})
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": safeErrorMessage(hErr, appCfg, "webhook.handle", "provider", providerName)})
 			logDelivery(ctx, deliveries, orgID, providerName,
 				eventType, "failed", time.Since(started), body, hdrs, sourceIP, hErr.Error())
 			return
@@ -250,8 +375,7 @@ func Webhook(reg *integration.Registry, pool *pgxpool.Pool, deliveries *repo.Web
 			eventType, "processed", time.Since(started), body, hdrs, sourceIP, "")
 
 		if err := tx.Commit(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			slog.Default().Error("webhook: commit", "err", err)
-			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": "commit"})
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": safeErrorMessage(err, appCfg, "webhook.commit", "provider", providerName)})
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -269,7 +393,7 @@ func Webhook(reg *integration.Registry, pool *pgxpool.Pool, deliveries *repo.Web
 // 401 mapping. Missing `?org` returns 404 — without a target org the adapter
 // has no key to look up and we want this to look like a routing failure to
 // the upstream so it doesn't keep retrying.
-func WebhookByQuery(provider domain.IntegrationProvider, reg *integration.Registry, pool *pgxpool.Pool, deliveries *repo.WebhookDeliveriesRepo) http.HandlerFunc {
+func WebhookByQuery(provider domain.IntegrationProvider, reg *integration.Registry, pool *pgxpool.Pool, deliveries *repo.WebhookDeliveriesRepo, appCfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
 		sourceIP := clientIPFromRequest(r)
@@ -280,10 +404,20 @@ func WebhookByQuery(provider domain.IntegrationProvider, reg *integration.Regist
 			hdrs[k] = r.Header.Get(k)
 		}
 
+		// Validate ?org=... is a UUID AND points to a real organization
+		// (SQA F-3). A missing param previously surfaced as 404 to look like
+		// a routing miss to the upstream; a malformed/non-existent UUID
+		// is 400 invalid_org_id so the client can distinguish.
 		if orgID == "" {
 			httpJSON(w, http.StatusNotFound, map[string]string{"error": "missing org query parameter"})
 			logDelivery(r.Context(), deliveries, "", providerName,
 				providerName+".webhook", "rejected", time.Since(started), nil, hdrs, sourceIP, "missing org")
+			return
+		}
+		if !validateOrgID(r.Context(), pool, orgID) {
+			httpJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_org_id"})
+			logDelivery(r.Context(), deliveries, "", providerName,
+				providerName+".webhook", "rejected", time.Since(started), nil, hdrs, sourceIP, "invalid org_id")
 			return
 		}
 		body, berr := io.ReadAll(r.Body)
@@ -303,11 +437,23 @@ func WebhookByQuery(provider domain.IntegrationProvider, reg *integration.Regist
 			return
 		}
 
+		// Idempotency dedupe — same shape as Webhook above.
+		eventID := extractProviderEventID(providerName, hdrs, body)
+		stashIdempotencyKey(hdrs, eventID)
+		if eventID != "" {
+			alreadyProcessed, err := deliveries.ExistsByProviderEventID(r.Context(), orgID, providerName, eventID)
+			if err != nil {
+				slog.Default().Warn("webhook_q: idempotency lookup", "provider", providerName, "err", err)
+			} else if alreadyProcessed {
+				httpJSON(w, http.StatusOK, map[string]string{"status": "already_processed"})
+				return
+			}
+		}
+
 		ctx := r.Context()
 		tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
-			slog.Default().Error("webhook_q: begin tx", "err", err)
-			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": safeErrorMessage(err, appCfg, "webhook_q.begin_tx", "provider", providerName)})
 			logDelivery(ctx, deliveries, orgID, providerName,
 				eventType, "failed", time.Since(started), body, hdrs, sourceIP, err.Error())
 			return
@@ -319,8 +465,7 @@ func WebhookByQuery(provider domain.IntegrationProvider, reg *integration.Regist
 		}()
 
 		if _, err := tx.Exec(ctx, "SELECT set_config('app.current_org_id', $1, true)", orgID); err != nil {
-			slog.Default().Error("webhook_q: set org_id", "err", err, "org_id", orgID)
-			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": safeErrorMessage(err, appCfg, "webhook_q.set_org_id", "provider", providerName, "org_id", orgID)})
 			logDelivery(ctx, deliveries, orgID, providerName,
 				eventType, "failed", time.Since(started), body, hdrs, sourceIP, err.Error())
 			return
@@ -335,9 +480,7 @@ func WebhookByQuery(provider domain.IntegrationProvider, reg *integration.Regist
 					eventType, "rejected", time.Since(started), body, hdrs, sourceIP, hErr.Error())
 				return
 			}
-			slog.Default().Error("webhook_q handler",
-				"provider", providerName, "err", hErr)
-			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": hErr.Error()})
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": safeErrorMessage(hErr, appCfg, "webhook_q.handle", "provider", providerName)})
 			logDelivery(ctx, deliveries, orgID, providerName,
 				eventType, "failed", time.Since(started), body, hdrs, sourceIP, hErr.Error())
 			return
@@ -347,8 +490,7 @@ func WebhookByQuery(provider domain.IntegrationProvider, reg *integration.Regist
 			eventType, "processed", time.Since(started), body, hdrs, sourceIP, "")
 
 		if err := tx.Commit(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			slog.Default().Error("webhook_q: commit", "err", err)
-			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": "commit"})
+			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": safeErrorMessage(err, appCfg, "webhook_q.commit", "provider", providerName)})
 			return
 		}
 		w.WriteHeader(http.StatusOK)

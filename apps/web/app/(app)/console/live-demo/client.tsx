@@ -260,7 +260,7 @@ function ScenarioCard({
         <SeverityPill severity={scenario.severity} />
         <SourceChip source={scenario.source_provider} />
         {!ready && (
-          <span className="inline-flex items-center rounded-full bg-zinc-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest text-zinc-600 ring-1 ring-zinc-500/20 dark:text-zinc-400">
+          <span className="inline-flex items-center rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest text-[var(--color-muted-foreground)] ring-1 ring-[var(--color-border)]">
             Coming soon
           </span>
         )}
@@ -368,7 +368,7 @@ function RunningModal({
                         ? "bg-emerald-500"
                         : active
                           ? "animate-pulse bg-[var(--color-primary)]"
-                          : "bg-zinc-400/50",
+                          : "bg-[var(--color-muted-foreground)]/25",
                     )}
                   />
                   <span

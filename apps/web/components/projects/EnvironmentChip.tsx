@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import type { ProjectEnvironment } from "@/lib/projects";
 
 const ENV_STYLES: Record<ProjectEnvironment, string> = {
-  dev: "bg-zinc-500/10 text-zinc-700 ring-zinc-500/30 dark:text-zinc-300",
+  dev: "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] ring-[var(--color-border)]",
   staging: "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300",
   prod: "bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300",
 };

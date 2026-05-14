@@ -8,6 +8,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { ChevronRight } from "lucide-react";
 
 import { formatRelative } from "@/lib/agents-format";
@@ -77,7 +78,7 @@ export function RecentActivityFeed({ initial }: { initial: Row[] }) {
           </p>
         </div>
         <Link
-          href={"/console/activity" as never}
+          href={"/console/activity" as Route}
           className="text-xs font-medium text-[var(--color-primary)] hover:underline"
         >
           View all →

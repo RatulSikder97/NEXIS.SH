@@ -104,7 +104,7 @@ export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
           users have a quick path back to /console without scrolling. */}
       {signedIn ? (
         <Link
-          href={"/console/dashboard" as Route}
+          href={"/console" as Route}
           className="absolute bottom-6 right-6 z-10 hidden md:inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-card)]/90 px-4 py-2 text-[13px] font-medium text-[var(--color-foreground)] shadow-sm backdrop-blur-sm transition-colors hover:bg-[var(--color-card)]"
         >
           Skip to dashboard

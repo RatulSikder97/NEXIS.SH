@@ -81,7 +81,7 @@ export function ConfidencePill({
     return (
       <span
         className={cn(
-          "inline-flex items-center rounded-full bg-zinc-500/10 px-2 py-0.5 text-[10px] font-medium text-zinc-600 ring-1 ring-zinc-500/20 dark:text-zinc-300",
+          "inline-flex items-center rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] ring-1 ring-[var(--color-border)]",
           className,
         )}
       >

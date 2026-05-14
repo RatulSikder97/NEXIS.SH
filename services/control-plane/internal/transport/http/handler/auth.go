@@ -93,8 +93,26 @@ func clearSessionCookie(w http.ResponseWriter, cfg config.Config) {
 }
 
 // mapAuthError converts a domain error to an HTTP status + user-safe message.
-// Unknown errors are logged and reported as 500.
+// Unknown errors are logged and reported as 500. The wire message for the
+// unknown arm is always "internal error" — handlers that also receive a
+// config.Config (Login, Signup, Logout) should call mapAuthErrorSafe instead
+// so dev mode surfaces the underlying cause.
 func mapAuthError(w http.ResponseWriter, err error, op string) {
+	mapAuthErrorImpl(w, err, op, nil)
+}
+
+// mapAuthErrorSafe is the env-aware variant of mapAuthError used by the
+// handlers that already take a config.Config. The unknown-error arm routes
+// through safeErrorMessage so dev surfaces the underlying cause while
+// staging/prod return only "internal server error".
+func mapAuthErrorSafe(w http.ResponseWriter, err error, op string, cfg config.Config) {
+	mapAuthErrorImpl(w, err, op, &cfg)
+}
+
+// mapAuthErrorImpl is the shared body. cfg may be nil; when nil the unknown
+// arm falls back to the legacy "internal error" string (preserved for the
+// MFA/APIKey/Me handlers that don't thread cfg today).
+func mapAuthErrorImpl(w http.ResponseWriter, err error, op string, cfg *config.Config) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidCredentials):
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
@@ -111,6 +129,10 @@ func mapAuthError(w http.ResponseWriter, err error, op string) {
 	case errors.Is(err, domain.ErrConflict):
 		writeError(w, http.StatusConflict, "email already registered")
 	default:
+		if cfg != nil {
+			writeError(w, http.StatusInternalServerError, safeErrorMessage(err, *cfg, op))
+			return
+		}
 		slog.Default().Error("auth handler", "op", op, "err", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}
@@ -186,7 +208,7 @@ func Signup(
 			OrgName:  req.OrgName,
 		})
 		if err != nil {
-			mapAuthError(w, err, "signup")
+			mapAuthErrorSafe(w, err, "signup", cfg)
 			return
 		}
 		setSessionCookie(w, cfg, res.Session)
@@ -229,7 +251,7 @@ func Login(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config, ws 
 			MFACode:  req.MFACode,
 		})
 		if err != nil {
-			mapAuthError(w, err, "login")
+			mapAuthErrorSafe(w, err, "login", cfg)
 			return
 		}
 		setSessionCookie(w, cfg, tok)
@@ -314,7 +336,7 @@ func Logout(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config) ht
 		princ, _ := appmw.PrincipalFrom(r.Context())
 		if princ.SessionID != "" {
 			if err := p.Logout(r.Context(), princ.SessionID); err != nil {
-				mapAuthError(w, err, "logout")
+				mapAuthErrorSafe(w, err, "logout", cfg)
 				return
 			}
 		}

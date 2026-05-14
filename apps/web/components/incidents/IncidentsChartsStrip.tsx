@@ -234,8 +234,7 @@ export function IncidentsChartsStrip({
                 if (!onSelectDay) return;
                 const tgt = e.currentTarget as HTMLElement;
                 const rect = tgt.getBoundingClientRect();
-                const x =
-                  (e as unknown as React.MouseEvent).clientX - rect.left;
+                const x = e.clientX - rect.left;
                 if (incidentsHourly30d.length === 0) return;
                 const t0 = incidentsHourly30d[0].ts_ms;
                 const t1 =

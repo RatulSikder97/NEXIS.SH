@@ -1,7 +1,16 @@
 "use client";
 
+import Link from "next/link";
+import type { Route } from "next";
+import { ArrowRight } from "lucide-react";
+
 import { Button } from "@/components/ui/Button";
 
+// Landing-page teaser for the synthetic-fault demo. The real pipeline canvas,
+// scenario picker, and live log stream live under /console/live-demo — that
+// route requires an authenticated session and a selected workspace, so the
+// landing CTA is just a link there rather than a non-functional button that
+// pretends to run a pipeline from the marketing surface.
 export default function LiveDemoEmbed() {
   return (
     <section
@@ -33,16 +42,30 @@ export default function LiveDemoEmbed() {
               )}
             </ul>
           </aside>
-          <div className="min-h-[280px] rounded-md bg-[var(--color-muted)] grid place-items-center text-sm text-[var(--color-muted-foreground)]">
-            Pipeline canvas (Phase 6 wiring)
+          <div className="min-h-[280px] rounded-md bg-[var(--color-muted)] grid place-items-center p-6 text-center text-sm text-[var(--color-muted-foreground)]">
+            <div className="space-y-2">
+              <p className="font-medium text-[var(--color-foreground)]">
+                Pipeline canvas
+              </p>
+              <p className="max-w-[36ch]">
+                Sign in to fire a synthetic fault and watch the recovery
+                pipeline render every detect → diagnose → patch step in real
+                time.
+              </p>
+            </div>
           </div>
           <aside className="rounded-md bg-[var(--color-foreground)] text-[var(--color-background)] font-mono text-xs p-4 overflow-auto">
             <div>$ nexis demo --scenario=schema-drift</div>
-            <div className="opacity-60">[idle — click Run]</div>
+            <div className="opacity-60">[idle — open the console to run]</div>
           </aside>
         </div>
-        <div className="mt-6 text-center">
-          <Button>Run a synthetic incident</Button>
+        <div className="mt-6 flex justify-center">
+          <Button asChild size="lg">
+            <Link href={"/console/live-demo" as Route}>
+              Open the live demo
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
         </div>
       </div>
     </section>

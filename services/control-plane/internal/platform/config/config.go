@@ -156,6 +156,13 @@ type Config struct {
 	SlackSigningSecret  []byte
 	SlackAppRedirectURI string
 
+	// SlackDefaultChannel is the workspace-wide default channel id used by
+	// the Approval Gate when a recovery isn't bound to a project (or the
+	// bound project has no SlackChannelID set). Empty string disables the
+	// default fallback — the gate stays silent on Slack in that case.
+	// Sourced from SLACK_DEFAULT_CHANNEL.
+	SlackDefaultChannel string
+
 	// Phase 7 — cloud cutover selectors. Defaults are dev-safe; the
 	// FatalIfLocalInCloud assertion fires at boot when AppEnv in
 	// {staging, prod} and any selector is still local/dev-shaped.
@@ -396,6 +403,7 @@ func Load() Config {
 		SlackClientSecret:   []byte(env("SLACK_CLIENT_SECRET", "")),
 		SlackSigningSecret:  []byte(env("SLACK_SIGNING_SECRET", "")),
 		SlackAppRedirectURI: env("SLACK_APP_REDIRECT_URI", ""),
+		SlackDefaultChannel: env("SLACK_DEFAULT_CHANNEL", ""),
 	}
 	// SlackAppRedirectURI default depends on AppBaseURL, so fill it in after
 	// the struct literal has captured both. Keeping the default behaviour

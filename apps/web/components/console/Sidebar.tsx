@@ -379,6 +379,7 @@ function NavLink({
   badge,
   badgeTone = "info",
   badgeLabel,
+  onNavigate,
 }: {
   item: NavItem;
   collapsed: boolean;
@@ -386,6 +387,7 @@ function NavLink({
   badge?: string;
   badgeTone?: BadgeTone;
   badgeLabel?: string;
+  onNavigate?: () => void;
 }) {
   const Icon = item.icon;
   const showBadge = typeof badge === "string" && badge.length > 0;
@@ -397,6 +399,7 @@ function NavLink({
       href={item.href as unknown as never}
       title={collapsed ? item.label : undefined}
       aria-current={active ? "page" : undefined}
+      onClick={onNavigate}
       className={cn(
         "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
         active
@@ -526,13 +529,34 @@ function badgeFor(
   }
 }
 
-export function Sidebar() {
+type SidebarVariant = "desktop" | "mobile";
+
+export function Sidebar({
+  variant = "desktop",
+  onNavigate,
+}: {
+  /**
+   * `desktop` (default): renders the chrome we ship on >=md viewports — a
+   * fixed-position rail with localStorage-driven collapse.
+   *
+   * `mobile`: renders inside a Sheet (Radix Dialog) opened from the
+   * Topbar hamburger. Drops the `fixed` positioning so the Dialog content
+   * owns layout, forces the rail expanded (no collapse toggle on a
+   * temporary panel), and reports link clicks via `onNavigate` so the
+   * caller can dismiss the sheet.
+   */
+  variant?: SidebarVariant;
+  onNavigate?: () => void;
+} = {}) {
   const pathname = usePathname();
-  const collapsed = React.useSyncExternalStore(
+  const persistedCollapsed = React.useSyncExternalStore(
     subscribe,
     readCollapsed,
     () => false,
   );
+  // Mobile always renders expanded — a temporary panel that hides the
+  // labels would be doubly cramped.
+  const collapsed = variant === "mobile" ? false : persistedCollapsed;
   const runningIncidents = useRunningPipelineCount();
   const pendingApprovals = usePendingApprovalsCount();
   const integrationsSummary = useIntegrationsConnectedSummary();
@@ -549,7 +573,15 @@ export function Sidebar() {
     emit();
   }
 
-  const width = collapsed ? "w-16" : "w-60";
+  const width =
+    variant === "mobile" ? "w-full" : collapsed ? "w-16" : "w-60";
+  const containerClass =
+    variant === "mobile"
+      ? "flex h-full min-h-0 flex-col bg-[var(--color-card)]"
+      : cn(
+          "fixed inset-y-0 left-0 z-30 hidden min-h-screen flex-col border-r border-[var(--color-border)] bg-[var(--color-card)] md:flex",
+          width,
+        );
 
   function isActive(href: string) {
     if (!pathname) return false;
@@ -574,12 +606,7 @@ export function Sidebar() {
   ];
 
   return (
-    <aside
-      className={cn(
-        "fixed inset-y-0 left-0 z-30 flex min-h-screen flex-col border-r border-[var(--color-border)] bg-[var(--color-card)]",
-        width,
-      )}
-    >
+    <aside className={containerClass}>
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--color-border)] px-3">
         {!collapsed && (
           <span className="flex items-center gap-2 text-sm font-semibold tracking-tight text-[var(--color-foreground)]">
@@ -587,18 +614,20 @@ export function Sidebar() {
             NEXIS
           </span>
         )}
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
-        >
-          {collapsed ? (
-            <ChevronsRight className="h-4 w-4" />
-          ) : (
-            <ChevronsLeft className="h-4 w-4" />
-          )}
-        </button>
+        {variant === "desktop" && (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+          >
+            {collapsed ? (
+              <ChevronsRight className="h-4 w-4" />
+            ) : (
+              <ChevronsLeft className="h-4 w-4" />
+            )}
+          </button>
+        )}
       </div>
 
       <WorkspaceSwitcher collapsed={collapsed} />
@@ -631,6 +660,7 @@ export function Sidebar() {
                       badge={badge}
                       badgeTone={tone}
                       badgeLabel={label}
+                      onNavigate={onNavigate}
                     />
                   </li>
                 );
@@ -649,6 +679,7 @@ export function Sidebar() {
           }}
           collapsed={collapsed}
           active={isActive("/console/settings")}
+          onNavigate={onNavigate}
         />
       </div>
 

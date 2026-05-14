@@ -95,14 +95,14 @@ export default async function ConsoleLayout({
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-foreground)]">
       <Sidebar />
-      <div className="ml-60">
+      <div className="md:ml-60">
         <Topbar
           userEmail={me.user.email}
           currentWorkspace={
             current ? { name: current.name, region: current.region } : undefined
           }
         />
-        <main className="mx-auto max-w-[1440px] px-6 py-6">{children}</main>
+        <main className="mx-auto max-w-[1440px] px-4 py-6 md:px-6">{children}</main>
       </div>
       {!tourCompleted && <TourMount />}
     </div>

@@ -38,8 +38,8 @@ const DOT_COLOR: Record<HealthState, string> = {
   healthy: "bg-emerald-500",
   degraded: "bg-amber-500",
   down: "bg-red-500",
-  disconnected: "bg-zinc-400",
-  unknown: "bg-zinc-400",
+  disconnected: "bg-[var(--color-muted-foreground)]/40",
+  unknown: "bg-[var(--color-muted-foreground)]/40",
 };
 
 const LABEL_COLOR: Record<HealthState, string> = {

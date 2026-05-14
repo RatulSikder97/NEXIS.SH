@@ -118,6 +118,41 @@ func (r *WebhookDeliveriesRepo) Insert(ctx context.Context, d WebhookDelivery) e
 	return err
 }
 
+// ExistsByProviderEventID returns true when a webhook_deliveries row already
+// exists for (orgID, provider) with the provider-specific event id stashed
+// inside the headers JSONB. The event id is canonicalised at the handler
+// boundary into a single header key (`Idempotency-Key`) so the SQL lookup is
+// uniform across providers; see handler/webhooks.go::stashIdempotencyKey for
+// the per-provider mapping.
+//
+// Uses the admin pool because the lookup must run BEFORE the per-request RLS
+// tx is opened — we want to dedupe even when the caller is anonymous (every
+// webhook arrives without a session). Tenancy is enforced by the org_id=$1
+// filter; the orgID itself is validated upstream against the organizations
+// table before this call.
+//
+// nil-safe / no-pool-safe — returns (false, nil) so the dev path keeps
+// working when the repo isn't wired.
+func (r *WebhookDeliveriesRepo) ExistsByProviderEventID(ctx context.Context, orgID, provider, eventID string) (bool, error) {
+	if r == nil || r.adminPool == nil || eventID == "" {
+		return false, nil
+	}
+	var exists bool
+	err := r.adminPool.QueryRow(ctx, `
+        SELECT EXISTS (
+            SELECT 1 FROM webhook_deliveries
+            WHERE org_id = $1::uuid
+              AND provider = $2
+              AND headers ->> 'Idempotency-Key' = $3
+        )`,
+		orgID, provider, eventID,
+	).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 // ListFilter holds optional filters for the operator-side list endpoint.
 // Empty Provider matches every provider. Limit defaults to 50 (max 200);
 // Offset defaults to 0.

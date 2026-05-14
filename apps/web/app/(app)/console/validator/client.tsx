@@ -56,7 +56,7 @@ type ValidatorListResp = {
 };
 
 const STATUS_PILL: Record<ValidatorStatus, string> = {
-  queued: "bg-zinc-500/15 text-zinc-700 ring-zinc-500/30 dark:text-zinc-300",
+  queued: "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] ring-[var(--color-border)]",
   running: "bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300",
   succeeded:
     "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-300",

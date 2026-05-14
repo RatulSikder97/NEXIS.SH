@@ -70,10 +70,10 @@ const PALETTE: Record<WorkflowRunStatus, Palette> = {
     label: "Timed out",
   },
   cancelled: {
-    bg: "bg-zinc-500/15",
-    fg: "text-zinc-700 dark:text-zinc-300",
-    ring: "ring-zinc-500/30",
-    dot: "bg-zinc-500",
+    bg: "bg-[var(--color-muted)]",
+    fg: "text-[var(--color-muted-foreground)]",
+    ring: "ring-[var(--color-border)]",
+    dot: "bg-[var(--color-muted-foreground)]",
     label: "Cancelled",
   },
 };

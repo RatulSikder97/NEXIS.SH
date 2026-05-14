@@ -71,10 +71,10 @@ function setOAuthStateCookie(state: string): void {
 
 function WorkOSSignIn() {
   const searchParams = useSearchParams();
-  const rawNext = searchParams.get("next") ?? "/dashboard";
+  const rawNext = searchParams.get("next") ?? "/console";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//")
     ? rawNext
-    : "/dashboard";
+    : "/console";
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -94,7 +94,7 @@ function WorkOSSignIn() {
       url.searchParams.set("state", state);
       // Round-trip the post-auth destination via state-adjacent param so the
       // callback handler can hand the user back to where they came from.
-      if (next && next !== "/dashboard") {
+      if (next && next !== "/console") {
         url.searchParams.set("return_to", next);
       }
       window.location.assign(url.toString());
@@ -149,10 +149,10 @@ function PasswordSignIn() {
   // because typedRoutes can't prove a runtime string is one of the known
   // routes. We restrict to same-origin paths starting with "/" (and reject
   // protocol-relative "//evil.example") to avoid open-redirects.
-  const rawNext = searchParams.get("next") ?? "/dashboard";
+  const rawNext = searchParams.get("next") ?? "/console";
   const next = (rawNext.startsWith("/") && !rawNext.startsWith("//")
     ? rawNext
-    : "/dashboard") as Route;
+    : "/console") as Route;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

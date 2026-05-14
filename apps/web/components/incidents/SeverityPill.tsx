@@ -31,10 +31,10 @@ type Palette = {
 
 const PALETTE: Record<IncidentSeverity, Palette> = {
   none: {
-    bg: "bg-zinc-500/10",
-    fg: "text-zinc-700 dark:text-zinc-300",
-    ring: "ring-zinc-500/20",
-    dot: "bg-zinc-400",
+    bg: "bg-[var(--color-muted)]",
+    fg: "text-[var(--color-muted-foreground)]",
+    ring: "ring-[var(--color-border)]",
+    dot: "bg-[var(--color-muted-foreground)]/40",
     label: "—",
   },
   low: {

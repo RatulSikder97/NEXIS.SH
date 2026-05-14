@@ -43,7 +43,7 @@ const LAYER_COLOR: Record<AgentInfo["layer"], string> = {
 const STATUS_COLOR: Record<AgentInfo["status"], string> = {
   available: "bg-emerald-500",
   degraded: "bg-amber-500",
-  disabled: "bg-zinc-400",
+  disabled: "bg-[var(--color-muted-foreground)]/40",
 };
 
 export default async function AgentsPage() {

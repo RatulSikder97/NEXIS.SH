@@ -12,6 +12,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import {
   ChevronDown,
   ChevronRight,
@@ -50,7 +51,7 @@ export type WorkflowRowSeed = {
 
 const STATUS_PILL: Record<WorkflowRunStatus, string> = {
   queued:
-    "bg-zinc-500/15 text-zinc-700 ring-zinc-500/30 dark:text-zinc-300",
+    "bg-[var(--color-muted)] text-[var(--color-muted-foreground)] ring-[var(--color-border)]",
   running:
     "bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300",
   succeeded:
@@ -60,7 +61,7 @@ const STATUS_PILL: Record<WorkflowRunStatus, string> = {
   timed_out:
     "bg-red-500/15 text-red-700 ring-red-500/30 dark:text-red-300",
   cancelled:
-    "bg-zinc-500/10 text-zinc-600 ring-zinc-500/20 dark:text-zinc-400",
+    "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]/80 ring-[var(--color-border)]",
 };
 
 function hasInFlight(rows: WorkflowRowSeed[]): boolean {
@@ -101,7 +102,8 @@ function segmentsFor(run: WorkflowRun): OperationalSegment[] {
   if (run.current_step) {
     const stepKey = run.current_step.toLowerCase();
     out.push({
-      label: AGENT_LABELS[stepKey as never] ?? run.current_step,
+      label:
+        AGENT_LABELS[stepKey as keyof typeof AGENT_LABELS] ?? run.current_step,
       started_at: run.started_at,
       duration_ms: undefined,
       status: run.status === "running" ? "running" : "succeeded",
@@ -201,7 +203,7 @@ function Row({
         </td>
         <td className="px-3 py-2 text-right">
           <Link
-            href={`/console/incidents/${run.id}` as never}
+            href={`/console/incidents/${run.id}` as Route}
             className="text-xs font-medium text-[var(--color-primary)] hover:underline"
           >
             Detail →

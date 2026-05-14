@@ -41,10 +41,10 @@ const STATUS_STYLES: Record<NonNullable<Integration["status"]>, string> = {
 };
 
 const LOGO_BG: Partial<Record<ProviderID, string>> = {
-  github: "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900",
+  github: "bg-[var(--color-foreground)] text-[var(--color-background)]",
   sentry: "bg-[#362D59]/10 text-[#362D59] dark:bg-[#362D59]/20 dark:text-[#A89FFF]",
   argocd: "bg-[#EF7B4D]/10 text-[#EF7B4D]",
-  slack: "bg-white ring-1 ring-inset ring-[var(--color-border)] dark:bg-zinc-900",
+  slack: "bg-[var(--color-card)] ring-1 ring-inset ring-[var(--color-border)]",
   datadog: "bg-[#632CA6]/10 text-[#632CA6] dark:bg-[#632CA6]/20 dark:text-[#B594E0]",
   pagerduty: "bg-[#06AC38]/10 text-[#06AC38] dark:bg-[#06AC38]/15 dark:text-[#5BD680]",
   // Roadmap tints
@@ -69,7 +69,7 @@ const LOGO_BG: Partial<Record<ProviderID, string>> = {
   airflow: "bg-[#017CEE]/10 text-[#017CEE]",
   snowflake: "bg-[#29B5E8]/10 text-[#29B5E8]",
   dbt: "bg-[#FF694B]/10 text-[#FF694B]",
-  kafka: "bg-zinc-900/10 text-zinc-900 dark:text-zinc-100",
+  kafka: "bg-[var(--color-foreground)]/10 text-[var(--color-foreground)]",
   launchdarkly: "bg-[#405BFF]/10 text-[#405BFF]",
   vault: "bg-[#FFEC6E]/20 text-amber-700 dark:text-amber-300",
 };

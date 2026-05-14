@@ -28,7 +28,7 @@ export default function MFAPage() {
     setBusy(true);
     try {
       await auth.mfaVerify(code);
-      router.push("/dashboard");
+      router.push("/console");
     } catch (e) {
       setErr(e instanceof AuthError ? e.message : "verify failed");
     } finally {
