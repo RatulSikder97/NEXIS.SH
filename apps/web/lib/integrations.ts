@@ -97,15 +97,51 @@ async function unwrapError(r: Response): Promise<never> {
 // still return the legacy shape without a `health` block; we synthesise one
 // from the `connected` (or legacy `status`) flag so the HealthPill doesn't
 // crash with `Cannot read properties of undefined (reading 'state')`.
+// deriveHealthFromRow infers a HealthState from the integrations row when the
+// BE doesn't return an explicit `.health` block. Mirrors the same logic in
+// console/integrations/client.tsx so server-rendered and client-rendered
+// state agree.
+function deriveHealthFromRow(o: {
+  status?: string;
+  connected?: boolean;
+  last_error?: string;
+  metadata?: Record<string, unknown>;
+  updated_at?: string;
+}): IntegrationHealth {
+  const connected = o.status === "connected" || o.connected === true;
+  if (!connected) return { state: "disconnected" };
+  if (o.last_error) {
+    return {
+      state: "degraded",
+      latency_ms: numberOrUndefined(o.metadata?.["latency_ms"]),
+      last_check_at: o.updated_at,
+      last_error: o.last_error,
+    };
+  }
+  return {
+    state: "healthy",
+    latency_ms: numberOrUndefined(o.metadata?.["latency_ms"]),
+    last_check_at: o.updated_at,
+  };
+}
+
+function numberOrUndefined(v: unknown): number | undefined {
+  return typeof v === "number" ? v : undefined;
+}
+
 function normaliseConnection(raw: unknown): IntegrationConnection {
   const r = (raw ?? {}) as Partial<IntegrationConnection> & {
     status?: Integration["status"];
   };
   const connected =
     typeof r.connected === "boolean" ? r.connected : r.status === "connected";
-  const health: IntegrationHealth = r.health ?? {
-    state: connected ? "unknown" : "disconnected",
-  };
+  const health: IntegrationHealth = r.health ?? deriveHealthFromRow({
+    status: r.status,
+    connected: r.connected,
+    last_error: r.last_error,
+    metadata: r.metadata,
+    updated_at: r.updated_at,
+  });
   return {
     provider: (r.provider ?? "github") as IntegrationProvider,
     connected,
@@ -172,6 +208,28 @@ export const integrations = {
       credentials: "include",
     });
     if (!r.ok && r.status !== 204) await unwrapError(r);
+  },
+
+  // probe forces a live Status refresh on the named integration. Returns
+  // fresh status + measured latency. Used by the "Check access" button so
+  // operators can verify credentials without waiting for a background tick.
+  probe: async (
+    provider: string,
+  ): Promise<{
+    provider: string;
+    status: "connected" | "pending" | "error" | "disconnected";
+    installation_id?: string;
+    metadata?: Record<string, unknown>;
+    last_error?: string;
+    latency_ms: number;
+    probed_at: string;
+  }> => {
+    const r = await fetch(`${API}/v1/integrations/${provider}/probe`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!r.ok) await unwrapError(r);
+    return r.json();
   },
 
   mockInstallGithub: () => {

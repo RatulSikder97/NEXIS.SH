@@ -184,8 +184,55 @@ func (c *Client) ExchangeInstallationToken(ctx context.Context, installationID i
 type installationRepoListResp struct {
 	TotalCount   int `json:"total_count"`
 	Repositories []struct {
-		FullName string `json:"full_name"`
+		FullName      string `json:"full_name"`
+		DefaultBranch string `json:"default_branch"`
+		Private       bool   `json:"private"`
+		HTMLURL       string `json:"html_url"`
 	} `json:"repositories"`
+}
+
+// RepoDetail is the richer projection returned by ListInstallationReposDetailed.
+type RepoDetail struct {
+	FullName      string `json:"full_name"`
+	DefaultBranch string `json:"default_branch"`
+	Private       bool   `json:"private"`
+	HTMLURL       string `json:"html_url,omitempty"`
+}
+
+// ListInstallationReposDetailed returns the full repo projection (full_name +
+// default_branch + private + html_url). Used by the Connect Project wizard's
+// repo dropdown.
+func (c *Client) ListInstallationReposDetailed(ctx context.Context, instToken string) ([]RepoDetail, error) {
+	url := c.baseURL + "/installation/repositories?per_page=100"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("github: build req: %w", err)
+	}
+	req.Header.Set("Authorization", "token "+instToken)
+	c.setCommonHeaders(req)
+
+	resp, err := c.httpc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("github: list repos: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return nil, decodeAPIError(resp)
+	}
+	var body installationRepoListResp
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("github: decode repo list: %w", err)
+	}
+	out := make([]RepoDetail, 0, len(body.Repositories))
+	for _, r := range body.Repositories {
+		out = append(out, RepoDetail{
+			FullName:      r.FullName,
+			DefaultBranch: r.DefaultBranch,
+			Private:       r.Private,
+			HTMLURL:       r.HTMLURL,
+		})
+	}
+	return out, nil
 }
 
 // ListInstallationRepos calls GET /installation/repositories with the

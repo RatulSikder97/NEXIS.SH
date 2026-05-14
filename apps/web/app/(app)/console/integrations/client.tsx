@@ -100,17 +100,41 @@ const CATEGORY_LABELS: Record<CardSpec["category"], { title: string; description
 };
 
 // Derives a HealthPill-ready health DTO from whatever the backend returned.
-// The Wave 1 backend (Task 1) will start populating `health`; until then we
-// fall back to "unknown" when connected, "disconnected" otherwise — matching
-// the contract assumption in the task spec.
+// Preference order:
+//   1. Explicit `.health` block (Wave 1 BE will populate this).
+//   2. Derive from `row.status` + `row.last_error` + metadata.latency_ms.
+//   3. Fall back to disconnected.
 function healthFromIntegration(
   row: Integration | undefined,
   raw: unknown,
 ): IntegrationHealth {
-  const r = (raw ?? {}) as { health?: IntegrationHealth; connected?: boolean };
+  const r = (raw ?? {}) as {
+    health?: IntegrationHealth;
+    connected?: boolean;
+    last_error?: string;
+    metadata?: { latency_ms?: number };
+    updated_at?: string;
+  };
   if (r.health) return r.health;
   const connected = row?.status === "connected" || r.connected === true;
-  return { state: connected ? "unknown" : "disconnected" };
+  if (!connected) return { state: "disconnected" };
+  const lastError = row?.last_error ?? r.last_error ?? "";
+  // Connected + last_error set → degraded (works but with errors)
+  if (lastError) {
+    return {
+      state: "degraded",
+      latency_ms: r.metadata?.latency_ms,
+      last_check_at: row?.updated_at ?? r.updated_at,
+      last_error: lastError,
+    };
+  }
+  // Connected + no errors → healthy. If the BE has recorded a latency on
+  // the row metadata, surface it.
+  return {
+    state: "healthy",
+    latency_ms: r.metadata?.latency_ms,
+    last_check_at: row?.updated_at ?? r.updated_at,
+  };
 }
 
 // The page.tsx server component still passes `orgId` + `apiUrl` because the

@@ -277,7 +277,7 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		// inside the owner|admin group.
 		if deps.Integrations != nil {
 			r.Get("/v1/integrations/github/install/callback",
-				handler.GitHubInstallCallback(deps.Integrations, aud, cfg))
+				handler.GitHubInstallCallback(deps.Integrations, aud, cfg, deps.AppPool))
 			r.Get("/v1/integrations/slack/callback",
 				handler.SlackInstallCallback(deps.Integrations, aud, cfg))
 		}
@@ -453,6 +453,7 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 					g2.Post("/v1/integrations/{provider}/connect", handler.IntegrationsConnect(deps.Integrations, aud, cfg))
 					g2.Delete("/v1/integrations/{provider}", handler.IntegrationsDisconnect(deps.Integrations, aud, cfg))
 					g2.Get("/v1/integrations/github/mock_install", handler.GitHubMockInstall(deps.Integrations, aud, cfg.AppBaseURL, cfg.AppEnv))
+					g2.Get("/v1/integrations/github/repos", handler.GitHubReposList(deps.Integrations))
 
 					// Manual probe — operator forces a Status refresh on a
 					// single integration. Owner|Admin only so members can't

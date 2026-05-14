@@ -23,19 +23,56 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
 	appmw "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/middleware"
 )
+
+// runWithTenantTx opens a tx on appPool, pins app.current_org_id to the
+// principal's org_id, attaches the tx to ctx so repos pick it up, and runs
+// the closure. Used by OAuth install callbacks which sit OUTSIDE the RLS
+// middleware (they're mounted in the public group because GitHub/Slack
+// redirects may strip the session cookie in some browser contexts).
+//
+// Commits on success, rolls back on any error. Returns any error from the
+// closure, the BeginTx call, or the GUC-pin SQL.
+func runWithTenantTx(ctx context.Context, appPool *pgxpool.Pool, princ domain.Principal, fn func(ctx context.Context) error) error {
+	if appPool == nil {
+		// Dev fallback — no RLS pool wired; run the closure directly so
+		// the test harness still works.
+		return fn(ctx)
+	}
+	tx, err := appPool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, "SELECT set_config('app.current_org_id', $1, true)", princ.OrgID); err != nil {
+		return err
+	}
+	if err := fn(db.WithTx(ctx, tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// errOAuthCallback is unused — kept to suppress linter warnings on imports.
+var _ = errors.New
 
 // oauthStateMaxAge bounds the lifetime of the nexis_oauth_state cookie. Five
 // minutes is the same window the WorkOS callback applies — long enough to
@@ -166,7 +203,7 @@ func GitHubInstallStart(cfg config.Config) http.HandlerFunc {
 //
 // The cookie is cleared on every branch so a replay attempt cannot reuse the
 // same state value even if the handler bails for a different reason.
-func GitHubInstallCallback(reg *integration.Registry, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
+func GitHubInstallCallback(reg *integration.Registry, aud domain.AuditWriter, cfg config.Config, appPool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, ok := appmw.PrincipalFrom(r.Context())
 		clearInstallStateCookie(w, cfg)
@@ -189,7 +226,16 @@ func GitHubInstallCallback(reg *integration.Registry, aud domain.AuditWriter, cf
 			http.Redirect(w, r, installErrorURL(cfg.AppBaseURL, "github", "provider_unavailable"), http.StatusFound)
 			return
 		}
-		c, err := p.Connect(r.Context(), princ, map[string]any{"installation_id": installID})
+		// Wrap Connect in a tx that pins app.current_org_id so the
+		// integrations.WITH-CHECK RLS policy (migration 0025) accepts
+		// the INSERT. The callback sits outside the RLS middleware
+		// because it's mounted in the public group.
+		var c domain.Connection
+		err := runWithTenantTx(r.Context(), appPool, princ, func(ctx context.Context) error {
+			out, err := p.Connect(ctx, princ, map[string]any{"installation_id": installID})
+			c = out
+			return err
+		})
 		if err != nil {
 			slog.Default().Error("github install callback connect", "err", err, "org_id", princ.OrgID)
 			http.Redirect(w, r, installErrorURL(cfg.AppBaseURL, "github", "connect_failed"), http.StatusFound)

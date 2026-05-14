@@ -233,6 +233,36 @@ func (p *Provider) Status(ctx context.Context, princ domain.Principal) (domain.C
 	return c, nil
 }
 
+// ListReposForOrg mints (or reuses cached) an installation token for the
+// caller's org and returns the full repository projection. Powers
+// GET /v1/integrations/github/repos for the project-wizard dropdown.
+func (p *Provider) ListReposForOrg(ctx context.Context, princ domain.Principal) ([]RepoDetail, error) {
+	c, _, err := p.repo.Get(ctx, princ.OrgID, domain.IntegrationGitHub)
+	if err != nil {
+		return nil, err
+	}
+	if !p.hasAppMode() {
+		return nil, errors.New("github: app credentials not configured")
+	}
+	if c.InstallationID == "" {
+		return nil, errors.New("github: not installed for this org")
+	}
+	id, err := strconv.ParseInt(c.InstallationID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("github: installation_id not numeric: %w", err)
+	}
+	tok, ok := p.cache.Get(ctx, id)
+	if !ok {
+		var expiresAt time.Time
+		tok, expiresAt, err = p.client.ExchangeInstallationToken(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		p.cache.Set(ctx, id, tok, expiresAt, p.now())
+	}
+	return p.client.ListInstallationReposDetailed(ctx, tok)
+}
+
 // HandleWebhook verifies the X-Hub-Signature-256 header against the per-tenant
 // secret (or defaultSecret if no row exists yet) and dispatches a few key
 // events:

@@ -8,10 +8,12 @@
 // to brand-primary for grab-ability.
 
 import * as React from "react";
+import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { ProviderLogo, type ProviderID } from "@/components/integrations/ProviderLogo";
 import { cn } from "@/lib/utils";
+import { integrations } from "@/lib/integrations";
 import type { Integration } from "@/lib/integrations";
 
 export type IntegrationCardProps = {
@@ -27,6 +29,9 @@ export type IntegrationCardProps = {
   // Optional metadata: installation id, region, last-sync — rendered as a
   // small monospace strip above the CTA.
   metadata?: string;
+  // onProbed fires after a successful Check Access call. Parent uses it to
+  // refresh its integration list so the HealthPill picks up the new state.
+  onProbed?: (result: { status: string; latency_ms: number; last_error?: string }) => void;
 };
 
 const STATUS_STYLES: Record<NonNullable<Integration["status"]>, string> = {
@@ -111,8 +116,36 @@ export function IntegrationCard({
   onConfigure,
   statusSlot,
   metadata,
+  onProbed,
 }: IntegrationCardProps) {
   const connected = status === "connected";
+  const [probing, setProbing] = React.useState(false);
+  const [probeMsg, setProbeMsg] = React.useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  async function checkAccess() {
+    setProbing(true);
+    setProbeMsg(null);
+    try {
+      const r = await integrations.probe(provider);
+      if (r.status === "connected" && !r.last_error) {
+        setProbeMsg({ kind: "ok", text: `Reachable · ${r.latency_ms}ms` });
+      } else {
+        setProbeMsg({
+          kind: "err",
+          text: r.last_error ?? `Status: ${r.status}`,
+        });
+      }
+      onProbed?.({ status: r.status, latency_ms: r.latency_ms, last_error: r.last_error });
+    } catch (e) {
+      setProbeMsg({
+        kind: "err",
+        text: e instanceof Error ? e.message : "Probe failed",
+      });
+    } finally {
+      setProbing(false);
+      window.setTimeout(() => setProbeMsg(null), 5000);
+    }
+  }
   return (
     <div
       className={cn(
@@ -157,17 +190,56 @@ export function IntegrationCard({
         </div>
       ) : null}
 
-      {/* CTA */}
-      <div className="flex items-center justify-between gap-2">
-        <Button
-          variant={connected ? "outline" : "default"}
-          size="sm"
-          disabled={comingSoon}
-          onClick={onConfigure}
+      {/* Probe result toast (transient) */}
+      {probeMsg && (
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[11px] ring-1 ring-inset",
+            probeMsg.kind === "ok"
+              ? "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-300"
+              : "bg-red-500/10 text-red-700 ring-red-500/20 dark:text-red-300",
+          )}
+          role="status"
         >
-          {comingSoon ? "Unavailable" : connected ? "Manage" : "Configure"}
-        </Button>
-        {!comingSoon && connected ? (
+          {probeMsg.kind === "ok" ? (
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+          )}
+          <span className="truncate">{probeMsg.text}</span>
+        </div>
+      )}
+
+      {/* CTA + Check access */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Button
+            variant={connected ? "outline" : "default"}
+            size="sm"
+            disabled={comingSoon}
+            onClick={onConfigure}
+          >
+            {comingSoon ? "Unavailable" : connected ? "Manage" : "Configure"}
+          </Button>
+          {!comingSoon ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={probing}
+              onClick={checkAccess}
+              aria-label={`Check access to ${name}`}
+              title={`Probe ${name} for live reachability`}
+            >
+              {probing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-3.5 w-3.5" />
+              )}
+              Check access
+            </Button>
+          ) : null}
+        </div>
+        {!comingSoon && connected && !probeMsg ? (
           <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
             ✓ Connected
           </span>
