@@ -67,7 +67,7 @@ func (f *fakeSeedWorkflows) Get(context.Context, domain.Principal, string) (doma
 	return domain.WorkflowRun{}, nil, nil
 }
 
-func (f *fakeSeedWorkflows) List(context.Context, domain.Principal, string, int, time.Time) ([]domain.WorkflowRun, error) {
+func (f *fakeSeedWorkflows) List(context.Context, domain.Principal, string, string, int, time.Time) ([]domain.WorkflowRun, error) {
 	return nil, nil
 }
 

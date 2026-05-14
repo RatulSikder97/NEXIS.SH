@@ -178,7 +178,7 @@ func (f *failingWorkflows) Get(context.Context, domain.Principal, string) (domai
 	return domain.WorkflowRun{}, nil, nil
 }
 
-func (f *failingWorkflows) List(context.Context, domain.Principal, string, int, time.Time) ([]domain.WorkflowRun, error) {
+func (f *failingWorkflows) List(context.Context, domain.Principal, string, string, int, time.Time) ([]domain.WorkflowRun, error) {
 	return nil, nil
 }
 

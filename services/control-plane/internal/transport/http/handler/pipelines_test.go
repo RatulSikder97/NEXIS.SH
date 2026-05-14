@@ -57,7 +57,7 @@ func (f *fakePipelinesWorkflows) Get(_ context.Context, _ domain.Principal, _ st
 	return f.runs[0], f.events, nil
 }
 
-func (f *fakePipelinesWorkflows) List(_ context.Context, _ domain.Principal, _ string, _ int, _ time.Time) ([]domain.WorkflowRun, error) {
+func (f *fakePipelinesWorkflows) List(_ context.Context, _ domain.Principal, _ string, _ string, _ int, _ time.Time) ([]domain.WorkflowRun, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.runs, f.listErr

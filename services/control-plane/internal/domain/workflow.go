@@ -113,10 +113,14 @@ type ActivityResult struct {
 // WorkflowService is the port HTTP handlers depend on. The adapter in
 // internal/adapter/workflow implements it on top of a Temporal client + the
 // workflow repo + an SSE broker.
+//
+// List takes an optional projectID — when non-empty the result is narrowed
+// to runs whose workflow_runs.project_id matches the value. Pass "" to
+// disable the filter (default for the workspace-wide pipelines list).
 type WorkflowService interface {
 	Start(ctx context.Context, p Principal, workspaceID, workflowType string, input []byte) (WorkflowRun, error)
 	Get(ctx context.Context, p Principal, runID string) (WorkflowRun, []ActivityEvent, error)
-	List(ctx context.Context, p Principal, workspaceID string, limit int, before time.Time) ([]WorkflowRun, error)
+	List(ctx context.Context, p Principal, workspaceID, projectID string, limit int, before time.Time) ([]WorkflowRun, error)
 	Subscribe(ctx context.Context, runID string) <-chan ActivityEvent
 }
 

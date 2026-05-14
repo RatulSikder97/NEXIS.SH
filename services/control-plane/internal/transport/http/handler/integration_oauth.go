@@ -291,7 +291,14 @@ func SlackInstallStart(reg *integration.Registry, cfg config.Config) http.Handle
 //
 // The state cookie is cleared on every branch — same shape as
 // GitHubInstallCallback above.
-func SlackInstallCallback(reg *integration.Registry, aud domain.AuditWriter, cfg config.Config) http.HandlerFunc {
+//
+// appPool is the application-role pool used to open a tenant-pinned tx so
+// the integrations.WITH-CHECK RLS policy (migration 0025) accepts the
+// INSERT. This mirrors GitHubInstallCallback — the callback sits OUTSIDE
+// the RLS middleware (mounted in the public group because Slack's OAuth
+// redirect may strip the session cookie in some browser contexts) so we
+// rebuild the GUC binding inline before calling Connect.
+func SlackInstallCallback(reg *integration.Registry, aud domain.AuditWriter, cfg config.Config, appPool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, ok := appmw.PrincipalFrom(r.Context())
 		clearInstallStateCookie(w, cfg)
@@ -314,9 +321,17 @@ func SlackInstallCallback(reg *integration.Registry, aud domain.AuditWriter, cfg
 			http.Redirect(w, r, installErrorURL(cfg.AppBaseURL, "slack", "provider_unavailable"), http.StatusFound)
 			return
 		}
-		c, err := p.Connect(r.Context(), princ, map[string]any{
-			"code":  code,
-			"state": state,
+		// Wrap Connect in a tx that pins app.current_org_id so the
+		// integrations.WITH-CHECK RLS policy (migration 0025) accepts
+		// the INSERT — same shape as GitHubInstallCallback above.
+		var c domain.Connection
+		err := runWithTenantTx(r.Context(), appPool, princ, func(ctx context.Context) error {
+			out, err := p.Connect(ctx, princ, map[string]any{
+				"code":  code,
+				"state": state,
+			})
+			c = out
+			return err
 		})
 		if err != nil {
 			slog.Default().Error("slack install callback connect", "err", err, "org_id", princ.OrgID)

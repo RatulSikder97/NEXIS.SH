@@ -148,6 +148,14 @@ type Deps struct {
 	//     "down" so the dashboard can render a mixed-deploy correctly.
 	WebhookDeliveries *repo.WebhookDeliveriesRepo
 	SystemHealth      handler.SystemHealthDeps
+
+	// PatchStore — Phase 6 approval-flow patch viewer.
+	//
+	// Powers GET /v1/workspaces/{ws}/pipelines/{run}/patch. Backed by the
+	// MinIO/S3 patchstore the recovery workflow writes into. Optional —
+	// when nil the route is not mounted so a deploy without object storage
+	// boots cleanly (the FE just doesn't render the diff panel).
+	PatchStore domain.PatchStore
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
@@ -279,7 +287,7 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			r.Get("/v1/integrations/github/install/callback",
 				handler.GitHubInstallCallback(deps.Integrations, aud, cfg, deps.AppPool))
 			r.Get("/v1/integrations/slack/callback",
-				handler.SlackInstallCallback(deps.Integrations, aud, cfg))
+				handler.SlackInstallCallback(deps.Integrations, aud, cfg, deps.AppPool))
 		}
 
 		// Protected routes — RequireAuth issues 401 if no principal is in ctx;
@@ -443,6 +451,25 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 						handler.PipelineApprove(deps.ApprovalSignaler))
 					g2.Post("/v1/workspaces/{ws_id}/pipelines/{run_id}/reject",
 						handler.PipelineReject(deps.ApprovalSignaler))
+				}
+				// Approvals — pending decisions list. Powers the
+				// /console/approvals page + the sidebar pending badge.
+				// Mounted here (rather than the open-to-any-member
+				// group) because only owners + admins act on approvals;
+				// members shouldn't see pending recoveries they can't
+				// decide on.
+				if deps.Approvals != nil {
+					g2.Get("/v1/workspaces/{ws_id}/approvals/pending",
+						handler.ApprovalsPending(deps.Approvals))
+				}
+				// Patch diff viewer — owner|admin only because the
+				// raw diff includes the proposed code change for a
+				// pending recovery. Mounted alongside approve/reject
+				// so the FE can wire all three off the same role
+				// gate.
+				if deps.Workflows != nil && deps.PatchStore != nil {
+					g2.Get("/v1/workspaces/{ws_id}/pipelines/{run_id}/patch",
+						handler.PipelinePatch(deps.Workflows, deps.PatchStore))
 				}
 				g2.Post("/v1/apikeys", handler.APIKeyCreate(deps.Auth, aud))
 				if deps.AuditLister != nil {

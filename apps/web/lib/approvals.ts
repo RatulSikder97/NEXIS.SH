@@ -155,12 +155,12 @@ export const approvals = {
 
   reject: async (wsId: string, runId: string, notes?: string): Promise<void> => {
     const r = await fetch(
-      `${API}/v1/workspaces/${wsId}/pipelines/${runId}/approve`,
+      `${API}/v1/workspaces/${wsId}/pipelines/${runId}/reject`,
       {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ decision: "reject", notes: notes ?? "" }),
+        body: JSON.stringify({ notes: notes ?? "" }),
       },
     );
     await failOr<void>(r);

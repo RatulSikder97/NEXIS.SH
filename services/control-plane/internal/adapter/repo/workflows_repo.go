@@ -148,7 +148,13 @@ func (r *WorkflowRepo) GetRun(ctx context.Context, orgID, runID string) (*domain
 // ListRuns returns workflow_runs for one (org, workspace), most-recent first.
 // `before` is the cursor — pass time.Time{} for the first page. `limit` is
 // capped at 200.
-func (r *WorkflowRepo) ListRuns(ctx context.Context, orgID, workspaceID string, limit int, before time.Time) ([]domain.WorkflowRun, error) {
+//
+// projectID is an optional dedicated-column filter — when non-empty the
+// query narrows to runs whose workflow_runs.project_id matches the value.
+// Empty disables the filter. The string is cast to uuid in SQL so an
+// invalid UUID bubbles up as a postgres "invalid input syntax" error;
+// HTTP callers should pre-validate.
+func (r *WorkflowRepo) ListRuns(ctx context.Context, orgID, workspaceID, projectID string, limit int, before time.Time) ([]domain.WorkflowRun, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -162,8 +168,9 @@ func (r *WorkflowRepo) ListRuns(ctx context.Context, orgID, workspaceID string, 
         FROM workflow_runs
         WHERE org_id=$1 AND workspace_id=$2
           AND ($3::timestamptz IS NULL OR started_at < $3)
+          AND ($5 = '' OR project_id = $5::uuid)
         ORDER BY started_at DESC
-        LIMIT $4`, orgID, workspaceID, nullTime(before), limit)
+        LIMIT $4`, orgID, workspaceID, nullTime(before), limit, projectID)
 	if err != nil {
 		return nil, err
 	}

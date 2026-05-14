@@ -47,9 +47,12 @@ import {
   ConfidencePill,
 } from "@/components/incidents/AgentSummaryCard";
 import { NasaTlxModal } from "@/components/incidents/NasaTlxModal";
+import { PatchDiffViewer } from "@/components/incidents/PatchDiffViewer";
 import {
+  AGENT_LABELS,
   pipelines,
   type ActivityEvent,
+  type AgentRole,
   type PathfinderPayload,
   type PipelineDetail,
   type SynthesiserPayload,
@@ -187,6 +190,51 @@ function validatorFromEvents(
       )
     : undefined;
   return { tests_passed: p.tests_passed, hypothesis_failures: failures };
+}
+
+// PatchRef captures the (agent_role, patch_key, seq) triple we need to
+// render a patch disclosure. We key disclosures by patch_key directly so
+// duplicate frames from the SSE replay collapse to one viewer.
+type PatchRef = {
+  patchKey: string;
+  agentRole: string;
+  seq: number;
+};
+
+// patchesFromEvents returns every activity_event whose payload carries a
+// non-empty `patch_key` string. The brief calls out Backend.Codegen as the
+// canonical emitter but we scan every event so future emitters
+// (DataEngineer migrations, etc.) light up automatically.
+//
+// Deduplicates by patch_key — the SSE replays the persisted history before
+// tailing live frames, so the same Backend.Codegen succeeded frame can land
+// twice. We keep the highest-seq sighting so the agent role reflects the
+// terminal projection.
+function patchesFromEvents(events: ActivityEvent[]): PatchRef[] {
+  const bestByKey = new Map<string, PatchRef>();
+  for (const e of events) {
+    const p = e.payload as Record<string, unknown> | undefined;
+    if (!p) continue;
+    const raw = p.patch_key;
+    if (typeof raw !== "string" || raw.length === 0) continue;
+    const existing = bestByKey.get(raw);
+    if (!existing || e.seq > existing.seq) {
+      bestByKey.set(raw, {
+        patchKey: raw,
+        agentRole: e.agent_role,
+        seq: e.seq,
+      });
+    }
+  }
+  // Stable, deterministic ordering by seq so reorders don't repaint the
+  // disclosure list on every SSE frame.
+  return Array.from(bestByKey.values()).sort((a, b) => a.seq - b.seq);
+}
+
+// agentLabelFor renders a human-readable role string for the disclosure
+// header. Falls back to the raw role when an unknown emitter shows up.
+function agentLabelFor(role: string): string {
+  return AGENT_LABELS[role as AgentRole] ?? role;
 }
 
 // DECISION_LABEL renders the approval state for the header badge.
@@ -379,6 +427,11 @@ export function TimelineClient({
     () => validatorFromEvents(events),
     [events],
   );
+  // Phase 7 — every emitted patch_key surfaces as a disclosure under the
+  // summary cards so the approver can read the diff before they decide.
+  // The viewer fetches the raw diff lazily on first expand to keep the
+  // page paint fast.
+  const patches = React.useMemo(() => patchesFromEvents(events), [events]);
   const decisionLabel =
     decision?.decision &&
     (DECISION_LABEL[decision.decision] ?? decision.decision);
@@ -631,6 +684,38 @@ export function TimelineClient({
           }
         />
       </section>
+
+      {patches.length > 0 && (
+        <section
+          aria-label="Patch diffs"
+          className="space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-5"
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-semibold text-[var(--color-foreground)]">
+              Patches
+            </h2>
+            <span className="text-[10px] uppercase tracking-widest text-[var(--color-muted-foreground)]">
+              {patches.length} {patches.length === 1 ? "diff" : "diffs"}
+            </span>
+          </div>
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            Code changes proposed by the recovery agents. Expand each entry to
+            review the unified diff before approving.
+          </p>
+          <ul className="space-y-2 pt-1">
+            {patches.map((p) => (
+              <li key={p.patchKey}>
+                <PatchDiffViewer
+                  workspaceId={workspaceId}
+                  runId={runId}
+                  patchKey={p.patchKey}
+                  agentLabel={agentLabelFor(p.agentRole)}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section
         aria-label="Activity timeline"

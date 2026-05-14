@@ -339,7 +339,7 @@ func TestWorkflowRepo_ListRuns_OrdersByStartedAtDesc(t *testing.T) {
 		}
 	}
 
-	rows, err := fix.repo.ListRuns(ctx, fix.orgID, fix.workspaceID, 10, time.Time{})
+	rows, err := fix.repo.ListRuns(ctx, fix.orgID, fix.workspaceID, "", 10, time.Time{})
 	if err != nil {
 		t.Fatalf("ListRuns: %v", err)
 	}

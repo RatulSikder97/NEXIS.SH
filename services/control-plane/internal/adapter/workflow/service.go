@@ -203,7 +203,10 @@ func (s *Service) Get(ctx context.Context, p domain.Principal, runID string) (do
 }
 
 // List returns the last N runs for the given workspace, newest first.
-func (s *Service) List(ctx context.Context, p domain.Principal, workspaceID string, limit int, before time.Time) ([]domain.WorkflowRun, error) {
+// projectID narrows to a single project when non-empty; pass "" for the
+// workspace-wide list. The workspace-ownership check still runs first so
+// cross-tenant access is rejected before the project filter is applied.
+func (s *Service) List(ctx context.Context, p domain.Principal, workspaceID, projectID string, limit int, before time.Time) ([]domain.WorkflowRun, error) {
 	if s.cfg.Workspaces != nil {
 		ok, err := s.cfg.Workspaces.OwnsWorkspace(ctx, p.OrgID, workspaceID)
 		if err != nil {
@@ -213,7 +216,7 @@ func (s *Service) List(ctx context.Context, p domain.Principal, workspaceID stri
 			return nil, domain.ErrNotFound
 		}
 	}
-	return s.cfg.Repo.ListRuns(ctx, p.OrgID, workspaceID, limit, before)
+	return s.cfg.Repo.ListRuns(ctx, p.OrgID, workspaceID, projectID, limit, before)
 }
 
 // Subscribe attaches a tap to the SSE broker for the given run id. The

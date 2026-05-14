@@ -86,8 +86,13 @@ type NavItem = {
 };
 
 const COOKIE_WORKSPACE = "nexis_workspace";
-const INCIDENTS_POLL_MS = 10_000;
-const APPROVALS_POLL_MS = 10_000;
+// 2026-05-15 — bumped Incidents + Approvals polls from 10s to 30s. Both
+// endpoints are cheap but the BE just got the approvals/pending route
+// mounted, and a 10s cadence triple-counts the live dashboard's own
+// pipeline poll for the same data. 30s is the lowest cadence that still
+// reads as "live" without burning workspace-scoped Postgres scans.
+const INCIDENTS_POLL_MS = 30_000;
+const APPROVALS_POLL_MS = 30_000;
 const INTEGRATIONS_POLL_MS = 60_000;
 const PROJECTS_POLL_MS = 60_000;
 
@@ -498,16 +503,24 @@ function badgeFor(
 ): { count?: string; tone: BadgeTone; label: string } | null {
   switch (navKey) {
     case "incidents":
+      // Incidents is the "something is on fire" surface — `warn` tone so
+      // the badge reads as an alert and visually separates from the cool
+      // info-blue used for the approvals queue depth.
       return signals.incidents > 0
-        ? { count: String(signals.incidents), tone: "info", label: "running" }
+        ? { count: String(signals.incidents), tone: "warn", label: "running" }
         : null;
     case "workflows":
+      // Workflows mirrors Incidents (same underlying running-count) so
+      // operators get a consistent signal across both rows.
       return signals.incidents > 0
-        ? { count: String(signals.incidents), tone: "info", label: "running" }
+        ? { count: String(signals.incidents), tone: "warn", label: "running" }
         : null;
     case "approvals":
+      // Approvals is "needs your attention" but not "on fire" — info blue
+      // distinguishes the queue-depth signal from the active-incident
+      // alert tone above.
       return signals.approvals > 0
-        ? { count: String(signals.approvals), tone: "warn", label: "pending" }
+        ? { count: String(signals.approvals), tone: "info", label: "pending" }
         : null;
     case "integrations":
       return {

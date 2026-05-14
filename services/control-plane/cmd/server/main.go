@@ -361,6 +361,12 @@ func main() {
 	var slackDecider *approval.SlackDecider
 	var approvalRepo *repo.ApprovalRepo
 	var approvalSignaler *approval.SignalerService
+	// patchStoreForHTTP is the same MinIO/S3 PatchStore the recovery worker
+	// writes into. Hoisted to outer scope so the HTTP Deps struct can wire
+	// the approval-flow patch viewer route. Stays nil when the worker
+	// branch is skipped (no temporal, no admin pool) — the route mount in
+	// server.go guards on non-nil.
+	var patchStoreForHTTP domain.PatchStore
 	if appPool != nil && adminPool != nil {
 		wfRepo = repo.NewWorkflowRepo(appPool, adminPool)
 		tc, err := temporalplatform.Dial(temporalplatform.Config{
@@ -382,11 +388,16 @@ func main() {
 			// Phase 5 — patch store wiring. The activity dependency tolerates
 			// nil (test path), so a misconfigured PATCH_STORE in dev logs a
 			// warning and keeps the worker running without object storage.
+			//
+			// Lift the constructed store to the outer-scope
+			// patchStoreForHTTP so the HTTP server can mount the
+			// approval-flow patch viewer route against the same backend.
 			var ps domain.PatchStore
 			if got, perr := patchstore.NewFromConfig(cfg, kv); perr != nil {
 				logger.Warn("patchstore disabled", "err", perr)
 			} else {
 				ps = got
+				patchStoreForHTTP = got
 				logger.Info("patchstore initialised", "kind", cfg.PatchStore, "endpoint", cfg.MinIOEndpoint)
 			}
 
@@ -658,6 +669,7 @@ func main() {
 		Projects:          projectsHandlerSvc,
 		Approvals:         approvalRepo,
 		ApprovalSignaler:  approvalSignaler,
+		PatchStore:        patchStoreForHTTP,
 		InviteCodes:       inviteCodesRepo,
 		NASATLX:           nasaTLXRepo,
 		OrgStats:          orgStatsRepo,

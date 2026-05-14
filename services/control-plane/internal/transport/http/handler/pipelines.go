@@ -83,6 +83,11 @@ func toActivityEventResp(e domain.ActivityEvent) dto.ActivityEventResp {
 // PipelinesList wires GET /v1/workspaces/{ws_id}/pipelines. Always emits an
 // array (never null). `limit` defaults to 50, max 200. `before` is an RFC3339
 // timestamp cursor.
+//
+// project_id (optional UUID) narrows the result to runs whose
+// workflow_runs.project_id matches the value — used by the per-project
+// Overview tab in the FE. An empty or invalid UUID disables the filter so
+// a malformed query string can't silently flip the meaning of the list.
 func PipelinesList(svc domain.WorkflowService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		princ, _ := appmw.PrincipalFrom(r.Context())
@@ -99,7 +104,14 @@ func PipelinesList(svc domain.WorkflowService) http.HandlerFunc {
 				before = t
 			}
 		}
-		rows, err := svc.List(r.Context(), princ, wsID, limit, before)
+		// project_id is opt-in. Validate UUID shape so a malformed query
+		// param degrades to the workspace-wide list rather than a 500
+		// from the database when it tries to cast a non-UUID to ::uuid.
+		projectID := ""
+		if v := r.URL.Query().Get("project_id"); v != "" && isUUID(v) {
+			projectID = v
+		}
+		rows, err := svc.List(r.Context(), princ, wsID, projectID, limit, before)
 		if err != nil {
 			if errors.Is(err, domain.ErrNotFound) {
 				writeError(w, http.StatusNotFound, "not found")
@@ -114,6 +126,28 @@ func PipelinesList(svc domain.WorkflowService) http.HandlerFunc {
 		}
 		httpJSON(w, http.StatusOK, out)
 	}
+}
+
+// isUUID is a cheap shape-check for the canonical 36-char hex form
+// (8-4-4-4-12). The repo's SQL casts to ::uuid anyway, but checking here
+// keeps a malformed query param from surfacing as a 500.
+func isUUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i, c := range s {
+		switch i {
+		case 8, 13, 18, 23:
+			if c != '-' {
+				return false
+			}
+		default:
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // PipelineGet wires GET /v1/workspaces/{ws_id}/pipelines/{run_id}. Returns

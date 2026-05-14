@@ -314,4 +314,35 @@ export const pipelines = {
     });
     return es;
   },
+
+  // patches namespaces the patch-store endpoints. Today only `get` exists —
+  // the control-plane resolves a `patch_key` stamped on a Backend.Codegen
+  // activity_event payload back to the raw unified diff text stored in
+  // MinIO. The response body is plain text (not JSON) — the diff is fed
+  // straight into a <pre> on the incident detail page.
+  //
+  // 404 → null so the caller can render an empty state instead of a toast
+  // (the patch may have been garbage-collected from the patchstore).
+  patches: {
+    get: async (
+      wsId: string,
+      runId: string,
+      patchKey: string,
+    ): Promise<string | null> => {
+      const r = await fetch(
+        `${API}/v1/workspaces/${wsId}/pipelines/${runId}/patches/${encodeURIComponent(
+          patchKey,
+        )}`,
+        { credentials: "include", cache: "no-store" },
+      );
+      if (r.status === 404) return null;
+      if (!r.ok) {
+        const body = (await r.json().catch(() => ({}) as Record<string, unknown>)) as {
+          error?: string;
+        };
+        throw new Error(body.error ?? r.statusText);
+      }
+      return r.text();
+    },
+  },
 };
