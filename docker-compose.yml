@@ -429,7 +429,7 @@ services:
       GITOPS_URL: http://gitops:8082
       GITOPS_TOKEN: ${GITOPS_TOKEN:?GITOPS_TOKEN required — see .env.example}
       GITHUB_APP_ID: ${GITHUB_APP_ID:-12345}
-      GITHUB_APP_PRIVATE_KEY_PATH: /run/secrets/github-app.pem
+      GITHUB_APP_PRIVATE_KEY_PATH: /run/secrets/github-app
       FIXTURE_REPO_OWNER: ${FIXTURE_REPO_OWNER:-nexis-eco}
       FIXTURE_REPO_NAME:  ${FIXTURE_REPO_NAME:-fixture-recovery-demo}
       FIXTURE_REPO_DEFAULT_BRANCH: ${FIXTURE_REPO_DEFAULT_BRANCH:-main}
@@ -517,9 +517,9 @@ services:
     environment:
       PORT: "8082"
       DATABASE_URL: postgres://nexis_gitops:nexis_dev_password@postgres:5432/nexis?sslmode=disable
-      GITOPS_TOKEN: ${GITOPS_TOKEN:?GITOPS_TOKEN required — see .env.example}
+      GITOPS_AUTH_TOKEN: ${GITOPS_TOKEN:?GITOPS_TOKEN required — see .env.example}
       GITHUB_APP_ID: ${GITHUB_APP_ID:-12345}
-      GITHUB_APP_PRIVATE_KEY_PATH: /run/secrets/github-app.pem
+      GITHUB_APP_PRIVATE_KEY_PATH: /run/secrets/github-app
       LOG_LEVEL: info
     ports:
       - "127.0.0.1:8082:8082"
