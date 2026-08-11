@@ -1,8 +1,17 @@
-.PHONY: seed-sentry help
+.PHONY: seed-sentry migrate help
 
 ORG_ID ?=
 SECRET ?= dev-sentry-webhook-secret-32
 HOST   ?= http://localhost:8080
+DATABASE_URL ?= postgres://nexis:nexis_dev_password@localhost:5432/nexis?sslmode=disable
+
+migrate:
+	@echo "control-plane applies migrations automatically at boot (internal/platform/migrate)."
+	@echo "This target is for replaying them manually against $(DATABASE_URL) without starting the server."
+	@for f in $$(ls services/control-plane/migrations/*.up.sql | sort); do \
+		echo "[up] $$f"; \
+		psql "$(DATABASE_URL)" -v ON_ERROR_STOP=1 -f "$$f" || exit 1; \
+	done
 
 seed-sentry:
 	@test -n "$(ORG_ID)" || (echo "ORG_ID required (e.g. ORG_ID=<uuid> make seed-sentry)" && exit 1)

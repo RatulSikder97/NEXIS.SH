@@ -12,8 +12,10 @@
 
 const API =
   typeof window === "undefined"
-    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
-    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    ? (process.env.API_URL_INTERNAL ??
+      process.env.NEXT_PUBLIC_API_URL ??
+      "http://localhost:8080")
+    : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080");
 
 export type AuthUser = { id: string; email: string };
 export type AuthOrg = { id: string; name: string; slug: string };
@@ -40,6 +42,18 @@ export type APIKeyCreated = {
   name: string;
   scopes: string[];
   plaintext_once: string;
+};
+
+// SessionInfo matches dto.SessionResp from the control-plane — one row in
+// the GET /v1/me/sessions response. `is_current` marks the session backing
+// the request; the UI hides the revoke button for that row.
+export type SessionInfo = {
+  id: string;
+  created_at: string;
+  last_seen_at: string;
+  user_agent: string;
+  ip: string;
+  is_current: boolean;
 };
 
 export type MFAEnrollResp = {
@@ -71,11 +85,12 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (r.status === 204) return undefined as T;
-  const body = await r.json().catch(() => ({} as Record<string, unknown>));
+  const body = await r.json().catch(() => ({}) as Record<string, unknown>);
   if (!r.ok) {
-    const msg = typeof body === "object" && body !== null && "error" in body
-      ? String((body as { error: unknown }).error)
-      : r.statusText;
+    const msg =
+      typeof body === "object" && body !== null && "error" in body
+        ? String((body as { error: unknown }).error)
+        : r.statusText;
     throw new AuthError(msg, r.status);
   }
   return body as T;
@@ -94,8 +109,7 @@ export const auth = {
       body: JSON.stringify(input),
     }),
 
-  logout: () =>
-    call<void>("/v1/auth/logout", { method: "POST" }),
+  logout: () => call<void>("/v1/auth/logout", { method: "POST" }),
 
   me: () => call<MeResp>("/v1/me"),
 
@@ -114,6 +128,26 @@ export const auth = {
       body: JSON.stringify({ code }),
     }),
 
-  mfaDisable: () =>
-    call<void>("/v1/auth/mfa", { method: "DELETE" }),
+  mfaDisable: () => call<void>("/v1/auth/mfa", { method: "DELETE" }),
+
+  // Phase 9 — password reset. The request endpoint always returns 202 for a
+  // well-formed email (unknown addresses included) so it can't be used to
+  // probe for accounts; confirm returns 204 and revokes every session.
+  requestPasswordReset: (email: string) =>
+    call<void>("/v1/auth/password-reset/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  confirmPasswordReset: (token: string, newPassword: string) =>
+    call<void>("/v1/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({ token, new_password: newPassword }),
+    }),
+
+  // Phase 9 — session management.
+  listSessions: () => call<SessionInfo[]>("/v1/me/sessions"),
+
+  revokeSession: (id: string) =>
+    call<void>(`/v1/me/sessions/${id}`, { method: "DELETE" }),
 };

@@ -21,12 +21,15 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -266,6 +269,65 @@ func (c *Client) ListInstallationRepos(ctx context.Context, instToken string) ([
 		names = append(names, r.FullName)
 	}
 	return names, nil
+}
+
+// fileContentsResp is the slim view of GET /repos/{owner}/{repo}/contents/
+// {path} we consume — the base64 blob + its encoding marker. GitHub returns
+// many more fields (sha, size, links); all dropped.
+type fileContentsResp struct {
+	Content  string `json:"content"`
+	Encoding string `json:"encoding"`
+}
+
+// GetFileContents fetches a single file's raw bytes via the contents API
+// (GET /repos/{owner}/{repo}/contents/{path}?ref={ref}). ref may be empty —
+// GitHub then serves the repo's default branch. A missing file surfaces as a
+// typed *APIError with Status 404 so callers can branch on "not present"
+// without string matching.
+//
+// Used by the deploy preflight to cheaply answer "does this repo have a root
+// Dockerfile" without a clone; the deploy-engine service re-checks after
+// cloning, so this read only needs to be a fast preview, not authoritative.
+func (c *Client) GetFileContents(ctx context.Context, instToken, owner, repo, path, ref string) ([]byte, error) {
+	if owner == "" || repo == "" || path == "" {
+		return nil, errors.New("github: owner, repo and path required")
+	}
+	u := fmt.Sprintf("%s/repos/%s/%s/contents/%s", c.baseURL, owner, repo, path)
+	if ref != "" {
+		u += "?ref=" + url.QueryEscape(ref)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("github: build req: %w", err)
+	}
+	req.Header.Set("Authorization", "token "+instToken)
+	c.setCommonHeaders(req)
+
+	resp, err := c.httpc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("github: get contents: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode/100 != 2 {
+		return nil, decodeAPIError(resp)
+	}
+	var body fileContentsResp
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("github: decode contents: %w", err)
+	}
+	if body.Encoding != "base64" {
+		// Directories return an array (decode above fails first) and >1MB
+		// files return encoding "none" — neither is a shape this preview
+		// reader supports.
+		return nil, fmt.Errorf("github: unsupported contents encoding %q", body.Encoding)
+	}
+	// GitHub line-wraps the base64 payload; strip the newlines before decoding.
+	raw, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(body.Content, "\n", ""))
+	if err != nil {
+		return nil, fmt.Errorf("github: decode base64 contents: %w", err)
+	}
+	return raw, nil
 }
 
 // pullRequestRespMin is the slim view of the PR creation response we care

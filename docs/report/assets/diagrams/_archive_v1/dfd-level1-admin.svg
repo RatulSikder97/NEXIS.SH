@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ar2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#333"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="900" fill="#ffffff"/>
+  <text x="600" y="32" text-anchor="middle" font-size="20" font-weight="bold">Figure: DFD Level 1 (Owner / Admin)</text>
+
+  <rect x="30" y="380" width="150" height="54" fill="#dfeeff" stroke="#1c4e91" stroke-width="1.4"/>
+  <text x="105" y="412" text-anchor="middle" font-size="12">Owner / Admin</text>
+
+  <!-- processes -->
+  <g font-size="11.5">
+    <circle cx="330" cy="110" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="330" y="106" text-anchor="middle">1.0</text><text x="330" y="120" text-anchor="middle">Auth + RBAC</text>
+
+    <circle cx="530" cy="110" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="530" y="106" text-anchor="middle">2.0</text><text x="530" y="120" text-anchor="middle">Members &amp; Roles</text>
+
+    <circle cx="730" cy="110" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="730" y="106" text-anchor="middle">3.0</text><text x="730" y="120" text-anchor="middle">Role Recommender</text>
+
+    <circle cx="930" cy="110" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="930" y="106" text-anchor="middle">4.0</text><text x="930" y="120" text-anchor="middle">Integrations</text>
+
+    <circle cx="330" cy="270" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="330" y="266" text-anchor="middle">5.0</text><text x="330" y="280" text-anchor="middle">Project + Policy</text>
+
+    <circle cx="530" cy="270" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="530" y="266" text-anchor="middle">6.0</text><text x="530" y="280" text-anchor="middle">Approval Gate</text>
+
+    <circle cx="730" cy="270" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="730" y="266" text-anchor="middle">7.0</text><text x="730" y="280" text-anchor="middle">Billing</text>
+
+    <circle cx="930" cy="270" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="930" y="266" text-anchor="middle">8.0</text><text x="930" y="280" text-anchor="middle">Audit &amp; Export</text>
+
+    <circle cx="330" cy="430" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="330" y="426" text-anchor="middle">9.0</text><text x="330" y="440" text-anchor="middle">System Health</text>
+
+    <circle cx="530" cy="430" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="530" y="426" text-anchor="middle">10.0</text><text x="530" y="440" text-anchor="middle">Sentinel Trigger</text>
+
+    <circle cx="730" cy="430" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="730" y="426" text-anchor="middle">11.0</text><text x="730" y="440" text-anchor="middle">Sessions / MFA</text>
+
+    <circle cx="930" cy="430" r="55" fill="#cfe3ff" stroke="#1c4e91"/><text x="930" y="426" text-anchor="middle">12.0</text><text x="930" y="440" text-anchor="middle">Kill Switch</text>
+  </g>
+
+  <!-- data stores -->
+  <g font-size="11">
+    <rect x="30" y="540" width="150" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="105" y="562" text-anchor="middle">Users DB</text>
+    <rect x="200" y="540" width="150" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="275" y="562" text-anchor="middle">org_members DB</text>
+    <rect x="370" y="540" width="170" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="455" y="562" text-anchor="middle">role_recommendations DB</text>
+    <rect x="560" y="540" width="150" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="635" y="562" text-anchor="middle">integrations DB</text>
+    <rect x="730" y="540" width="150" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="805" y="562" text-anchor="middle">projects DB</text>
+    <rect x="900" y="540" width="150" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="975" y="562" text-anchor="middle">approval_decisions DB</text>
+
+    <rect x="30" y="600" width="150" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="105" y="622" text-anchor="middle">billing DB (Stripe)</text>
+    <rect x="200" y="600" width="150" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="275" y="622" text-anchor="middle">audit_log DB</text>
+    <rect x="370" y="600" width="170" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="455" y="622" text-anchor="middle">incidents_raw DB</text>
+    <rect x="560" y="600" width="150" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="635" y="622" text-anchor="middle">sessions DB</text>
+    <rect x="730" y="600" width="150" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="805" y="622" text-anchor="middle">workflow_runs DB</text>
+  </g>
+
+  <!-- connectors: actor to processes -->
+  <g stroke="#333" stroke-width="1.1" fill="none">
+    <path d="M180 400 L 285 140" marker-end="url(#ar2)"/>
+    <path d="M180 405 L 490 145" marker-end="url(#ar2)"/>
+    <path d="M180 410 L 690 145" marker-end="url(#ar2)"/>
+    <path d="M180 415 L 895 145" marker-end="url(#ar2)"/>
+    <path d="M180 400 L 290 290" marker-end="url(#ar2)"/>
+    <path d="M180 405 L 490 290" marker-end="url(#ar2)"/>
+    <path d="M180 410 L 690 290" marker-end="url(#ar2)"/>
+    <path d="M180 400 L 890 290" marker-end="url(#ar2)"/>
+    <path d="M180 400 L 300 400" marker-end="url(#ar2)"/>
+    <path d="M180 405 L 500 415" marker-end="url(#ar2)"/>
+    <path d="M180 415 L 700 425" marker-end="url(#ar2)"/>
+    <path d="M180 420 L 900 425" marker-end="url(#ar2)"/>
+  </g>
+
+  <!-- process to store connectors -->
+  <g stroke="#888" stroke-width="1" fill="none">
+    <path d="M330 165 L 200 540" marker-end="url(#ar2)"/>
+    <path d="M530 165 L 275 540" marker-end="url(#ar2)"/>
+    <path d="M730 165 L 455 540" marker-end="url(#ar2)"/>
+    <path d="M930 165 L 635 540" marker-end="url(#ar2)"/>
+    <path d="M330 325 L 805 540" marker-end="url(#ar2)"/>
+    <path d="M530 325 L 975 540" marker-end="url(#ar2)"/>
+    <path d="M730 325 L 105 600" marker-end="url(#ar2)"/>
+    <path d="M930 325 L 275 600" marker-end="url(#ar2)"/>
+    <path d="M330 485 L 455 600" marker-end="url(#ar2)"/>
+    <path d="M730 485 L 635 600" marker-end="url(#ar2)"/>
+    <path d="M530 485 L 805 600" marker-end="url(#ar2)"/>
+  </g>
+
+  <text x="600" y="700" text-anchor="middle" font-size="12" fill="#444">10.0 Sentinel Trigger writes directly into incidents_raw, which is the SAME table the self-healing</text>
+  <text x="600" y="718" text-anchor="middle" font-size="12" fill="#444">loop's automatic detectors write to — an admin-triggered run is indistinguishable downstream from an automatic one.</text>
+</svg>

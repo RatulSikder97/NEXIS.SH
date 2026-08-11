@@ -55,6 +55,12 @@ const (
 	ActFailed    ActivityStatus = "failed"
 	ActRetrying  ActivityStatus = "retrying"
 	ActTimedOut  ActivityStatus = "timed_out"
+	// ActSkipped marks an agent the Synthesiser plan deliberately left out
+	// (or an action a project policy disabled). The workflow emits it instead
+	// of silently omitting the step so the timeline UI can explain why the
+	// agent never ran. Widened into the activity_events CHECK by migration
+	// 0026.
+	ActSkipped ActivityStatus = "skipped"
 )
 
 // WorkflowRun is one tenant-scoped execution of a workflow type. ID equals

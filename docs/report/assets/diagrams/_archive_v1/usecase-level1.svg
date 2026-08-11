@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="1500" viewBox="0 0 1300 1500" font-family="Helvetica, Arial, sans-serif">
+  <rect width="1300" height="1500" fill="#ffffff"/>
+  <text x="650" y="34" text-anchor="middle" font-size="20" font-weight="bold">Figure: Level 1 Use Case Diagram — NEXIS Platform</text>
+
+  <!-- system boundary -->
+  <rect x="230" y="70" width="840" height="1370" fill="#f7f9fc" stroke="#222" stroke-width="1.5"/>
+
+  <!-- actor: Owner/Admin -->
+  <g font-size="11.5" font-weight="bold">
+    <g transform="translate(40,110)">
+      <circle cx="20" cy="10" r="10" fill="none" stroke="#222" stroke-width="1.5"/>
+      <line x1="20" y1="20" x2="20" y2="55" stroke="#222" stroke-width="1.5"/>
+      <line x1="0" y1="32" x2="40" y2="32" stroke="#222" stroke-width="1.5"/>
+      <line x1="20" y1="55" x2="4" y2="82" stroke="#222" stroke-width="1.5"/>
+      <line x1="20" y1="55" x2="36" y2="82" stroke="#222" stroke-width="1.5"/>
+      <text x="20" y="98" text-anchor="middle">Owner /</text>
+      <text x="20" y="112" text-anchor="middle">Admin</text>
+    </g>
+  </g>
+
+  <!-- actor: Engineer -->
+  <g transform="translate(40,650)" font-size="11.5" font-weight="bold">
+    <circle cx="20" cy="10" r="10" fill="none" stroke="#222" stroke-width="1.5"/>
+    <line x1="20" y1="20" x2="20" y2="55" stroke="#222" stroke-width="1.5"/>
+    <line x1="0" y1="32" x2="40" y2="32" stroke="#222" stroke-width="1.5"/>
+    <line x1="20" y1="55" x2="4" y2="82" stroke="#222" stroke-width="1.5"/>
+    <line x1="20" y1="55" x2="36" y2="82" stroke="#222" stroke-width="1.5"/>
+    <text x="20" y="98" text-anchor="middle">Engineer /</text>
+    <text x="20" y="112" text-anchor="middle">Member</text>
+  </g>
+
+  <!-- actor: Viewer -->
+  <g transform="translate(40,1030)" font-size="11.5" font-weight="bold">
+    <circle cx="20" cy="10" r="10" fill="none" stroke="#222" stroke-width="1.5"/>
+    <line x1="20" y1="20" x2="20" y2="55" stroke="#222" stroke-width="1.5"/>
+    <line x1="0" y1="32" x2="40" y2="32" stroke="#222" stroke-width="1.5"/>
+    <line x1="20" y1="55" x2="4" y2="82" stroke="#222" stroke-width="1.5"/>
+    <line x1="20" y1="55" x2="36" y2="82" stroke="#222" stroke-width="1.5"/>
+    <text x="20" y="98" text-anchor="middle">Viewer</text>
+  </g>
+
+  <!-- actor: 9-agent fleet (right side, autonomous) -->
+  <g transform="translate(1190,650)" font-size="11.5" font-weight="bold">
+    <rect x="-30" y="-20" width="60" height="120" rx="8" fill="#eee9ff" stroke="#5a2f9c"/>
+    <text x="0" y="0" text-anchor="middle">9-Agent</text>
+    <text x="0" y="16" text-anchor="middle">Self-</text>
+    <text x="0" y="32" text-anchor="middle">Healing</text>
+    <text x="0" y="48" text-anchor="middle">Fleet</text>
+    <text x="0" y="64" text-anchor="middle">(autonomous)</text>
+  </g>
+
+  <!-- use case ovals: helper macro replaced by manual ellipses -->
+  <g font-size="11">
+    <!-- Owner/Admin group -->
+    <ellipse cx="420" cy="110" rx="110" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="420" y="114" text-anchor="middle">Manage members &amp; roles</text>
+    <ellipse cx="650" cy="110" rx="120" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="650" y="114" text-anchor="middle">Accept/dismiss role recs.</text>
+    <ellipse cx="880" cy="110" rx="110" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="880" y="114" text-anchor="middle">Connect integrations</text>
+
+    <ellipse cx="420" cy="180" rx="110" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="420" y="184" text-anchor="middle">Create / configure project</text>
+    <ellipse cx="650" cy="180" rx="120" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="650" y="184" text-anchor="middle">Set recovery policy &amp; SLO</text>
+    <ellipse cx="880" cy="180" rx="110" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="880" y="184" text-anchor="middle">Toggle kill switch</text>
+
+    <ellipse cx="420" cy="250" rx="110" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="420" y="254" text-anchor="middle">Issue invites / API keys</text>
+    <ellipse cx="650" cy="250" rx="120" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="650" y="254" text-anchor="middle">Manage billing / plan</text>
+    <ellipse cx="880" cy="250" rx="110" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="880" y="254" text-anchor="middle">Export RLHF training data</text>
+
+    <ellipse cx="420" cy="320" rx="110" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="420" y="324" text-anchor="middle">View audit log</text>
+    <ellipse cx="650" cy="320" rx="120" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="650" y="324" text-anchor="middle">Trigger manual Sentinel run</text>
+    <ellipse cx="880" cy="320" rx="110" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="880" y="324" text-anchor="middle">Export eval / audit CSV</text>
+
+    <ellipse cx="420" cy="390" rx="110" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="420" y="394" text-anchor="middle">Revoke sessions</text>
+    <ellipse cx="650" cy="390" rx="120" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="650" y="394" text-anchor="middle">Reset password</text>
+    <ellipse cx="880" cy="390" rx="110" ry="28" fill="#dfeeff" stroke="#1c4e91"/><text x="880" y="394" text-anchor="middle">Enroll / verify MFA</text>
+
+    <!-- shared: approve/reject/modify -->
+    <ellipse cx="480" cy="470" rx="140" ry="30" fill="#fdeee0" stroke="#c15b0f"/><text x="480" y="466" text-anchor="middle">Approve / Reject / Modify</text><text x="480" y="480" text-anchor="middle">a proposed patch</text>
+    <ellipse cx="800" cy="470" rx="140" ry="30" fill="#fdeee0" stroke="#c15b0f"/><text x="800" y="466" text-anchor="middle">Watch live recovery</text><text x="800" y="480" text-anchor="middle">timeline (SSE)</text>
+
+    <ellipse cx="480" cy="550" rx="140" ry="30" fill="#fdeee0" stroke="#c15b0f"/><text x="480" y="546" text-anchor="middle">View patch diff</text><text x="480" y="560" text-anchor="middle">(Monaco viewer)</text>
+    <ellipse cx="800" cy="550" rx="140" ry="30" fill="#fdeee0" stroke="#c15b0f"/><text x="800" y="546" text-anchor="middle">Deploy / stop preview</text><text x="800" y="560" text-anchor="middle">container (Ops tab)</text>
+
+    <!-- Engineer group -->
+    <ellipse cx="420" cy="690" rx="110" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="420" y="694" text-anchor="middle">Run Live-Demo scenario</text>
+    <ellipse cx="650" cy="690" rx="120" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="650" y="694" text-anchor="middle">Browse incidents list</text>
+    <ellipse cx="880" cy="690" rx="110" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="880" y="694" text-anchor="middle">Inspect agent runs</text>
+
+    <ellipse cx="420" cy="760" rx="110" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="420" y="764" text-anchor="middle">Submit NASA-TLX survey</text>
+    <ellipse cx="650" cy="760" rx="120" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="650" y="764" text-anchor="middle">Browse eval harness runs</text>
+    <ellipse cx="880" cy="760" rx="110" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="880" y="764" text-anchor="middle">Query knowledge base</text>
+
+    <ellipse cx="420" cy="830" rx="110" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="420" y="834" text-anchor="middle">View cost / performance</text>
+    <ellipse cx="650" cy="830" rx="120" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="650" y="834" text-anchor="middle">Manage own API keys</text>
+    <ellipse cx="880" cy="830" rx="110" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="880" y="834" text-anchor="middle">Update profile / prefs.</text>
+
+    <ellipse cx="550" cy="900" rx="130" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="550" y="904" text-anchor="middle">Manage own sessions / devices</text>
+    <ellipse cx="820" cy="900" rx="130" ry="28" fill="#e9f9ec" stroke="#2f8f4e"/><text x="820" y="904" text-anchor="middle">Sign up / sign in / MFA verify</text>
+
+    <!-- Viewer group -->
+    <ellipse cx="420" cy="1070" rx="110" ry="28" fill="#f4f1fb" stroke="#6a3fb0"/><text x="420" y="1074" text-anchor="middle">Read-only dashboard</text>
+    <ellipse cx="650" cy="1070" rx="120" ry="28" fill="#f4f1fb" stroke="#6a3fb0"/><text x="650" y="1074" text-anchor="middle">Read-only incident view</text>
+    <ellipse cx="880" cy="1070" rx="110" ry="28" fill="#f4f1fb" stroke="#6a3fb0"/><text x="880" y="1074" text-anchor="middle">Read-only system health</text>
+
+    <!-- autonomous fleet driven use cases -->
+    <ellipse cx="480" cy="1160" rx="140" ry="30" fill="#eee9ff" stroke="#5a2f9c"/><text x="480" y="1156" text-anchor="middle">Detect &amp; diagnose incident</text><text x="480" y="1170" text-anchor="middle">(Sentinel + Pathfinder)</text>
+    <ellipse cx="800" cy="1160" rx="140" ry="30" fill="#eee9ff" stroke="#5a2f9c"/><text x="800" y="1156" text-anchor="middle">Plan &amp; synthesise repair</text><text x="800" y="1170" text-anchor="middle">(Synthesiser + Architect)</text>
+
+    <ellipse cx="480" cy="1240" rx="140" ry="30" fill="#eee9ff" stroke="#5a2f9c"/><text x="480" y="1236" text-anchor="middle">Generate code + tests</text><text x="480" y="1250" text-anchor="middle">(Backend + QA)</text>
+    <ellipse cx="800" cy="1240" rx="140" ry="30" fill="#eee9ff" stroke="#5a2f9c"/><text x="800" y="1236" text-anchor="middle">Package deploy + migrations</text><text x="800" y="1250" text-anchor="middle">(DevOps ‖ Data Engineer)</text>
+
+    <ellipse cx="480" cy="1320" rx="140" ry="30" fill="#eee9ff" stroke="#5a2f9c"/><text x="480" y="1316" text-anchor="middle">Shadow-validate patch</text><text x="480" y="1330" text-anchor="middle">(Validator sandbox)</text>
+    <ellipse cx="800" cy="1320" rx="140" ry="30" fill="#eee9ff" stroke="#5a2f9c"/><text x="800" y="1316" text-anchor="middle">Open PR / redeploy /</text><text x="800" y="1330" text-anchor="middle">rollback on SLO breach</text>
+  </g>
+
+  <!-- connector lines (indicative, not exhaustive) -->
+  <g stroke="#888" stroke-width="1">
+    <line x1="80" y1="176" x2="310" y2="110"/>
+    <line x1="80" y1="176" x2="310" y2="180"/>
+    <line x1="80" y1="176" x2="310" y2="250"/>
+    <line x1="80" y1="176" x2="310" y2="320"/>
+    <line x1="80" y1="176" x2="310" y2="390"/>
+    <line x1="80" y1="176" x2="340" y2="470"/>
+
+    <line x1="80" y1="716" x2="310" y2="690"/>
+    <line x1="80" y1="716" x2="310" y2="760"/>
+    <line x1="80" y1="716" x2="310" y2="830"/>
+    <line x1="80" y1="716" x2="420" y2="900"/>
+    <line x1="80" y1="716" x2="340" y2="550"/>
+    <line x1="80" y1="716" x2="340" y2="470"/>
+
+    <line x1="80" y1="1096" x2="310" y2="1070"/>
+    <line x1="80" y1="1096" x2="650" y2="1070"/>
+    <line x1="80" y1="1096" x2="880" y2="1070"/>
+
+    <line x1="1190" y1="686" x2="940" y2="470"/>
+    <line x1="1190" y1="686" x2="940" y2="1160"/>
+    <line x1="1190" y1="686" x2="940" y2="1240"/>
+    <line x1="1190" y1="686" x2="940" y2="1320"/>
+  </g>
+
+  <text x="650" y="1460" text-anchor="middle" font-size="12" fill="#444">Owner/Admin (blue) has every Engineer + Viewer permission; Engineer (green) has every Viewer permission (role-additive RBAC).</text>
+  <text x="650" y="1478" text-anchor="middle" font-size="12" fill="#444">The 9-agent fleet (purple) executes autonomously inside the system boundary and only surfaces to a human at the approval gate.</text>
+</svg>

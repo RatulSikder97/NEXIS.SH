@@ -38,13 +38,13 @@ import (
 // scenario:"unknown" placeholder with confidence=0 so the Synthesiser still
 // has a deterministic route to fall back on.
 type Provider struct {
-	LLM       *agents.LLMClient // shared LLMClient used for the optional refinement pass + budget plumbing
-	Graph     domain.Graph      // may be nil — Pathfinder must tolerate
+	LLM       *agents.LLMClient   // shared LLMClient used for the optional refinement pass + budget plumbing
+	Graph     domain.Graph        // may be nil — Pathfinder must tolerate
 	Causal    domain.CausalEngine // may be nil — Pathfinder must tolerate
-	Model     string            // resolved per-provider by main.go; only used when LLMRefine is true
-	LLMRefine bool              // mirrors config.PathfinderLLMRefine
-	MaxHops   int               // edge traversal depth; default 2 (matches spec §6.2)
-	Limit     int               // edge traversal cap; default 20 (matches spec §6.2)
+	Model     string              // resolved per-provider by main.go; only used when LLMRefine is true
+	LLMRefine bool                // mirrors config.PathfinderLLMRefine
+	MaxHops   int                 // edge traversal depth; default 2 (matches spec §6.2)
+	Limit     int                 // edge traversal cap; default 20 (matches spec §6.2)
 }
 
 // New returns a Provider with safe defaults. Both graph and causal are
@@ -79,21 +79,81 @@ func (p *Provider) Run(ctx context.Context, in domain.AgentInput) (domain.AgentO
 	filePath, line := extractLastPythonFrame(inc.Stacktrace)
 
 	// ----- 2 + 3) Walk the graph for the containing symbol + 1-2 hop neighbours.
+	// Alongside the flat evidence list we assemble the per-node candidate set
+	// the causal sidecar ranks: the symptom symbol itself (distance 0) plus
+	// every Symbol-kind neighbour, each carrying its own evidence slice and
+	// graph-position metadata (hop distance from the symptom, edge counts
+	// within the retrieved <=MaxHops subgraph — see domain.CausalCandidate).
 	var (
 		rootCauseNode  string
 		evidence       []string
+		candidates     []domain.CausalCandidate
 		graphAvailable = p.Graph != nil
 	)
 	if p.Graph != nil && filePath != "" {
 		sym, err := p.Graph.FindSymbolContaining(ctx, in.OrgID, in.RepoSHA, filePath, line)
 		if err == nil {
 			rootCauseNode = sym.Name
-			evidence = append(evidence, fmt.Sprintf("symbol=%s in %s:%d-%d", sym.Name, sym.FilePath, sym.LineStart, sym.LineEnd))
+			symEv := fmt.Sprintf("symbol=%s in %s:%d-%d", sym.Name, sym.FilePath, sym.LineStart, sym.LineEnd)
+			evidence = append(evidence, symEv)
 
 			neigh, nerr := p.Graph.Neighbours(ctx, sym, []domain.GraphEdgeKind{domain.GraphEdgeCalls, domain.GraphEdgeRaised}, p.MaxHops, p.Limit)
 			if nerr == nil {
+				rootEvidence := []string{symEv}
+				rootDegree := 0
+				neighbourEv := map[string][]string{}
+				neighbourHops := map[string]int{}
+				neighbourPaths := map[string]int{}
+				neighbourKind := map[string]domain.GraphNodeKind{}
+				var order []string
 				for _, e := range neigh {
-					evidence = append(evidence, fmt.Sprintf("%s->%s(%s)", e.From.Name, e.To.Name, e.Kind))
+					edgeEv := fmt.Sprintf("%s->%s(%s)", e.From.Name, e.To.Name, e.Kind)
+					evidence = append(evidence, edgeEv)
+					hops := e.Hops
+					if hops <= 0 {
+						hops = 1 // pre-Hops stores + fakes: traversal rows are >=1 hop
+					}
+					if hops == 1 {
+						// 1-hop rows are exactly the symptom symbol's incident
+						// edges — its degree within the evidence subgraph.
+						rootDegree++
+						rootEvidence = append(rootEvidence, edgeEv)
+					}
+					name := e.To.Name
+					if name == "" || name == sym.Name {
+						continue
+					}
+					if _, seen := neighbourEv[name]; !seen {
+						order = append(order, name)
+						neighbourHops[name] = hops
+						neighbourKind[name] = e.To.Kind
+					}
+					neighbourEv[name] = append(neighbourEv[name], edgeEv)
+					neighbourPaths[name]++ // path multiplicity == subgraph in-degree proxy
+					if hops < neighbourHops[name] {
+						neighbourHops[name] = hops
+					}
+				}
+				candidates = append(candidates, domain.CausalCandidate{
+					Node:                sym.Name,
+					Evidence:            rootEvidence,
+					OutDegree:           rootDegree,
+					DistanceFromSymptom: 0,
+				})
+				for _, name := range order {
+					// Only Symbol nodes are root-cause hypotheses; ExceptionType /
+					// Module neighbours stay as evidence on the symbols that touch
+					// them. Empty Kind (test fakes) defaults to Symbol, mirroring
+					// the store's kindFromLabels fallback.
+					if k := neighbourKind[name]; k != domain.GraphKindSymbol && k != "" {
+						continue
+					}
+					candidates = append(candidates, domain.CausalCandidate{
+						Node:                name,
+						Evidence:            neighbourEv[name],
+						InDegree:            neighbourPaths[name],
+						DistanceFromSymptom: neighbourHops[name],
+					})
 				}
 			}
 		} else if !errors.Is(err, domain.ErrNotFound) {
@@ -120,6 +180,7 @@ func (p *Provider) Run(ctx context.Context, in domain.AgentInput) (domain.AgentO
 			Stacktrace:    inc.Stacktrace,
 			RootCauseNode: rootCauseNode,
 			Features:      evidence,
+			Candidates:    candidates,
 		})
 		if cerr != nil {
 			// Sidecar unavailable: degrade gracefully. The agent still
@@ -188,13 +249,13 @@ func (p *Provider) Run(ctx context.Context, in domain.AgentInput) (domain.AgentO
 	}
 
 	structured := map[string]any{
-		"root_cause_node":   rootCauseNode,
-		"hypothesis":        hypothesis,
-		"confidence":        float64(confidence),
-		"evidence_chain":    evidence,
-		"estimand_name":     estimandName,
-		"graph_available":   graphAvailable,
-		"causal_available":  causalAvailable,
+		"root_cause_node":  rootCauseNode,
+		"hypothesis":       hypothesis,
+		"confidence":       float64(confidence),
+		"evidence_chain":   evidence,
+		"estimand_name":    estimandName,
+		"graph_available":  graphAvailable,
+		"causal_available": causalAvailable,
 	}
 
 	return domain.AgentOutput{

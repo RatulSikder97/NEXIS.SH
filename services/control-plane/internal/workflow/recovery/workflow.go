@@ -2,6 +2,7 @@ package recovery
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"go.temporal.io/sdk/temporal"
@@ -62,9 +63,60 @@ var recorderOpts = workflow.ActivityOptions{
 	},
 }
 
+// gitopsActivityOpts governs the deploy-side activities (GitOpsDeploy,
+// RollbackDeploy). Opening a PR walks the GitHub API through the gitops
+// sidecar — slower than a DB write, far faster than an LLM call — so it
+// gets its own 2-minute start-to-close budget on the standard retry ladder.
+var gitopsActivityOpts = func() workflow.ActivityOptions {
+	o := stdActivityOpts
+	o.StartToCloseTimeout = 2 * time.Minute
+	o.ScheduleToCloseTimeout = 5 * time.Minute
+	return o
+}()
+
+// deployEngineActivityOpts governs DeployEngineRedeploy. The engine clones,
+// builds a Docker image, and waits for the container health check with a
+// 120s in-request budget, so the start-to-close must clear that plus network
+// slack. Retries capped at 2 — a retry re-runs a full image build.
+var deployEngineActivityOpts = func() workflow.ActivityOptions {
+	o := stdActivityOpts
+	o.StartToCloseTimeout = 3 * time.Minute
+	o.ScheduleToCloseTimeout = 7 * time.Minute
+	if o.RetryPolicy != nil {
+		rp := *o.RetryPolicy
+		rp.MaximumAttempts = 2
+		o.RetryPolicy = &rp
+	}
+	return o
+}()
+
+// healthActivityOpts covers PostDeployHealthCheck, which deliberately blocks
+// for the whole post-deploy observation window (default 30s, capped well
+// below the 90s start-to-close so the probe never times out mid-poll).
+// Retries capped at 2 — a retry re-runs the full window, so the ladder
+// mustn't multiply the wait the way stdActivityOpts' 3 attempts would.
+var healthActivityOpts = func() workflow.ActivityOptions {
+	o := stdActivityOpts
+	o.StartToCloseTimeout = 90 * time.Second
+	o.ScheduleToCloseTimeout = 4 * time.Minute
+	if o.RetryPolicy != nil {
+		rp := *o.RetryPolicy
+		rp.MaximumAttempts = 2
+		o.RetryPolicy = &rp
+	}
+	return o
+}()
+
 // RecoveryPipeline is the 9-step DAG. The shape MUST match the spec table
 // (3 sequential L2 → 3 sequential L1 → DevOps||DataEngineer parallel → ApprovalGate
 // join) — Phases 5+6 only swap the activity bodies.
+//
+// Phase 8 closes the loop on top of that shape: the Synthesiser plan's
+// selected_agents gates which L1 steps actually execute (skips get their own
+// timeline frames), an approved/auto-approved decision triggers the GitOps
+// deploy tail (open PR → post-deploy SLO probe → policy-gated ArgoCD
+// rollback), and a Backend patch that strays outside the Architect's
+// affected_files escalates severity to HIGH via the contract-violation flag.
 //
 // We use *Activities methods so a single activity object owns all dependencies
 // (repo, broker, patchstore, validator). The Temporal SDK resolves the method
@@ -146,7 +198,17 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 		return r, nil
 	}
 
+	// incidentSource is the triggering incident's origin ("sentry",
+	// "deploy_engine", ...), captured from the Sentinel.Detect result payload.
+	// The deploy-engine redeploy tail below only fires when the incident that
+	// started this pipeline came from a failed preview deploy. Reading it off
+	// the activity result (history-backed) keeps the branch replay-safe.
+	incidentSource := ""
+
 	// ---- L2 detect → diagnose → plan (sequential) ----
+	// Pathfinder + Synthesiser carry their agent names so foldPrior lifts
+	// their structured plans into the prior map — the Synthesiser's
+	// selected_agents is what gates the L1 steps below.
 	for _, step := range []struct {
 		role  domain.AgentRole
 		name  string
@@ -155,47 +217,113 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 		agent domain.AgentName
 	}{
 		{domain.AgentSentinel, "Sentinel.Detect", (*Activities).SentinelDetect, stdActivityOpts, ""},
-		{domain.AgentPathfinder, "Pathfinder.Diagnose", (*Activities).PathfinderDiagnose, stdActivityOpts, ""},
-		{domain.AgentSynthesiser, "Synthesiser.Plan", (*Activities).SynthesiserPlan, stdActivityOpts, ""},
+		{domain.AgentPathfinder, "Pathfinder.Diagnose", (*Activities).PathfinderDiagnose, stdActivityOpts, domain.AgentNamePathfinder},
+		{domain.AgentSynthesiser, "Synthesiser.Plan", (*Activities).SynthesiserPlan, stdActivityOpts, domain.AgentNameSynthesiser},
 		// ---- L1 architect → backend → qa (sequential) ----
 		{domain.AgentArchitect, "Architect.Solution", (*Activities).ArchitectSolution, llmActivityOpts, domain.AgentNameArchitect},
 		{domain.AgentBackend, "Backend.Codegen", (*Activities).BackendCodegen, llmActivityOpts, domain.AgentNameBackend},
 		{domain.AgentQA, "QA.TestGen", (*Activities).QATestGen, llmActivityOpts, domain.AgentNameQA},
 	} {
+		// Phase 8 — Synthesiser delegation enforcement. Once the plan is in
+		// the prior map, L1 steps outside selected_agents don't run; the
+		// skip is still recorded so the timeline explains why the agent
+		// never fired. agentRoleOf returns "" for the L2 names, so only the
+		// L1 subset is ever gated. A nil set (stub path, degraded plan)
+		// preserves the legacy run-everything DAG.
+		if agentRoleOf(step.agent) != "" {
+			if sel := selectedAgentSet(prior); sel != nil {
+				if _, ok := sel[step.agent]; !ok {
+					recordSkippedAgent(ctx, in, step.role, step.name, prior)
+					continue
+				}
+			}
+		}
 		r, err := runActivity(step.role, step.name, step.fn, step.opts, step.agent)
 		if err != nil {
 			return PipelineOutput{}, err
 		}
 		results = append(results, r)
+
+		if step.name == "Sentinel.Detect" {
+			if src, ok := r.Payload["source"].(string); ok {
+				incidentSource = src
+			}
+		}
+
+		// Phase 8 — Architect contract enforcement. Right after Backend's
+		// patch lands, diff its actual changed files against the Architect's
+		// declared affected_files. A violation is an escalation signal, not
+		// a pipeline failure: the verdict rides the prior map into
+		// ApprovalGateRoute, which forces HIGH severity so a human must
+		// approve the out-of-contract patch.
+		if step.agent == domain.AgentNameBackend {
+			if bad := contractViolationFiles(prior); len(bad) > 0 {
+				prior["contract_violation"] = map[string]any{
+					"violation":          true,
+					"unauthorized_files": bad,
+				}
+				recordEvent(ctx, in, domain.AgentArchitect, "Architect.Violation", domain.ActFailed,
+					fmt.Sprintf("backend patch touched %d file(s) outside the architect's affected_files: %s",
+						len(bad), strings.Join(bad, ", ")),
+					map[string]interface{}{
+						"unauthorized_files": bad,
+						"escalation":         "severity forced to high",
+					}, 1)
+			}
+		}
 	}
 
 	// ---- DevOps || DataEngineer (parallel) ----
-	recordEvent(ctx, in, domain.AgentDevOps, "DevOps.Pipeline", domain.ActStarted, "", nil, 1)
-	recordEvent(ctx, in, domain.AgentDataEngineer, "DataEngineer.Migrations", domain.ActStarted, "", nil, 1)
+	// The Synthesiser plan gates the parallel pair exactly like the
+	// sequential L1 steps: unselected agents get a skipped frame instead of
+	// an execution. A nil future below means "was skipped".
+	sel := selectedAgentSet(prior)
+	runDevOps := true
+	runData := true
+	if sel != nil {
+		_, runDevOps = sel[domain.AgentNameDevOps]
+		_, runData = sel[domain.AgentNameDataEngineer]
+	}
 
 	parIn := in
 	parIn.PriorOutputs = clonePrior(prior)
-	devopsFut := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, llmActivityOpts),
-		(*Activities).DevOpsPipeline, parIn)
-	dataFut := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, llmActivityOpts),
-		(*Activities).DataEngineerMigrate, parIn)
-
-	var rDev, rData domain.ActivityResult
-	if err := devopsFut.Get(ctx, &rDev); err != nil {
-		recordEvent(ctx, in, domain.AgentDevOps, "DevOps.Pipeline", domain.ActFailed, err.Error(), nil, 1)
-		return PipelineOutput{}, err
+	var devopsFut, dataFut workflow.Future
+	if runDevOps {
+		recordEvent(ctx, in, domain.AgentDevOps, "DevOps.Pipeline", domain.ActStarted, "", nil, 1)
+		devopsFut = workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, llmActivityOpts),
+			(*Activities).DevOpsPipeline, parIn)
+	} else {
+		recordSkippedAgent(ctx, in, domain.AgentDevOps, "DevOps.Pipeline", prior)
 	}
-	recordEvent(ctx, in, domain.AgentDevOps, "DevOps.Pipeline", domain.ActSucceeded, rDev.Message, rDev.Payload, 1)
-	foldPrior(domain.AgentNameDevOps, rDev.Payload)
-	results = append(results, rDev)
-
-	if err := dataFut.Get(ctx, &rData); err != nil {
-		recordEvent(ctx, in, domain.AgentDataEngineer, "DataEngineer.Migrations", domain.ActFailed, err.Error(), nil, 1)
-		return PipelineOutput{}, err
+	if runData {
+		recordEvent(ctx, in, domain.AgentDataEngineer, "DataEngineer.Migrations", domain.ActStarted, "", nil, 1)
+		dataFut = workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, llmActivityOpts),
+			(*Activities).DataEngineerMigrate, parIn)
+	} else {
+		recordSkippedAgent(ctx, in, domain.AgentDataEngineer, "DataEngineer.Migrations", prior)
 	}
-	recordEvent(ctx, in, domain.AgentDataEngineer, "DataEngineer.Migrations", domain.ActSucceeded, rData.Message, rData.Payload, 1)
-	foldPrior(domain.AgentNameDataEngineer, rData.Payload)
-	results = append(results, rData)
+
+	if devopsFut != nil {
+		var rDev domain.ActivityResult
+		if err := devopsFut.Get(ctx, &rDev); err != nil {
+			recordEvent(ctx, in, domain.AgentDevOps, "DevOps.Pipeline", domain.ActFailed, err.Error(), nil, 1)
+			return PipelineOutput{}, err
+		}
+		recordEvent(ctx, in, domain.AgentDevOps, "DevOps.Pipeline", domain.ActSucceeded, rDev.Message, rDev.Payload, 1)
+		foldPrior(domain.AgentNameDevOps, rDev.Payload)
+		results = append(results, rDev)
+	}
+
+	if dataFut != nil {
+		var rData domain.ActivityResult
+		if err := dataFut.Get(ctx, &rData); err != nil {
+			recordEvent(ctx, in, domain.AgentDataEngineer, "DataEngineer.Migrations", domain.ActFailed, err.Error(), nil, 1)
+			return PipelineOutput{}, err
+		}
+		recordEvent(ctx, in, domain.AgentDataEngineer, "DataEngineer.Migrations", domain.ActSucceeded, rData.Message, rData.Payload, 1)
+		foldPrior(domain.AgentNameDataEngineer, rData.Payload)
+		results = append(results, rData)
+	}
 
 	// ---- ApprovalGate.Route (join) ----
 	rApprove, err := runActivity(domain.AgentApprovalGate, "ApprovalGate.Route", (*Activities).ApprovalGateRoute, stdActivityOpts, "")
@@ -248,6 +376,12 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 		)
 	}
 
+	// Phase 8 — GitOps deploy outcome, surfaced on PipelineOutput + the
+	// Pipeline.Complete payload so the incident timeline can show the PR
+	// link (or why there isn't one).
+	prURL := ""
+	gitopsErr := ""
+
 	if severityStr != "" {
 		// Policy auto-approval — force LOW path so awaitApprovalDecision
 		// short-circuits without a signal/timer race.
@@ -271,10 +405,19 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 
 		// Finalise activity persists the decision + audit. Runs even on
 		// rejection so the row is up-to-date when the UI re-reads it.
+		// Scenario + patch ride along so the activity can fold the terminal
+		// decision into feedback_examples (RLHF pipeline).
+		finScenario := ""
+		if syn, ok := prior["synthesiser"].(map[string]any); ok {
+			finScenario, _ = syn["scenario"].(string)
+		}
 		finIn := ApprovalFinalizeInput{
 			OrgID:         in.OrgID,
 			WorkflowRunID: in.RunID,
 			Signal:        sig,
+			IncidentID:    in.IncidentID,
+			Scenario:      finScenario,
+			PatchDiff:     backendPatchFromPrior(prior),
 		}
 		finCtx := workflow.WithActivityOptions(ctx, stdActivityOpts)
 		recordEvent(ctx, in, domain.AgentApprovalGate, "ApprovalGate.Finalize", domain.ActStarted, "", nil, 1)
@@ -301,17 +444,143 @@ func RecoveryPipeline(ctx workflow.Context, in PipelineInput) (PipelineOutput, e
 				fmt.Sprintf("approval %s", sig.Decision), "ApprovalRejectedError", nil,
 			)
 		}
+
+		// ---- GitOps deploy (approve / auto-approve / modified only) ----
+		// Phase 8 — close the loop. Reaching here means the gate landed on
+		// ApprovalApproved, ApprovalAutoApproved, or ApprovalModified
+		// (reject/timeout returned above, kill-switch even earlier). Only
+		// runs when the Backend agent actually produced a patch — the stub
+		// demo loop keeps its exact event trail otherwise. Deploy failure is
+		// deliberately soft: the patch was already approved + validated, so
+		// we record the failure and let Pipeline.Complete still succeed.
+		//
+		// RLHF — a 'modified' decision means the engineer edited the patch
+		// before approving, so the edited diff REPLACES the Backend agent's
+		// original in the prior map: the PR that opens ships exactly what
+		// the human signed off on. We rebuild the backend entry (rather
+		// than mutating in place) so earlier history frames keep the
+		// original diff for the feedback example.
+		if sig.Decision == domain.ApprovalModified && sig.ModifiedDiff != "" {
+			merged := map[string]any{}
+			if prev, ok := prior["backend"].(map[string]any); ok {
+				for k, v := range prev {
+					merged[k] = v
+				}
+			}
+			merged["patch_diff"] = sig.ModifiedDiff
+			prior["backend"] = merged
+		}
+		if patch := backendPatchFromPrior(prior); patch != "" &&
+			(sig.Decision == domain.ApprovalApproved || sig.Decision == domain.ApprovalAutoApproved ||
+				sig.Decision == domain.ApprovalModified) {
+			deployIn := in
+			deployIn.PriorOutputs = clonePrior(prior)
+			deployCtx := workflow.WithActivityOptions(ctx, gitopsActivityOpts)
+			recordEvent(ctx, in, domain.AgentPipeline, "GitOps.Deploy", domain.ActStarted, "", nil, 1)
+			var rDeploy domain.ActivityResult
+			if err := workflow.ExecuteActivity(deployCtx, (*Activities).GitOpsDeploy, deployIn).Get(deployCtx, &rDeploy); err != nil {
+				recordEvent(ctx, in, domain.AgentPipeline, "GitOps.Deploy", domain.ActFailed, err.Error(), nil, 1)
+				gitopsErr = err.Error()
+			} else {
+				recordEvent(ctx, in, domain.AgentPipeline, "GitOps.Deploy", domain.ActSucceeded, rDeploy.Message, rDeploy.Payload, 1)
+				results = append(results, rDeploy)
+				if u, ok := rDeploy.Payload["pr_url"].(string); ok {
+					prURL = u
+				}
+				// ---- Post-deploy SLO probe + policy rollback ----
+				// Only after a real PR (not the client-unwired skip path):
+				// watch the Sentinel incident feed for a fresh fatal, and
+				// roll the org's ArgoCD app back when the project policy
+				// says so. Probe + rollback both fail soft — a broken probe
+				// must never sink an already-approved recovery.
+				if skipped, _ := rDeploy.Payload["skipped"].(bool); !skipped {
+					service := ""
+					if in.Incident != nil {
+						service = in.Incident.Service
+					}
+					hcIn := HealthCheckInput{
+						OrgID:      in.OrgID,
+						Service:    service,
+						DeployedAt: workflow.Now(ctx),
+					}
+					hcCtx := workflow.WithActivityOptions(ctx, healthActivityOpts)
+					recordEvent(ctx, in, domain.AgentPipeline, "GitOps.HealthCheck", domain.ActStarted, "", nil, 1)
+					var rHealth domain.ActivityResult
+					if err := workflow.ExecuteActivity(hcCtx, (*Activities).PostDeployHealthCheck, hcIn).Get(hcCtx, &rHealth); err != nil {
+						recordEvent(ctx, in, domain.AgentPipeline, "GitOps.HealthCheck", domain.ActFailed, err.Error(), nil, 1)
+					} else {
+						recordEvent(ctx, in, domain.AgentPipeline, "GitOps.HealthCheck", rHealth.Status, rHealth.Message, rHealth.Payload, 1)
+						results = append(results, rHealth)
+						healthy, _ := rHealth.Payload["healthy"].(bool)
+						if !healthy {
+							if in.Project != nil && in.Project.Policy.RollbackOnSLOBreach {
+								rbIn := in
+								rbIn.PriorOutputs = clonePrior(prior)
+								rbCtx := workflow.WithActivityOptions(ctx, gitopsActivityOpts)
+								recordEvent(ctx, in, domain.AgentPipeline, "GitOps.Rollback", domain.ActStarted, "", nil, 1)
+								var rRollback domain.ActivityResult
+								if err := workflow.ExecuteActivity(rbCtx, (*Activities).RollbackDeploy, rbIn).Get(rbCtx, &rRollback); err != nil {
+									recordEvent(ctx, in, domain.AgentPipeline, "GitOps.Rollback", domain.ActFailed, err.Error(), nil, 1)
+								} else {
+									recordEvent(ctx, in, domain.AgentPipeline, "GitOps.Rollback", rRollback.Status, rRollback.Message, rRollback.Payload, 1)
+									results = append(results, rRollback)
+								}
+							} else {
+								// The rollback DECISION is a timeline event
+								// either way — an analyst must see that the
+								// breach was noticed and why nothing moved.
+								reason := "no project bound to this run"
+								if in.Project != nil {
+									reason = "rollback_on_slo_breach disabled by project policy"
+								}
+								recordEvent(ctx, in, domain.AgentPipeline, "GitOps.Rollback", domain.ActSkipped, reason,
+									map[string]interface{}{"skipped": true, "reason": reason}, 1)
+							}
+						}
+					}
+					// ---- Deploy-engine redeploy (retry after fix) ----
+					// Only when the incident that started this pipeline was a
+					// failed preview deploy: re-invoke POST /v1/deploy for the
+					// bound project (fresh deployment id, same repo/branch —
+					// now presumably fixed on the branch HEAD post-merge).
+					// Fail-soft like every other post-deploy step — a redeploy
+					// hiccup must never sink an already-approved recovery.
+					if incidentSource == "deploy_engine" {
+						rdIn := in
+						rdIn.PriorOutputs = clonePrior(prior)
+						rdCtx := workflow.WithActivityOptions(ctx, deployEngineActivityOpts)
+						recordEvent(ctx, in, domain.AgentPipeline, "DeployEngine.Redeploy", domain.ActStarted, "", nil, 1)
+						var rRedeploy domain.ActivityResult
+						if err := workflow.ExecuteActivity(rdCtx, (*Activities).DeployEngineRedeploy, rdIn).Get(rdCtx, &rRedeploy); err != nil {
+							recordEvent(ctx, in, domain.AgentPipeline, "DeployEngine.Redeploy", domain.ActFailed, err.Error(), nil, 1)
+						} else {
+							recordEvent(ctx, in, domain.AgentPipeline, "DeployEngine.Redeploy", rRedeploy.Status, rRedeploy.Message, rRedeploy.Payload, 1)
+							results = append(results, rRedeploy)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	out := PipelineOutput{
 		DurationMS:         workflow.Now(ctx).Sub(start).Milliseconds(),
 		Results:            results,
 		ApprovalDecisionID: decisionID,
+		PRURL:              prURL,
+		GitOpsError:        gitopsErr,
 	}
 	// Terminal pipeline event — UI uses this to close EventSource.
+	completePayload := map[string]interface{}{"duration_ms": out.DurationMS}
+	if prURL != "" {
+		completePayload["pr_url"] = prURL
+	}
+	if gitopsErr != "" {
+		completePayload["gitops_error"] = gitopsErr
+	}
 	recordEvent(ctx, in, domain.AgentPipeline, "Pipeline.Complete", domain.ActSucceeded,
 		fmt.Sprintf("duration=%s", time.Duration(out.DurationMS)*time.Millisecond),
-		map[string]interface{}{"duration_ms": out.DurationMS}, 1)
+		completePayload, 1)
 	return out, nil
 }
 
@@ -328,6 +597,91 @@ func clonePrior(m map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+// selectedAgentSet extracts the Synthesiser plan's selected_agents from the
+// prior map. Returns nil when no plan landed (stub path, degraded run, or a
+// plan without the field) — callers treat nil as "run every L1 agent",
+// preserving the legacy DAG. Pure function of the prior map, so calling it
+// inside the workflow body stays replay-deterministic.
+func selectedAgentSet(prior map[string]any) map[domain.AgentName]struct{} {
+	syn, ok := prior["synthesiser"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	names := stringsFromAny(syn["selected_agents"])
+	if len(names) == 0 {
+		return nil
+	}
+	out := make(map[domain.AgentName]struct{}, len(names))
+	for _, n := range names {
+		out[domain.AgentName(n)] = struct{}{}
+	}
+	return out
+}
+
+// recordSkippedAgent emits the ActSkipped timeline frame for an L1 agent the
+// Synthesiser plan left out. The frame carries the scenario + selected list
+// so the UI can explain WHY the agent never ran instead of showing a
+// permanently-pending row.
+func recordSkippedAgent(ctx workflow.Context, in PipelineInput, role domain.AgentRole, name string, prior map[string]any) {
+	scenario := ""
+	var selected []string
+	if syn, ok := prior["synthesiser"].(map[string]any); ok {
+		scenario, _ = syn["scenario"].(string)
+		selected = stringsFromAny(syn["selected_agents"])
+	}
+	recordEvent(ctx, in, role, name, domain.ActSkipped,
+		fmt.Sprintf("skipped by synthesiser plan (scenario=%s)", scenario),
+		map[string]interface{}{
+			"skipped_by":      "synthesiser",
+			"scenario":        scenario,
+			"selected_agents": selected,
+		}, 1)
+}
+
+// contractViolationFiles compares the Backend agent's actual changed files
+// (structured.files_changed, produced by backend.ExtractDiff) against the
+// Architect's declared affected_files. Returns the files Backend touched
+// without a matching declaration — the Architect contract violation set.
+// Either side missing (stub path, degraded agent) disables the check and
+// returns nil; an Architect that DID declare affected_files is held to it,
+// even when the declared list is empty.
+func contractViolationFiles(prior map[string]any) []string {
+	arch, ok := prior["architect"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	affRaw, ok := arch["affected_files"]
+	if !ok {
+		return nil
+	}
+	be, ok := prior["backend"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	changed := stringsFromAny(be["files_changed"])
+	if len(changed) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{})
+	for _, f := range stringsFromAny(affRaw) {
+		allowed[normalizeRepoPath(f)] = struct{}{}
+	}
+	var out []string
+	for _, f := range changed {
+		if _, ok := allowed[normalizeRepoPath(f)]; !ok {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// normalizeRepoPath strips the "./" prefix + surrounding whitespace so the
+// Architect's declared paths and the diff's "+++ b/<path>" headers compare
+// on the same form.
+func normalizeRepoPath(p string) string {
+	return strings.TrimPrefix(strings.TrimSpace(p), "./")
 }
 
 // awaitApprovalDecision is the workflow-side implementation of the

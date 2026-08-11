@@ -30,11 +30,16 @@ import {
   ChevronRight,
   CircleSlash,
   Loader2,
+  MinusCircle,
   X,
 } from "lucide-react";
 
 import { AgentIcon } from "@/components/pipelines/AgentIcon";
-import { AGENTS_IN_ORDER, AGENT_LABELS, type ActivityEvent } from "@/lib/pipelines";
+import {
+  AGENTS_IN_ORDER,
+  AGENT_LABELS,
+  type ActivityEvent,
+} from "@/lib/pipelines";
 import { formatTokens } from "@/lib/eval";
 import { cn } from "@/lib/utils";
 import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
@@ -71,12 +76,17 @@ function extractCostPillData(payload: Record<string, unknown>): {
   const ti = payload.tokens_in;
   const to = payload.tokens_out;
   const cc = payload.cost_cents;
-  const tokensIn = typeof ti === "number" && Number.isFinite(ti) ? ti : undefined;
+  const tokensIn =
+    typeof ti === "number" && Number.isFinite(ti) ? ti : undefined;
   const tokensOut =
     typeof to === "number" && Number.isFinite(to) ? to : undefined;
   const costCents =
     typeof cc === "number" && Number.isFinite(cc) ? cc : undefined;
-  if (tokensIn === undefined && tokensOut === undefined && costCents === undefined) {
+  if (
+    tokensIn === undefined &&
+    tokensOut === undefined &&
+    costCents === undefined
+  ) {
     return null;
   }
   return { tokensIn, tokensOut, costCents };
@@ -114,7 +124,13 @@ function CostPills({ payload }: { payload: Record<string, unknown> }) {
   );
 }
 
-type RowState = "pending" | "running" | "succeeded" | "failed" | "retrying";
+type RowState =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "retrying"
+  | "skipped";
 
 type Row = {
   role: string;
@@ -198,6 +214,9 @@ function buildRow(events: ActivityEvent[], role: string): Row {
       break;
     case "started":
       state = "running";
+      break;
+    case "skipped":
+      state = "skipped";
       break;
   }
   return {
@@ -316,6 +335,12 @@ function StateIcon({
           />
         </span>
       );
+    case "skipped":
+      return (
+        <span className="grid h-6 w-6 place-items-center rounded-full border border-dashed border-[var(--color-border)] bg-[var(--color-card)]">
+          <MinusCircle className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
+        </span>
+      );
   }
 }
 
@@ -385,8 +410,8 @@ export function ActivityTimeline({
           row.state === "running" && row.startedAt
             ? Math.max(0, now - row.startedAt)
             : row.startedAt && row.finishedAt
-            ? row.finishedAt - row.startedAt
-            : null;
+              ? row.finishedAt - row.startedAt
+              : null;
         return (
           <li
             key={row.role}
@@ -428,7 +453,7 @@ export function ActivityTimeline({
                     role={row.role}
                     className={cn(
                       "h-4 w-4",
-                      row.state === "pending"
+                      row.state === "pending" || row.state === "skipped"
                         ? "text-[var(--color-muted-foreground)]"
                         : "text-[var(--color-foreground)]",
                     )}
@@ -436,13 +461,18 @@ export function ActivityTimeline({
                   <span
                     className={cn(
                       "text-sm font-medium",
-                      row.state === "pending"
+                      row.state === "pending" || row.state === "skipped"
                         ? "text-[var(--color-muted-foreground)]"
                         : "text-[var(--color-foreground)]",
                     )}
                   >
                     {row.label}
                   </span>
+                  {row.state === "skipped" && (
+                    <span className="inline-flex items-center rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] ring-1 ring-[var(--color-border)]">
+                      not selected
+                    </span>
+                  )}
                   {row.role === "backend" &&
                     row.state === "succeeded" &&
                     row.payload &&

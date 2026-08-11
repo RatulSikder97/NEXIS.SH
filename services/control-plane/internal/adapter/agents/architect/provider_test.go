@@ -18,8 +18,10 @@ type fakeLLM struct {
 	lastReq   domain.CompletionRequest
 }
 
-func (f *fakeLLM) Name() string                           { return "openai" }
-func (f *fakeLLM) Info(_ context.Context) (domain.LLMInfo, error) { return domain.LLMInfo{Provider: "openai"}, nil }
+func (f *fakeLLM) Name() string { return "openai" }
+func (f *fakeLLM) Info(_ context.Context) (domain.LLMInfo, error) {
+	return domain.LLMInfo{Provider: "openai"}, nil
+}
 func (f *fakeLLM) Complete(_ context.Context, req domain.CompletionRequest) (domain.CompletionResponse, error) {
 	idx := f.calls
 	f.lastReq = req

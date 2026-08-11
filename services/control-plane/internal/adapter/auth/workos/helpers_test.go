@@ -28,9 +28,9 @@ func TestNew_ReturnsProviderWithDefaults(t *testing.T) {
 // TestDisplayNameFromUser walks every input variant.
 func TestDisplayNameFromUser(t *testing.T) {
 	cases := []struct {
-		name      string
-		user      workosUser
-		want      string
+		name string
+		user workosUser
+		want string
 	}{
 		{
 			name: "full_name",

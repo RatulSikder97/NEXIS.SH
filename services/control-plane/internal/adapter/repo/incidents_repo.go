@@ -98,6 +98,19 @@ func (r *IncidentsRepo) Insert(ctx context.Context, orgID string, raw domain.Raw
 	return err
 }
 
+// InsertAdmin is the system-side twin of Insert: same idempotent write, but
+// on the admin pool because the caller (the QA continuous-loop cron) runs on
+// context.Background with no principal — the RLS-aware app pool would reject
+// the row for lack of a bound org GUC. Reuses Insert's payload/fingerprint
+// folding by temporarily narrowing the repo to the admin pool.
+func (r *IncidentsRepo) InsertAdmin(ctx context.Context, orgID string, raw domain.RawIncident) error {
+	if r.adminPool == nil {
+		return fmt.Errorf("IncidentsRepo.InsertAdmin: %w", domain.ErrUnknown)
+	}
+	adminView := &IncidentsRepo{pool: r.adminPool, adminPool: r.adminPool}
+	return adminView.Insert(ctx, orgID, raw)
+}
+
 // UpdateProjectID stamps incidents_raw.project_id once Sentinel's router
 // resolves a project for the row. Runs on the admin pool because the call
 // site is the Sentinel goroutine (no principal in ctx), and the column is a
@@ -135,14 +148,20 @@ var _ domain.IncidentsReader = (*IncidentsRepo)(nil)
 // Runs on the admin pool — this is a system-job path with no principal in ctx.
 //
 // Multi-source widening (Task 8): the source filter is now
-// IN ('sentry','datadog','pagerduty') — every adapter that emits via
-// IncidentSink.Insert. The level=='fatal' criterion still applies; the
-// Datadog adapter maps Priority=='P1' to 'fatal' (per its alert→level table)
-// and PagerDuty maps Severity=='critical' to 'fatal', so a P1 alert or a
-// PagerDuty critical lands in the same tick that a Sentry fatal does. The
-// detector's dedupe layer (sentinel/multisource.go) collapses double-fires
-// when multiple sources observe the same root incident inside the dedupe
-// window.
+// IN ('sentry','datadog','pagerduty','schema_drift') — every adapter that
+// emits via IncidentSink.Insert. The level=='fatal' criterion still applies;
+// the Datadog adapter maps Priority=='P1' to 'fatal' (per its alert→level
+// table) and PagerDuty maps Severity=='critical' to 'fatal', so a P1 alert
+// or a PagerDuty critical lands in the same tick that a Sentry fatal does.
+// 'schema_drift' (Phase 9) is the Data Engineer drift checker's synthetic
+// source — always level='fatal', deduped by its drift-fingerprint
+// source_event_id. 'deploy_engine' is the preview-deploy failure path: the
+// deployments handler inserts a fatal row (stacktrace = error + build log,
+// logs = container log) whose GitHubRepo fingerprint routes it back to the
+// owning project, so a broken build enters the exact same recovery pipeline
+// as any other incident. The detector's dedupe layer
+// (sentinel/multisource.go) collapses double-fires when multiple sources
+// observe the same root incident inside the dedupe window.
 //
 // The query projects title / service / environment from the dedicated columns
 // and pulls stacktrace / logs out of raw_payload. Phase 6's fixture incidents
@@ -168,7 +187,7 @@ func (r *IncidentsRepo) PollFatalSince(ctx context.Context, orgID string, since 
 		       COALESCE(raw_payload->'_fingerprint'->>'pagerduty_service_id', '')      AS pagerduty_service_id,
 		       COALESCE(raw_payload->'_fingerprint'->>'github_repo', '')               AS github_repo
 		FROM incidents_raw
-		WHERE org_id=$1 AND source IN ('sentry','datadog','pagerduty')
+		WHERE org_id=$1 AND source IN ('sentry','datadog','pagerduty','schema_drift','qa_loop','deploy_engine')
 		      AND level='fatal' AND received_at > $2
 		ORDER BY received_at ASC
 		LIMIT 50

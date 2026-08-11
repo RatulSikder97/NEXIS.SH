@@ -4,11 +4,11 @@
 // org kick a recovery without standing up a Sentry integration first. The
 // handler:
 //
-//   1. Loads the validator's null-pointer fixture (services/validator/fixtures/
-//      incidents/demo-null-pointer.json).
-//   2. Builds a synthetic incident JSON payload from it.
-//   3. Calls WorkflowService.Start with workflowType="RecoveryPipeline" so
-//      the existing demo path is reused exactly.
+//  1. Loads the validator's null-pointer fixture (services/validator/fixtures/
+//     incidents/demo-null-pointer.json).
+//  2. Builds a synthetic incident JSON payload from it.
+//  3. Calls WorkflowService.Start with workflowType="RecoveryPipeline" so
+//     the existing demo path is reused exactly.
 //
 // The fixture path is the same set of candidates PipelineDemo searches so the
 // in-container vs. local-dev contract stays consistent.

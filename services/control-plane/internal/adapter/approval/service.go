@@ -21,12 +21,21 @@ type Service struct {
 	repo     domain.ApprovalRepository
 	notifier domain.Notifier // typically a multi-fanout
 	audit    domain.AuditWriter
+	feedback domain.FeedbackRepository // RLHF sink; nil = feedback disabled
 }
 
 // New constructs a Service. notifier may be nil — Notify becomes a no-op.
 // audit may be nil — audit writes are best-effort and skipped silently.
 func New(r domain.ApprovalRepository, n domain.Notifier, a domain.AuditWriter) *Service {
 	return &Service{repo: r, notifier: n, audit: a}
+}
+
+// WithFeedback wires the RLHF feedback_examples sink. Chainable so main.go
+// can keep the existing New(...) call shape; nil keeps feedback disabled
+// (test path / dev without Postgres).
+func (s *Service) WithFeedback(f domain.FeedbackRepository) *Service {
+	s.feedback = f
+	return s
 }
 
 // CreateInput is the activity-side payload assembled from the synthesiser
@@ -111,7 +120,7 @@ func (s *Service) Notify(ctx context.Context, n domain.Notification) {
 }
 
 // RecordDecision flips a pending row to a human decision (approved |
-// rejected) and writes the "approval.decided" audit. Returns
+// rejected | modified) and writes the "approval.decided" audit. Returns
 // ErrApprovalRejected when the human rejected — callers in the workflow
 // signal handler propagate this to the workflow function which surfaces it
 // as a terminal failure.
@@ -121,14 +130,72 @@ func (s *Service) RecordDecision(ctx context.Context, runID, orgID string, sig d
 		return err
 	}
 	if s.audit != nil {
-		_ = s.audit.Write(ctx, domain.Principal{OrgID: orgID, UserID: sig.DecidedBy}, "approval.decided", runID, map[string]any{
+		meta := map[string]any{
 			"decision":   string(sig.Decision),
 			"decided_by": sig.DecidedBy,
 			"notes":      sig.Notes,
 			"auto":       false,
-		})
+		}
+		if sig.Decision == domain.ApprovalModified {
+			meta["modified"] = true
+		}
+		_ = s.audit.Write(ctx, domain.Principal{OrgID: orgID, UserID: sig.DecidedBy}, "approval.decided", runID, meta)
 	}
 	return nil
+}
+
+// FeedbackInput is the RLHF example assembled by ApprovalGateFinalize from
+// the workflow's prior outputs + the terminal signal.
+type FeedbackInput struct {
+	OrgID         string
+	WorkflowRunID string
+	IncidentID    string
+	Scenario      string
+	PatchDiff     string
+	Signal        domain.ApprovalSignal
+}
+
+// RecordFeedback writes one feedback_examples row for a terminal decision.
+// The RLHF dataset keys on three labels — approved / rejected / modified —
+// so the auto states collapse onto their human equivalents: auto_approved →
+// approved (the patch shipped), timeout_rejected → rejected (the patch was
+// discarded); both keep decided_by empty so a fine-tune can filter to
+// human-only examples. No-op when the feedback sink is unwired or the
+// example carries no scenario AND no patch (nothing to learn from).
+func (s *Service) RecordFeedback(ctx context.Context, in FeedbackInput) error {
+	if s.feedback == nil {
+		return nil
+	}
+	if in.Scenario == "" && in.PatchDiff == "" {
+		return nil
+	}
+	var decision string
+	switch in.Signal.Decision {
+	case domain.ApprovalApproved, domain.ApprovalAutoApproved:
+		decision = "approved"
+	case domain.ApprovalRejected, domain.ApprovalTimeoutRejected:
+		decision = "rejected"
+	case domain.ApprovalModified:
+		decision = "modified"
+	default:
+		return nil // pending / unknown — not a terminal decision
+	}
+	modified := ""
+	if in.Signal.Decision == domain.ApprovalModified {
+		modified = in.Signal.ModifiedDiff
+	}
+	_, err := s.feedback.Insert(ctx, domain.FeedbackExample{
+		OrgID:         in.OrgID,
+		IncidentID:    in.IncidentID,
+		WorkflowRunID: in.WorkflowRunID,
+		Scenario:      in.Scenario,
+		PatchDiff:     in.PatchDiff,
+		Decision:      decision,
+		ModifiedDiff:  modified,
+		DecidedBy:     in.Signal.DecidedBy,
+		DecidedAt:     time.Now().UTC(),
+	})
+	return err
 }
 
 // WaitForDecision is the auto-timeout race helper used by the workflow

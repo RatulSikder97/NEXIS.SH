@@ -146,11 +146,11 @@ type fakeRepo struct {
 }
 
 type update struct {
-	runID    string
-	state    domain.ApprovalDecisionState
-	by       string
-	notes    string
-	at       time.Time
+	runID string
+	state domain.ApprovalDecisionState
+	by    string
+	notes string
+	at    time.Time
 }
 
 func (f *fakeRepo) Create(_ context.Context, d domain.ApprovalDecision) (string, error) {
@@ -196,9 +196,9 @@ func (f *fakeAudit) Write(_ context.Context, p domain.Principal, action, target 
 }
 
 type fakeNotifier struct {
-	mu    sync.Mutex
-	sent  []domain.Notification
-	fail  bool
+	mu   sync.Mutex
+	sent []domain.Notification
+	fail bool
 }
 
 func (f *fakeNotifier) Channel() string { return "fake" }

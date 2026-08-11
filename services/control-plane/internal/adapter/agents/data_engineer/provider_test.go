@@ -13,8 +13,10 @@ type fakeLLM struct {
 	calls     int
 }
 
-func (f *fakeLLM) Name() string                                   { return "openai" }
-func (f *fakeLLM) Info(_ context.Context) (domain.LLMInfo, error) { return domain.LLMInfo{Provider: "openai"}, nil }
+func (f *fakeLLM) Name() string { return "openai" }
+func (f *fakeLLM) Info(_ context.Context) (domain.LLMInfo, error) {
+	return domain.LLMInfo{Provider: "openai"}, nil
+}
 func (f *fakeLLM) Complete(_ context.Context, _ domain.CompletionRequest) (domain.CompletionResponse, error) {
 	idx := f.calls
 	f.calls++

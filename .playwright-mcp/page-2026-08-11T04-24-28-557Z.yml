@@ -1,0 +1,139 @@
+- generic [active] [ref=f54e1]:
+  - generic [ref=f54e2]:
+    - link "Skip to content" [ref=f54e3] [cursor=pointer]:
+      - /url: "#main"
+    - complementary [ref=f54e4]:
+      - generic [ref=f54e5]:
+        - generic [ref=f54e6]: NEXIS
+        - button "Collapse sidebar" [ref=f54e9]
+      - 'button "Workspace: Production" [ref=f54e13]':
+        - generic [ref=f54e15]:
+          - generic [ref=f54e16]: Production
+          - generic [ref=f54e17]: us-east-1
+      - navigation "Console navigation" [ref=f54e21]:
+        - generic [ref=f54e22]:
+          - paragraph [ref=f54e23]: Workspace
+          - list [ref=f54e24]:
+            - listitem [ref=f54e25]:
+              - link "Dashboard" [ref=f54e26] [cursor=pointer]:
+                - /url: /console
+            - listitem [ref=f54e34]:
+              - link "Projects" [ref=f54e35] [cursor=pointer]:
+                - /url: /console/projects
+            - listitem [ref=f54e48]:
+              - link "Incidents" [ref=f54e49] [cursor=pointer]:
+                - /url: /console/incidents
+            - listitem [ref=f54e55]:
+              - link "Approvals" [ref=f54e56] [cursor=pointer]:
+                - /url: /console/approvals
+            - listitem [ref=f54e62]:
+              - link "Audit Log" [ref=f54e63] [cursor=pointer]:
+                - /url: /console/audit
+        - generic [ref=f54e69]:
+          - paragraph [ref=f54e70]: Fleet
+          - list [ref=f54e71]:
+            - listitem [ref=f54e72]:
+              - link "Agents 9 items" [ref=f54e73] [cursor=pointer]:
+                - /url: /console/agents
+                - generic [ref=f54e79]: Agents
+                - generic "9 items" [ref=f54e81]: "9"
+            - listitem [ref=f54e82]:
+              - link "Workflows" [ref=f54e83] [cursor=pointer]:
+                - /url: /console/workflows
+            - listitem [ref=f54e90]:
+              - link "Activity Stream" [ref=f54e91] [cursor=pointer]:
+                - /url: /console/activity
+            - listitem [ref=f54e96]:
+              - link "Validator Sandbox" [ref=f54e97] [cursor=pointer]:
+                - /url: /console/validator
+        - generic [ref=f54e104]:
+          - paragraph [ref=f54e105]: Observability
+          - list [ref=f54e106]:
+            - listitem [ref=f54e107]:
+              - link "Performance" [ref=f54e108] [cursor=pointer]:
+                - /url: /console/performance
+            - listitem [ref=f54e114]:
+              - link "Cost Tracker" [ref=f54e115] [cursor=pointer]:
+                - /url: /console/cost
+            - listitem [ref=f54e120]:
+              - link "System Health" [ref=f54e121] [cursor=pointer]:
+                - /url: /console/health
+        - generic [ref=f54e127]:
+          - paragraph [ref=f54e128]: Integrations
+          - list [ref=f54e129]:
+            - listitem [ref=f54e130]:
+              - link "All Integrations 0/6 connected" [ref=f54e131] [cursor=pointer]:
+                - /url: /console/integrations
+                - generic [ref=f54e134]: All Integrations
+                - generic "0/6 connected" [ref=f54e136]: 0/6
+            - listitem [ref=f54e137]:
+              - link "Webhook Activity" [ref=f54e138] [cursor=pointer]:
+                - /url: /console/webhooks
+            - listitem [ref=f54e145]:
+              - link "Connection Health" [ref=f54e146] [cursor=pointer]:
+                - /url: /console/connections
+        - generic [ref=f54e154]:
+          - paragraph [ref=f54e155]: Operations
+          - list [ref=f54e156]:
+            - listitem [ref=f54e157]:
+              - link "Recovery Pipeline" [ref=f54e158] [cursor=pointer]:
+                - /url: /console/recovery
+            - listitem [ref=f54e163]:
+              - link "Eval Harness" [ref=f54e164] [cursor=pointer]:
+                - /url: /console/eval
+            - listitem [ref=f54e169]:
+              - link "Live Demo 1 items" [ref=f54e170] [cursor=pointer]:
+                - /url: /console/live-demo
+                - generic [ref=f54e174]: Live Demo
+                - generic "1 items" [ref=f54e176]: "1"
+            - listitem [ref=f54e177]:
+              - link "Knowledge Base" [ref=f54e178] [cursor=pointer]:
+                - /url: /console/knowledge
+      - link "Settings" [ref=f54e184] [cursor=pointer]:
+        - /url: /console/settings/profile
+      - generic [ref=f54e190]:
+        - paragraph [ref=f54e191]: Live
+        - link "View activity stream" [ref=f54e198] [cursor=pointer]:
+          - /url: /console/activity
+          - generic [ref=f54e199]:
+            - generic [ref=f54e200]: Approval Decided
+            - generic [ref=f54e201]: just now
+          - paragraph [ref=f54e202]: 5fda8280-03d7-4c00-9e8f-d6918c2cd2f7
+        - 'link "System status: Status unknown" [ref=f54e203] [cursor=pointer]':
+          - /url: /console/health
+          - generic [ref=f54e205]: Status unknown
+    - generic [ref=f54e206]:
+      - banner [ref=f54e207]:
+        - generic [ref=f54e208]:
+          - generic "Workspace Production in us-east-1" [ref=f54e209]:
+            - generic [ref=f54e210]: 🇺🇸
+            - generic [ref=f54e211]: Production
+            - generic [ref=f54e212]: us-east-1
+          - navigation "Breadcrumb" [ref=f54e215]:
+            - generic [ref=f54e216]: Incidents
+            - generic [ref=f54e217]: /
+            - generic [ref=f54e218]: 5fda8280 03d7 4c00 9e8f D6918c2cd2f7
+        - generic [ref=f54e219]:
+          - button "Open command palette" [ref=f54e220]:
+            - generic [ref=f54e221]: Jump to…
+            - generic [ref=f54e222]: ⌘K
+          - button "5 unread notifications" [ref=f54e224]:
+            - generic [ref=f54e228]: "5"
+          - button "Switch to dark mode" [ref=f54e229]
+          - button "Account menu" [ref=f54e232]:
+            - generic [ref=f54e233]: D
+            - generic [ref=f54e234]: demo
+      - main [ref=f54e237]:
+        - status [ref=f54e238]:
+          - list [ref=f54e253]:
+            - listitem [ref=f54e254]
+            - listitem [ref=f54e259]
+            - listitem [ref=f54e264]
+            - listitem [ref=f54e269]
+            - listitem [ref=f54e274]
+            - listitem [ref=f54e279]
+            - listitem [ref=f54e284]
+            - listitem [ref=f54e289]
+          - generic [ref=f54e294]: Loading incident detail…
+  - button "Open Next.js Dev Tools" [ref=f54e300] [cursor=pointer]
+  - alert [ref=f54e304]

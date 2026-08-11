@@ -3,9 +3,9 @@
 // Four endpoints under /v1/invite-codes (owner-only) + signup-side redemption
 // in auth.go.
 //
-//   POST   /v1/invite-codes              → mint N codes
-//   GET    /v1/invite-codes              → list non-revoked codes
-//   DELETE /v1/invite-codes/{code}       → revoke (set expires_at = now())
+//	POST   /v1/invite-codes              → mint N codes
+//	GET    /v1/invite-codes              → list non-revoked codes
+//	DELETE /v1/invite-codes/{code}       → revoke (set expires_at = now())
 //
 // Redemption is wired into the existing POST /v1/auth/signup via the
 // ?invite=<code> query param. When SIGNUP_REQUIRES_INVITE=1 the redemption is
@@ -110,13 +110,13 @@ func InviteCodesCreate(repoInst *repo.InviteCodesRepo, aud domain.AuditWriter) h
 
 // inviteCodeListEntry is one row in the list response.
 type inviteCodeListEntry struct {
-	Code       string `json:"code"`
-	MaxUses    int    `json:"max_uses"`
-	UsedCount  int    `json:"used_count"`
-	ExpiresAt  string `json:"expires_at,omitempty"`
-	CreatedBy  string `json:"created_by,omitempty"`
-	CreatedAt  string `json:"created_at"`
-	Active     bool   `json:"active"`
+	Code      string `json:"code"`
+	MaxUses   int    `json:"max_uses"`
+	UsedCount int    `json:"used_count"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+	CreatedBy string `json:"created_by,omitempty"`
+	CreatedAt string `json:"created_at"`
+	Active    bool   `json:"active"`
 }
 
 // InviteCodesList wires GET /v1/invite-codes. Returns every code newest-first.

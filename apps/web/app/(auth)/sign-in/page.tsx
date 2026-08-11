@@ -59,7 +59,8 @@ function setOAuthStateCookie(state: string): void {
   // limit the replay window if the cookie leaks. SameSite=Lax so the cookie
   // rides along on the top-level navigation back from WorkOS.
   const maxAge = 60 * 5;
-  const secure = typeof window !== "undefined" && window.location.protocol === "https:";
+  const secure =
+    typeof window !== "undefined" && window.location.protocol === "https:";
   document.cookie = [
     `nexis_oauth_state=${state}`,
     "Path=/",
@@ -72,9 +73,8 @@ function setOAuthStateCookie(state: string): void {
 function WorkOSSignIn() {
   const searchParams = useSearchParams();
   const rawNext = searchParams.get("next") ?? "/console";
-  const next = rawNext.startsWith("/") && !rawNext.startsWith("//")
-    ? rawNext
-    : "/console";
+  const next =
+    rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/console";
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -150,9 +150,13 @@ function PasswordSignIn() {
   // routes. We restrict to same-origin paths starting with "/" (and reject
   // protocol-relative "//evil.example") to avoid open-redirects.
   const rawNext = searchParams.get("next") ?? "/console";
-  const next = (rawNext.startsWith("/") && !rawNext.startsWith("//")
-    ? rawNext
-    : "/console") as Route;
+  const next = (
+    rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/console"
+  ) as Route;
+
+  // Phase 9 — the reset-password page redirects here with ?reset=success so
+  // we can confirm completion without a toast library.
+  const resetSuccess = searchParams.get("reset") === "success";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -194,6 +198,14 @@ function PasswordSignIn() {
   return (
     <>
       <SignInChrome />
+      {resetSuccess && (
+        <div
+          role="status"
+          className="mb-4 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300"
+        >
+          Password updated. Sign in with your new password.
+        </div>
+      )}
       <form onSubmit={onSubmit} className="space-y-4">
         <Field
           label="Email"
@@ -211,6 +223,14 @@ function PasswordSignIn() {
           value={password}
           onChange={setPassword}
         />
+        <p className="text-right text-sm">
+          <a
+            href="/forgot-password"
+            className="text-[var(--color-primary)] hover:underline"
+          >
+            Forgot password?
+          </a>
+        </p>
         {mfaRequired && (
           <Field
             label="MFA code"
@@ -223,10 +243,7 @@ function PasswordSignIn() {
           />
         )}
         {err && (
-          <p
-            className="text-sm text-[var(--color-destructive)]"
-            role="alert"
-          >
+          <p className="text-sm text-[var(--color-destructive)]" role="alert">
             {err}
           </p>
         )}

@@ -47,8 +47,12 @@ func (f *fakeAuthProvider) ConsumeOAuthCode(_ context.Context, _ string) (domain
 func (f *fakeAuthProvider) EnrollMFA(_ context.Context, _ string) ([]byte, string, error) {
 	panic("EnrollMFA not used")
 }
-func (f *fakeAuthProvider) VerifyMFA(_ context.Context, _, _ string) error { panic("VerifyMFA not used") }
-func (f *fakeAuthProvider) DisableMFA(_ context.Context, _ string) error    { panic("DisableMFA not used") }
+func (f *fakeAuthProvider) VerifyMFA(_ context.Context, _, _ string) error {
+	panic("VerifyMFA not used")
+}
+func (f *fakeAuthProvider) DisableMFA(_ context.Context, _ string) error {
+	panic("DisableMFA not used")
+}
 func (f *fakeAuthProvider) CreateAPIKey(_ context.Context, _ domain.Principal, _ string, _ []string) (domain.APIKeyCreated, error) {
 	panic("CreateAPIKey not used")
 }
@@ -84,6 +88,18 @@ func (f *fakeAuthProvider) ListInvites(_ context.Context, _ domain.Principal) ([
 }
 func (f *fakeAuthProvider) RevokeInvite(_ context.Context, _ domain.Principal, _ string) error {
 	panic("RevokeInvite not used")
+}
+func (f *fakeAuthProvider) RequestPasswordReset(_ context.Context, _ string) error {
+	panic("RequestPasswordReset not used")
+}
+func (f *fakeAuthProvider) ResetPassword(_ context.Context, _, _ string) error {
+	panic("ResetPassword not used")
+}
+func (f *fakeAuthProvider) ListSessions(_ context.Context, _ string) ([]domain.Session, error) {
+	panic("ListSessions not used")
+}
+func (f *fakeAuthProvider) RevokeSession(_ context.Context, _, _ string) error {
+	panic("RevokeSession not used")
 }
 
 // compile-time conformance check

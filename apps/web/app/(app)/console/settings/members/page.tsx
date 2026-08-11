@@ -1,12 +1,10 @@
-// Phase 3 Stage 8 — Settings/Members & Roles.
+// Phase 3 Stage 8 + Phase 9 — Settings/Members & Roles.
 //
-// Server component shell: loads /v1/me + /v1/orgs/{id}/invites in parallel.
-// The current Phase 3 control-plane does not yet expose a members list
-// endpoint — GET /v1/orgs/{id}/members lands in Phase 4. For now we show
-// the caller as the sole "you" row plus the pending-invites table.
-//
-// If the invites fetch returns 403 (caller is a plain member, not owner|admin)
-// we degrade to a hidden invites section rather than blocking the whole page.
+// Server component shell: loads /v1/me, then (for owner|admin) the pending
+// invites, the real member list, and the intelligent role recommendations in
+// parallel. The members + role-recommendations endpoints are Phase 9 — when
+// either fetch fails (route not mounted yet, or 403) we degrade to null and
+// the client hides that surface rather than blocking the whole page.
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -14,6 +12,7 @@ import { redirect } from "next/navigation";
 import { MembersClient } from "./client";
 import type { MeResp } from "@/lib/auth";
 import type { PendingInvite } from "@/lib/invites";
+import type { OrgMember, RoleRecommendation } from "@/lib/roleRecommendations";
 
 const API =
   process.env.API_URL_INTERNAL ??
@@ -36,19 +35,30 @@ export default async function MembersPage() {
   // Only owners + admins can list invites. Members get an empty list
   // through a soft 403 — pass an empty array down.
   let pending: PendingInvite[] = [];
+  let members: OrgMember[] | null = null;
+  let recommendations: RoleRecommendation[] | null = null;
   let canManage = me.role === "owner" || me.role === "admin";
   if (canManage) {
-    const inviteR = await fetch(
-      `${API}/v1/orgs/${me.org.id}/invites`,
-      {
-        headers: { cookie: cookieHeader },
-        cache: "no-store",
-      },
-    );
+    const opts = {
+      headers: { cookie: cookieHeader },
+      cache: "no-store",
+    } as const;
+    const [inviteR, membersR, recsR] = await Promise.all([
+      fetch(`${API}/v1/orgs/${me.org.id}/invites`, opts),
+      fetch(`${API}/v1/orgs/${me.org.id}/members`, opts),
+      fetch(`${API}/v1/orgs/${me.org.id}/role-recommendations`, opts),
+    ]);
     if (inviteR.ok) {
       pending = (await inviteR.json()) as PendingInvite[];
     } else if (inviteR.status === 403) {
       canManage = false;
+    }
+    // Phase 9 surfaces — soft-fail to null (hidden) when unavailable.
+    if (membersR.ok) {
+      members = (await membersR.json()) as OrgMember[];
+    }
+    if (recsR.ok) {
+      recommendations = (await recsR.json()) as RoleRecommendation[];
     }
   }
 
@@ -56,6 +66,8 @@ export default async function MembersPage() {
     <MembersClient
       me={me}
       pending={pending}
+      members={members}
+      recommendations={recommendations}
       canIssue={me.role === "owner"}
       canManage={canManage}
     />

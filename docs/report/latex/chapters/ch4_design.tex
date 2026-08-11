@@ -1,0 +1,494 @@
+\chapter{System Design and UML Diagrams}
+
+This chapter presents the design of Nexis at four complementary levels of
+abstraction. Section~4.1 gives the physical view: the service topology of the
+deployed system. Section~4.2 gives the functional view through Level~0 and
+Level~1 use case diagrams, covering the three human roles and the nine
+autonomous agents. Section~4.3 gives the data view through a context-level
+data flow diagram and two Level~1 decompositions --- one for the Owner/Admin
+control surface and one for the self-healing loop itself. Section~4.4 closes
+with a UML sequence diagram that traces a single complete recovery run,
+message by message, from fault detection to post-deploy verification. The
+self-healing loop is deliberately given the most space, because it is the
+central contribution of the project.
+
+\section{System Architecture Overview}
+
+Figure~\ref{fig:architecture} shows the full service topology of Nexis. The
+diagram is organised into horizontal layers, read top to bottom: clients, the
+control-plane together with the LLM spine, the sidecar services, the data and
+state layer, and the external integrations.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{../assets/diagrams/architecture.png}
+\caption{NEXIS System Architecture ( full services topology across the client,
+control-plane/LLM, sidecar, data, and integration layers ).}
+\label{fig:architecture}
+\end{figure}
+
+\textbf{Clients.} The topmost layer contains every entry point into the
+platform: the web console (\code{apps/web}, Next.js~16), inbound GitHub
+webhooks, inbound Sentry/Datadog/PagerDuty alert webhooks
+\cite{sentry,datadog,pagerduty}, Slack interactivity callbacks
+\cite{slackapi}, and plain HTTP clients (CLI/\code{curl}) that address the
+deploy-engine and the public API directly. All of these converge on the
+control-plane; no client talks to a data store or an external integration
+directly.
+
+\textbf{Control-plane and LLM spine.} The second layer is the heart of the
+system. The control-plane is a single Go service (\code{:8080}) that hosts the
+HTTP API (chi router, with authentication, RBAC, row-level-security binding,
+and rate limiting), the always-on Sentinel detector goroutine (EWMA $+3\sigma$
+spike detection), and the cron scheduler (daily digest, QA continuous loop,
+billing tickers, schema-drift detection). Inside it, the Temporal
+RecoveryPipeline workflow \cite{temporal} orchestrates the nine-agent
+self-healing loop as a durable workflow: detect $\rightarrow$ diagnose
+$\rightarrow$ plan $\rightarrow$ design $\rightarrow$ code $\rightarrow$ test
+$\rightarrow$ package/migrate $\rightarrow$ approve (severity-routed)
+$\rightarrow$ deploy $\rightarrow$ verify $\rightarrow$ rollback if needed.
+Alongside it sits the LLM spine: OpenAI (gpt-4o family) as the production
+default and Ollama \cite{ollama} (local \code{gpt-oss:20b} and
+\code{qwen2.5-coder:14b}) as a fully supported alternate provider, a pgvector
+retrieval store \cite{pgvector} that supplies code-context passages to the
+Architect, Backend, and QA agents, and a structured-output stage that
+validates every agent completion against a per-agent JSON Schema and retries
+on mismatch.
+
+\textbf{Sidecar services.} The third layer holds the independently deployable
+modules. Four are Go services and one is Python:
+
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{validator} (\code{:8081}) --- the Docker-sandboxed test runner
+        \cite{docker} that shadow-executes every candidate patch under
+        \code{--network=none}, \code{--read-only}, \code{--cap-drop=ALL} and
+        runs the QA-generated Hypothesis property tests \cite{hypothesis};
+  \item \textbf{gitops} (\code{:8082}) --- GitHub App pull-request automation
+        (blob $\rightarrow$ tree $\rightarrow$ commit $\rightarrow$ ref
+        $\rightarrow$ PR), bearer-authenticated from the control-plane;
+  \item \textbf{causal-inference} (\code{:8090}) --- the Python/FastAPI
+        graph-evidence ranker that scores Pathfinder's candidate root causes
+        by evidence-chain specificity, structural proximity, and textual
+        overlap (an honest statistical proxy rather than a fitted structural
+        causal model \cite{dowhy});
+  \item \textbf{deploy-engine} (\code{:8091}) --- clone, stack detection,
+        Dockerfile generation, build, and health-checked container run for
+        preview deployments;
+  \item \textbf{argocd client} --- the Sync/Rollback integration \cite{argocd}
+        used by the post-deploy SLO probe.
+\end{itemize}
+
+\textbf{Data and state layer.} The fourth layer contains PostgreSQL~17 with
+pgvector, made multi-tenant through row-level security policies \cite{pgrls}
+across 33 migrations; Neo4j \cite{neo4j} holding the code dependency graph
+that Pathfinder walks; Temporal's own persistence for workflow durability;
+Redis for rate limiting and caching; and MinIO/S3 as the encrypted patch
+store. The key tenant-scoped tables --- \code{users}, \code{org\_members},
+\code{projects}, \code{incidents\_raw}, \code{workflow\_runs},
+\code{approval\_decisions}, \code{deployments}, \code{lineage\_events},
+\code{audit\_log}, \code{feedback\_examples}, \code{role\_recommendations},
+and \code{digest\_reports} --- are listed in the diagram and reappear as the
+data stores of the DFDs in Section~4.3.
+
+\textbf{External integrations.} The bottom layer lists every third-party
+system Nexis touches: the GitHub App, Sentry, Datadog, PagerDuty, Slack,
+ArgoCD, Stripe billing \cite{stripe}, and SES/SMTP mail. Observability across
+all layers follows the OpenTelemetry pipeline \cite{otel} into Prometheus,
+Loki, and Tempo, visualised in Grafana, and infrastructure is declared as
+Terraform code targeting AWS ECS behind an ALB.
+
+The architecture directly reflects the polyglot stack described in
+Chapter~3: Go for every latency- and concurrency-sensitive service
+(control-plane, validator, gitops, deploy-engine), Python for the
+statistics-oriented causal-inference sidecar, and TypeScript for the web
+console. The container runtime boundary is the Docker Engine API, which
+Podman \cite{podman} satisfies identically --- a property that was exercised
+in practice, since the evaluation environment for this report ran the
+validator sandbox and deploy-engine on Podman.
+
+\section{Use Case Diagram}
+\label{sec:usecase-diagrams}
+
+\subsection{Level 0 Use Case Diagram}
+
+Figure~\ref{fig:usecase-l0} shows the system at its coarsest functional
+granularity: a single system boundary, three human actors on the left, and
+the external systems and data stores on the right.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{../assets/diagrams/usecase-level0.png}
+\caption{Level 0 Use Case Diagram ( three human actors and the mediated
+external systems ).}
+\label{fig:usecase-l0}
+\end{figure}
+
+The three human actors correspond to the platform's role-based access model.
+The \textbf{Owner/Admin} administers the organisation: membership, roles,
+integrations, recovery policy, billing, and --- most importantly --- the
+approval gate through which every autonomous repair must pass. The
+\textbf{Engineer/Member} performs day-to-day engineering work on the
+platform: running demo scenarios, browsing incidents, inspecting agent runs,
+and participating in the approval flow. The \textbf{Viewer} is a read-only
+experience surfaced through RBAC gating in the console; it can observe
+dashboards, incidents, and system health but can change nothing.
+
+On the right-hand side sit the external entities: the GitHub App, the alert
+sources (Sentry, Datadog, PagerDuty), Slack, ArgoCD, the LLM provider
+(OpenAI or Ollama), Stripe billing, and the platform's own stores
+(PostgreSQL/Neo4j and the MinIO patch store). The essential property the
+diagram expresses is mediation: every line from an actor terminates at the
+system boundary, and every line to an external system originates from it. No
+human ever calls GitHub, the LLM, or ArgoCD directly --- the nine autonomous
+agents operate entirely inside the boundary and act on the external systems
+on the humans' behalf.
+
+\subsection{Level 1 Use Case Diagram}
+
+Figure~\ref{fig:usecase-l1} decomposes the single Level~0 bubble into the
+concrete use cases of each actor. The diagram uses colour to group use cases
+by the minimum role required: blue for Owner/Admin, orange for the shared
+approval flow, green for Engineer/Member, purple for Viewer, and
+purple-outlined boxes on the right for the autonomous nine-agent fleet.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.9\textwidth]{../assets/diagrams/usecase-level1.png}
+\caption{Level 1 Use Case Diagram ( per-actor use case groups and the
+autonomous 9-agent fleet ).}
+\label{fig:usecase-l1}
+\end{figure}
+
+\textbf{Owner/Admin (blue).} The administrative surface covers fifteen use
+cases: managing members and roles; accepting or dismissing role
+recommendations produced by the heuristic recommender; connecting
+integrations; creating and configuring projects; setting the recovery policy
+and SLO; toggling the kill switch; issuing invites and API keys; managing
+billing and plan; exporting the RLHF training data (the JSONL feedback
+export); viewing the audit log; triggering a manual Sentinel run; exporting
+evaluation-harness and audit CSVs; revoking sessions; resetting passwords;
+and enrolling or verifying MFA.
+
+\textbf{Shared approval flow (orange).} Four use cases are shared between
+Owner/Admin and Engineer/Member, because both roles participate in reviewing
+autonomous work: approving, rejecting, or modifying a proposed patch;
+watching the live recovery timeline over Server-Sent Events; viewing the
+patch diff in the Monaco viewer; and deploying or stopping a preview
+container from the project's Ops tab.
+
+\textbf{Engineer/Member (green).} The engineering surface covers running a
+Live-Demo scenario, browsing the incidents list, inspecting agent runs,
+submitting the NASA-TLX workload survey \cite{nasatlx}, browsing evaluation
+harness runs, querying the knowledge base, viewing cost and performance
+pages, managing the member's own API keys, updating profile and preferences,
+managing the member's own sessions and devices, and the account lifecycle
+itself (sign up, sign in, MFA verification).
+
+\textbf{Viewer (purple).} The Viewer holds exactly three use cases:
+read-only dashboard, read-only incident view, and read-only system health.
+
+\textbf{The 9-agent fleet (purple-outlined, right).} The fleet appears as a
+single autonomous actor whose six grouped use cases summarise the recovery
+pipeline: detect and diagnose an incident (Sentinel + Pathfinder); plan and
+synthesise the repair (Synthesiser + Architect); generate code and tests
+(Backend + QA); package deployment and migrations (DevOps in parallel with
+Data Engineer); shadow-validate the patch (Validator sandbox); and open the
+pull request, redeploy, or roll back on an SLO breach (GitOps deploy and the
+rollback probe). Its only connection to a human use case is the approval
+gate --- the fleet executes autonomously inside the boundary and surfaces to
+a person exactly once per run.
+
+The permission model is \emph{role-additive}: Owner/Admin holds every
+Engineer and Viewer permission, and Engineer holds every Viewer permission.
+This is why the diagram draws Owner/Admin connected into the orange shared
+group as well as the blue group --- a higher role never loses a capability
+that a lower role has, it only gains administrative ones. The read-only
+Viewer experience is enforced by RBAC gating in the console even though the
+underlying database role enumeration is owner/admin/member, a design
+decision discussed in Chapter~3.
+
+\section{Data Flow Diagram}
+
+\subsection{DFD Level 0 (Context Diagram)}
+
+Figure~\ref{fig:dfd-l0} is the context diagram: the entire platform
+(control-plane plus the nine-agent loop) as a single process, its external
+entities, and the three top-level data stores.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{../assets/diagrams/dfd-level0.png}
+\caption{DFD Level 0 ( context diagram with external entities and top-level
+data stores ).}
+\label{fig:dfd-l0}
+\end{figure}
+
+The data stores are labelled D1--D3. \textbf{D1, the tenant database
+(PostgreSQL)}, receives every organisational record --- users, memberships,
+projects, incidents, workflow runs, decisions, and audit entries --- under
+row-level security. \textbf{D2, the code graph (Neo4j)}, holds the dependency
+graph of each connected repository and is read by Pathfinder during
+diagnosis. \textbf{D3, the patch store (MinIO)}, receives the encrypted diff
+blob produced by each recovery run.
+
+Four external entity flows cross the boundary. The \textbf{user} (any of the
+three roles) sends logins, commands, and approval decisions inward and
+receives console views and notifications outward. \textbf{GitHub/GitOps}
+receives pull-request creation requests (and Dockerfile reads for the
+deploy-engine) and returns PR URLs and commit SHAs. The \textbf{alert
+sources} (Sentry, Datadog, PagerDuty, Slack) send fault and alert webhooks
+inward --- they are producers of incidents, not consumers of data. The
+\textbf{LLM provider} (OpenAI or Ollama) receives completion requests and
+returns patch and plan JSON. As at Level~0 of the use case model, every one
+of these flows is mediated by the platform process; there is no direct path
+from a human to an integration.
+
+\subsection{DFD Level 1 --- Owner/Admin}
+
+Figure~\ref{fig:dfd-l1-admin} decomposes the administrative side of the
+platform into twelve numbered processes and the eleven tenant-scoped data
+stores they touch.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{../assets/diagrams/dfd-level1-admin.png}
+\caption{DFD Level 1 --- Owner/Admin ( twelve administrative processes and
+their tenant-scoped data stores ).}
+\label{fig:dfd-l1-admin}
+\end{figure}
+
+Table~\ref{tab:admin-processes} summarises each process and the primary data
+store it writes to.
+
+\begin{table}[htbp]
+\caption{Owner/Admin DFD Level 1 processes and their primary data stores.}
+\label{tab:admin-processes}
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Process} & \textbf{Responsibility} & \textbf{Primary store written} \\
+\midrule
+1.0 Auth + RBAC        & login, JWT session issue, role checks      & \code{users}, \code{sessions} \\
+2.0 Members \& Roles   & invite, promote, demote, remove            & \code{org\_members} \\
+3.0 Role Recommender   & heuristic promote/downgrade suggestions    & \code{role\_recommendations} \\
+4.0 Integrations       & connect GitHub/Slack/Sentry/ArgoCD         & \code{integrations} \\
+5.0 Project + Policy   & project config, recovery policy, SLO       & \code{projects} \\
+6.0 Approval Gate      & approve / reject / modify decisions        & \code{approval\_decisions} \\
+7.0 Billing            & Stripe usage ticker, invoices, plan        & billing tables (Stripe) \\
+8.0 Audit \& Export    & hash-chained audit writes, CSV export      & \code{audit\_log} \\
+9.0 System Health      & parallel dependency probes (read-only)     & --- (no persistent write) \\
+10.0 Sentinel Trigger  & admin-initiated detection run              & \code{incidents\_raw} \\
+11.0 Sessions / MFA    & session list/revoke, TOTP enrolment        & \code{sessions} \\
+12.0 Kill Switch       & suspend autonomous recovery per project    & \code{workflow\_runs} (halt), \code{audit\_log} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Walking the diagram briefly: process 1.0 authenticates the admin and binds
+the request-scoped RLS context; 2.0 and 3.0 together form the membership
+surface, with the role recommender writing its suggestions to
+\code{role\_recommendations} and the accept action flowing back through 2.0
+into \code{org\_members}; 4.0 and 5.0 configure what the autonomous loop is
+allowed to act on; 6.0 records every terminal approval decision; 7.0 and 8.0
+handle billing and the append-only, hash-chained audit trail; 9.0 fans out
+health probes to Postgres, Redis, Neo4j, MinIO, and Temporal in parallel and
+persists nothing; 11.0 manages sessions and MFA; and 12.0 is the safety
+brake that suspends autonomous recovery for a project.
+
+The most important flow in the diagram is process \textbf{10.0, the Sentinel
+Trigger}. When an admin manually triggers a detection run, the process
+writes directly into \code{incidents\_raw} --- the \emph{same} table the
+self-healing loop's automatic detectors write to. There is no separate
+``manual'' code path, no parallel queue, and no privileged shortcut: an
+admin-triggered run is indistinguishable downstream from an automatic one,
+and flows through the identical Temporal pipeline, validator sandbox, and
+approval gate. This design decision keeps the system's behaviour uniform and
+means every guarantee established for the autonomous path (durability,
+validation, severity routing, auditability) holds for manual runs for free.
+
+\subsection{DFD Level 1 --- Self-Healing Loop}
+
+Figure~\ref{fig:dfd-l1-selfheal} decomposes the nine-agent loop itself into
+twelve numbered processes, coloured by layer: blue for the detection and
+decision agents at the head of the pipeline, green for the Layer-1 execution
+team, and orange for the validation, approval, deployment, and verification
+tail.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{../assets/diagrams/dfd-level1-selfheal.png}
+\caption{DFD Level 1 --- Self-Healing Loop ( the 9-agent fleet as twelve
+numbered processes with their data stores ).}
+\label{fig:dfd-l1-selfheal}
+\end{figure}
+
+The pipeline reads end-to-end as follows:
+
+\begin{enumerate}[itemsep=2pt]
+  \item \textbf{1.0 Sentinel} receives fault signals --- webhook payloads
+        from Sentry/Datadog/PagerDuty or its own EWMA~$+3\sigma$ spike rule
+        over the incident stream --- and writes the normalised incident into
+        \code{incidents\_raw}.
+  \item \textbf{2.0 Pathfinder} walks the Neo4j code graph outward from the
+        fault symptom and forwards candidate root-cause nodes, with hop
+        distance and degree metadata, to the causal-inference sidecar for
+        graph-evidence ranking.
+  \item \textbf{3.0 Synthesiser} classifies the incident into a scenario
+        (regex fast path with an LLM fallback) and computes the ordered
+        \code{selected\_agents} list that the workflow subsequently enforces.
+  \item \textbf{4.0 Architect} produces the structured plan ---
+        \code{plan\_steps}, \code{affected\_files}, \code{risk\_level} ---
+        that acts as the contract every downstream agent is checked against.
+  \item \textbf{5.0 Backend} generates the minimal unified diff, guided by
+        the LLM provider (shown as a dashed structured-JSON completion flow
+        into the green processes).
+  \item \textbf{6.0 QA} generates property-based tests from the incident and
+        the Backend diff.
+  \item \textbf{7.0 DevOps} emits the CI/CD and ArgoCD manifests for the
+        change.
+  \item \textbf{8.0 Data Engineer} proposes forward and reverse migrations
+        where schema changes are involved and emits
+        OpenLineage-compatible run events \cite{openlineage} into
+        \code{lineage\_events}.
+  \item \textbf{9.0 Validator} shadow-executes the patch in the Docker
+        sandbox, runs the QA-generated test suite, and stores the encrypted
+        candidate diff in the MinIO patch store.
+  \item \textbf{10.0 Approval Gate} routes the validated patch by severity
+        to the Owner/Admin external entity (the approve/reject/modify flow
+        at the bottom left of the diagram) and records the terminal decision
+        in \code{approval\_decisions} and \code{feedback\_examples}.
+  \item \textbf{11.0 GitOps Deploy} opens the real GitHub pull request
+        (writing to the \code{deployments} store and out to the
+        GitHub/GitOps/deploy-engine external entity), and redeploys through
+        the deploy-engine when the incident's source was a preview
+        deployment failure.
+  \item \textbf{12.0 Rollback Probe} watches \code{incidents\_raw} during a
+        bounded post-deploy window for a fresh fatal on the same
+        organisation and service.
+\end{enumerate}
+
+The diagram's closing annotation states the property that gives the project
+its title: \textbf{the loop is closed}. If process 12.0 observes an SLO
+breach after a deployment, it does not raise an alert into a separate
+escalation channel --- the breach lands in \code{incidents\_raw} as a fresh
+fatal, exactly as any external fault would, and re-enters the pipeline at
+process 1.0 as a new Sentinel-detected incident (with an ArgoCD rollback to
+the prior known-good revision when the project's
+\code{RollbackOnSLOBreach} policy is set). Recovery, verification, and
+re-detection form a single cycle over one shared data path.
+
+\section{Self-Healing Loop Sequence Diagram}
+
+Figure~\ref{fig:seq-selfheal} is the UML sequence diagram of one complete
+recovery run. All nine agents appear as lifelines, together with the fault
+source, the Validator sandbox, the Admin, and the GitOps and Deploy
+services. Eighteen numbered messages trace the run in temporal order; each
+corresponds to a named Temporal activity, and every one of them is recorded
+as a durable ActivityEvent and streamed to the incident timeline over
+Server-Sent Events --- which is why the live screenshots in Chapter~5 show
+this exact message order as a per-agent timeline.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{../assets/diagrams/sequence-selfheal.png}
+\caption{Self-Healing Loop Sequence Diagram ( one full recovery run, 18
+numbered messages across all nine agent lifelines ).}
+\label{fig:seq-selfheal}
+\end{figure}
+
+The run proceeds as follows:
+
+\begin{enumerate}[itemsep=2pt]
+  \item \textbf{Message 1 --- fault arrival.} A webhook or statistical spike
+        (fanned in from any incident source) reaches Sentinel. The resulting
+        \code{incidents\_raw} row is what the RecoveryPipeline trigger
+        polls, so workflow start is decoupled from signal arrival.
+  \item \textbf{Message 2 --- \code{Sentinel.Detect}.} The first workflow
+        activity re-records the detection inside the durable workflow. It is
+        marked as a stub in the diagram because the detection logic itself
+        already ran in the always-on detector goroutine; the activity exists
+        so that the workflow timeline owns the provenance of the run.
+  \item \textbf{Message 3 --- \code{Pathfinder.Diagnose}.} Pathfinder walks
+        the Neo4j dependency graph from the symptom and submits the
+        candidates to the causal-inference sidecar for ranking.
+  \item \textbf{Message 4 --- \code{Synthesiser.Plan}.} The incident is
+        classified into a scenario and the agent set for this run is
+        selected; non-selected Layer-1 agents will later appear as
+        explicitly ``skipped'' in the timeline rather than silently omitted.
+  \item \textbf{Message 5 --- LLM completion.} Drawn as a dashed
+        asynchronous flow spanning the agent lifelines: every reasoning
+        agent obtains its output as a structured JSON completion that is
+        validated against that agent's schema, with a retry on mismatch.
+  \item \textbf{Message 6 --- \code{Architect.Solution}.} The structured
+        plan with \code{plan\_steps} and \code{affected\_files} is produced;
+        this becomes the contract for the rest of the run.
+  \item \textbf{Message 7 --- \code{Backend.Codegen}.} The minimal unified
+        diff is generated. If the diff touches any file outside the
+        Architect's \code{affected\_files}, the workflow flags a contract
+        violation, which forces HIGH severity at the approval gate.
+  \item \textbf{Message 8 --- \code{QA.TestGen}.} Property-based tests are
+        generated from the incident and the diff.
+  \item \textbf{Messages 9a/9b --- \code{DevOps.Pipeline}
+        $\parallel$ \code{DataEngineer.Migrations}.} The only parallel pair
+        in the pipeline: CI/CD and ArgoCD manifests are prepared
+        concurrently with the forward and reverse migration proposal, since
+        neither depends on the other's output.
+  \item \textbf{Message 10 --- hand-off to \code{Validator.Validate}.} The
+        Backend result, together with the QA suite, is passed to the
+        Validator.
+  \item \textbf{Message 11 --- sandboxed execution.} The Validator runs the
+        patch in the locked-down container
+        (\code{--network=none}, \code{--read-only}, \code{--cap-drop=ALL},
+        \code{--pids-limit=128}, \code{--security-opt=no-new-privileges}),
+        executes the pytest/Hypothesis suite, and reports pass/fail and
+        coverage. No unvalidated patch can proceed past this point.
+  \item \textbf{Message 12 --- \code{ApprovalGate.Route}.} Severity is
+        computed as a function of the scenario, sensitive-path matches, and
+        contract violations: HIGH for the schema-drift scenario, any diff
+        touching a sensitive path glob (\code{*.sql}, \code{migrations/},
+        \code{auth/}, \code{security/}, \code{crypto/}), an unknown
+        scenario, or a contract violation; MEDIUM for everything else; LOW
+        for tiny UI-only diffs.
+  \item \textbf{Message 13 --- notification.} For HIGH and MEDIUM runs the
+        gate notifies humans over Slack and email and waits.
+  \item \textbf{Message 14 --- human decision.} The Admin's approve, reject,
+        or modify action arrives as a Temporal signal. The subsequent
+        \textbf{alt block} encodes the automatic paths: LOW severity
+        auto-approves immediately, and MEDIUM auto-approves after a 120-second
+        countdown unless a human overrides it first. HIGH always requires an
+        explicit human decision --- one of the two live runs evidenced in
+        Chapter~5 genuinely timed out at this gate, which is the safety
+        mechanism working as designed.
+  \item \textbf{Message 15 --- \code{GitOpsDeploy}.} On approval, the gitops
+        service performs the blob $\rightarrow$ tree $\rightarrow$ commit
+        $\rightarrow$ ref $\rightarrow$ PR sequence against GitHub.
+  \item \textbf{Message 16 --- conditional \code{DeployEngine.Redeploy}.}
+        Executed only when the triggering incident's source was the
+        deploy-engine: a merged fix to a broken preview build triggers an
+        automatic rebuild and redeploy of the preview container.
+  \item \textbf{Message 17 --- post-deploy health window.} The rollback
+        probe watches \code{incidents\_raw} for a fresh fatal on the same
+        organisation and service within the bounded window.
+  \item \textbf{Message 18 --- conditional \code{ArgoCD.Rollback}.} Inside
+        the closing \textbf{alt block}, an SLO breach detected during the
+        window triggers the ArgoCD Rollback client to restore the prior
+        known-good revision --- and, as established in
+        Section~4.3.3, the breach itself re-enters the pipeline as a new
+        incident.
+\end{enumerate}
+
+The footer of the diagram records the observed steady-state wall-clock time
+of a full run: approximately 35 seconds to 2 minutes on local Ollama models,
+depending on scenario complexity and LLM latency. This range is corroborated
+by the real timings visible in the Chapter~5 screenshots, including the
+fully successful run that completed in 1\,m\,40\,s from detection to
+verified deployment.
+
+Taken together, the four views of this chapter describe one coherent design:
+a mediated platform boundary (use case Level~0), a role-additive human
+surface beside an autonomous fleet (use case Level~1), a single shared data
+path for manual and automatic operation (DFD Level~1, Owner/Admin), and a
+detection--repair--verification cycle that feeds its own failures back into
+itself (DFD Level~1 self-healing loop and the sequence diagram). Chapter~5
+presents the implementation of each element, and Chapter~6 the evidence that
+the loop closes in practice.

@@ -5,10 +5,10 @@
 // EvalRunCreate so the POST returns 202 immediately and the client polls
 // the list endpoint for progress.
 //
-//   GET    /v1/workspaces/{ws_id}/eval                  → list (owner|admin|member)
-//   GET    /v1/workspaces/{ws_id}/eval/{run_id}         → detail (owner|admin|member)
-//   POST   /v1/workspaces/{ws_id}/eval                  → kick off run (owner|admin)
-//   GET    /v1/workspaces/{ws_id}/agents/budget         → topbar pill (owner|admin|member)
+//	GET    /v1/workspaces/{ws_id}/eval                  → list (owner|admin|member)
+//	GET    /v1/workspaces/{ws_id}/eval/{run_id}         → detail (owner|admin|member)
+//	POST   /v1/workspaces/{ws_id}/eval                  → kick off run (owner|admin)
+//	GET    /v1/workspaces/{ws_id}/agents/budget         → topbar pill (owner|admin|member)
 package handler
 
 import (

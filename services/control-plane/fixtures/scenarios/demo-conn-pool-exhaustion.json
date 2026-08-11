@@ -1,0 +1,19 @@
+{
+  "label": "demo-conn-pool-exhaustion",
+  "title": "SQLTransientConnectionException: HikariPool-1 connection wait timeout in billing-api",
+  "service": "billing-api",
+  "environment": "production",
+  "stacktrace": "java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.\n\tat com.zaxxer.hikari.pool.HikariPool.createTimeoutException(HikariPool.java:696)\n\tat com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:197)\n\tat com.nexis.billing.repo.InvoiceRepository.findPending(InvoiceRepository.java:64)\n\tat com.nexis.billing.job.InvoiceSweeper.sweep(InvoiceSweeper.java:39)",
+  "logs": "ts=2026-08-10T02:11:44Z level=warn service=billing-api msg=pool_stats pool=HikariPool-1 active=20 idle=0 waiting=143 max=20\nts=2026-08-10T02:11:59Z level=warn service=billing-api msg=connection_leak_detected holder=com.nexis.billing.export.ReportExporter.exportMonthly held_for_ms=1860042 note=\"connection acquired outside try-with-resources, never closed\"\nts=2026-08-10T02:12:14Z level=error service=billing-api msg=request_timeout route=/invoices/pending p99_ms=30012 timeouts_5m=88",
+  "metadata": {
+    "service_name": "billing-api",
+    "pool": "HikariPool-1",
+    "pool_max": 20,
+    "pool_active": 20,
+    "pool_waiting": 143,
+    "leak_suspect": "com.nexis.billing.export.ReportExporter.exportMonthly",
+    "held_for_ms": 1860042,
+    "incident_kind": "conn-pool-exhaustion",
+    "expected_scenario": "unknown"
+  }
+}

@@ -216,7 +216,7 @@ func TestSystemHealth_OmitsDisabledProbes(t *testing.T) {
 	t.Cleanup(func() { healthCache = prev })
 	deps := SystemHealthDeps{
 		AdminPool: nil, // disabled
-		RedisAddr: "", // disabled
+		RedisAddr: "",  // disabled
 		Neo4j:     nil, // disabled
 		Temporal:  nil, // disabled
 	}

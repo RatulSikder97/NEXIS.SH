@@ -1,0 +1,382 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1100" viewBox="0 0 1500 1100" font-family="Helvetica, Arial, sans-serif">
+<defs>
+<symbol id="i-browser" viewBox="0 0 24 24">
+  <rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <line x1="2" y1="8" x2="22" y2="8" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="5" cy="6" r="0.6" fill="currentColor" stroke="none"/>
+  <circle cx="7.2" cy="6" r="0.6" fill="currentColor" stroke="none"/>
+</symbol>
+<symbol id="i-webapp" viewBox="0 0 24 24">
+  <rect x="2" y="3" width="20" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M2 8 h20" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M8 21 h8 M12 17 v4" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M6 12.5 l2.2 2.2 M6 14.7 l2.2 -2.2" stroke="currentColor" stroke-width="1.3"/>
+</symbol>
+<symbol id="i-server" viewBox="0 0 24 24">
+  <rect x="3" y="3" width="18" height="7" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <rect x="3" y="14" width="18" height="7" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="7" cy="6.5" r="0.7" fill="currentColor" stroke="none"/>
+  <circle cx="7" cy="17.5" r="0.7" fill="currentColor" stroke="none"/>
+</symbol>
+<symbol id="i-service" viewBox="0 0 24 24">
+  <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M12 3.6v2.6M12 17.8v2.6M20.4 12h-2.6M6.2 12H3.6M17.9 6.1l-1.9 1.9M8 16l-1.9 1.9M17.9 17.9L16 16M8 8L6.1 6.1"
+        stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+<symbol id="i-database" viewBox="0 0 24 24">
+  <ellipse cx="12" cy="5.2" rx="8" ry="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M4 5.2v13.6c0 1.4 3.6 2.6 8 2.6s8-1.2 8-2.6V5.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M4 12c0 1.4 3.6 2.6 8 2.6s8-1.2 8-2.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+<symbol id="i-graph" viewBox="0 0 24 24">
+  <circle cx="6" cy="6" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="18" cy="6" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="12" cy="18" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M8.1 7.2L10 16M15.9 7.2L14 16M8.4 6h7.2" stroke="currentColor" stroke-width="1.5"/>
+</symbol>
+<symbol id="i-cache" viewBox="0 0 24 24">
+  <path d="M13 2 L4 14h6l-1 8 10-13h-6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+</symbol>
+<symbol id="i-bucket" viewBox="0 0 24 24">
+  <path d="M4 7h16l-1.6 12.4a2 2 0 0 1-2 1.6H7.6a2 2 0 0 1-2-1.6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M2.5 7h19M8 7l1.4-3.4a1.6 1.6 0 0 1 1.5-1h2.2a1.6 1.6 0 0 1 1.5 1L16 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+</symbol>
+<symbol id="i-workflow" viewBox="0 0 24 24">
+  <rect x="2" y="10" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <rect x="17" y="10" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="12" cy="4.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M7 12.5h3M14 12.5h3M12 7v3M12 10l-2.5 2.5M12 10l2.5 2.5" stroke="currentColor" stroke-width="1.5"/>
+</symbol>
+<symbol id="i-container" viewBox="0 0 24 24">
+  <path d="M12 2 21 6.5v11L12 22 3 17.5v-11z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M3 6.5 12 11l9-4.5M12 11v11" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+<symbol id="i-git" viewBox="0 0 24 24">
+  <circle cx="6" cy="5" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="6" cy="19" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="18" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M6 7.2V16.8M6 8c0 5 3 4.5 10 4.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+<symbol id="i-chat" viewBox="0 0 24 24">
+  <path d="M3 5.5h18v11H9l-4 3.5v-3.5H3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <line x1="7" y1="9.5" x2="17" y2="9.5" stroke="currentColor" stroke-width="1.4"/>
+  <line x1="7" y1="12.7" x2="14" y2="12.7" stroke="currentColor" stroke-width="1.4"/>
+</symbol>
+<symbol id="i-brain" viewBox="0 0 24 24">
+  <path d="M9 3.5a3.3 3.3 0 0 0-3.3 3.3v.3A3 3 0 0 0 4 9.8a3.1 3.1 0 0 0 1 5.7 3.2 3.2 0 0 0 3.6 3.9A3.2 3.2 0 0 0 12 21V6.8A3.3 3.3 0 0 0 9 3.5Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M15 3.5a3.3 3.3 0 0 1 3.3 3.3v.3A3 3 0 0 1 20 9.8a3.1 3.1 0 0 1-1 5.7 3.2 3.2 0 0 1-3.6 3.9A3.2 3.2 0 0 1 12 21V6.8a3.3 3.3 0 0 1 3-3.3Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+</symbol>
+<symbol id="i-shield" viewBox="0 0 24 24">
+  <path d="M12 2.5 20 6v6c0 5-3.4 8.4-8 9.5-4.6-1.1-8-4.5-8-9.5V6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M8.6 12.2l2.3 2.3 4.5-4.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol>
+<symbol id="i-terraform" viewBox="0 0 24 24">
+  <path d="M3 3v6.2l5.4 3.1V6.1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M9.3 6.4v6.2l5.4 3.1V9.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M15.6 9.8V16l5.4 3.1v-6.2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M9.3 13.3v6.2l-5.4 3.1v-6.2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+</symbol>
+<symbol id="i-observability" viewBox="0 0 24 24">
+  <path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+<symbol id="i-chart" viewBox="0 0 24 24">
+  <path d="M3 21V3M3 21h18" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M6 17l3.5-5 3 3L18 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol>
+<symbol id="i-card" viewBox="0 0 24 24">
+  <rect x="2" y="5" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <line x1="2" y1="9.5" x2="22" y2="9.5" stroke="currentColor" stroke-width="1.6"/>
+  <line x1="5" y1="14.5" x2="10" y2="14.5" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+<symbol id="i-cloud" viewBox="0 0 24 24">
+  <path d="M6.5 18a4.2 4.2 0 0 1-.7-8.3 5.5 5.5 0 0 1 10.6-1.9A4.5 4.5 0 0 1 17.5 18Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+</symbol>
+<symbol id="i-bell" viewBox="0 0 24 24">
+  <path d="M6 10.5a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14.5 6 10.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M10 19a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+<symbol id="i-lock" viewBox="0 0 24 24">
+  <rect x="5" y="10.5" width="14" height="10" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+<symbol id="i-code" viewBox="0 0 24 24">
+  <path d="M8.5 6 3 12l5.5 6M15.5 6 21 12l-5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol>
+<symbol id="i-terminal" viewBox="0 0 24 24">
+  <rect x="2" y="4" width="20" height="16" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M6 9l3.5 3L6 15M12 15h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol>
+<symbol id="i-check" viewBox="0 0 24 24">
+  <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol>
+<symbol id="i-person" viewBox="0 0 24 24">
+  <circle cx="12" cy="7.5" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M4.5 20.5c0-4.2 3.4-6.8 7.5-6.8s7.5 2.6 7.5 6.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+</symbol>
+<symbol id="i-robot" viewBox="0 0 24 24">
+  <rect x="4" y="8" width="16" height="12" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="9" cy="14" r="1.3" fill="currentColor" stroke="none"/>
+  <circle cx="15" cy="14" r="1.3" fill="currentColor" stroke="none"/>
+  <path d="M12 8V4.5M9.5 4.5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M8.5 18h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+</symbol>
+<marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+  <path d="M0,0 L0,6 L8,3 z" fill="#1f2937"/>
+</marker>
+<marker id="ahr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+  <path d="M0,0 L0,6 L8,3 z" fill="#b91c1c"/>
+</marker>
+</defs>
+
+<rect width="1500" height="1100" fill="#ffffff"/>
+<text x="750" y="40" text-anchor="middle" font-size="20" font-weight="bold" fill="#1f2937">Data Flow Diagram, Level 1 — Self-Healing Loop</text>
+<text x="750" y="63" text-anchor="middle" font-size="12" fill="#6b7280">Figure 4.10 — the nine-agent fleet's processes and data stores</text>
+
+<!-- ============ EXTERNAL ENTITIES ============ -->
+<!-- Sentry / Datadog / PagerDuty (top-left, above 1.0) -->
+<rect x="190" y="84" width="220" height="68" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+<g color="#1f2937"><use href="#i-bell" x="202" y="104" width="26" height="26"/></g>
+<text x="240" y="107" font-size="12.5" font-weight="bold" fill="#1f2937">Sentry, Datadog,</text>
+<text x="240" y="122" font-size="12.5" font-weight="bold" fill="#1f2937">PagerDuty</text>
+<text x="240" y="138" font-size="10" fill="#4b5563">fault telemetry sources</text>
+
+<!-- Large Language Model Provider (top-right, above 4.0) -->
+<rect x="1060" y="84" width="220" height="68" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+<g color="#1f2937"><use href="#i-brain" x="1072" y="104" width="26" height="26"/></g>
+<text x="1110" y="107" font-size="12.5" font-weight="bold" fill="#1f2937">Large Language Model</text>
+<text x="1110" y="122" font-size="12.5" font-weight="bold" fill="#1f2937">Provider</text>
+<text x="1110" y="138" font-size="10" fill="#4b5563">OpenAI / Ollama</text>
+
+<!-- Owner / Administrator (bottom, below 10.0) -->
+<rect x="480" y="910" width="220" height="68" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+<g color="#1f2937"><use href="#i-person" x="492" y="928" width="26" height="26"/></g>
+<text x="530" y="938" font-size="12.5" font-weight="bold" fill="#1f2937">Owner / Administrator</text>
+<text x="530" y="956" font-size="10" fill="#4b5563">final approval authority</text>
+
+<!-- GitHub (bottom, below 11.0) -->
+<rect x="770" y="910" width="220" height="68" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+<g color="#1f2937"><use href="#i-git" x="782" y="928" width="26" height="26"/></g>
+<text x="820" y="934" font-size="12.5" font-weight="bold" fill="#1f2937">GitHub</text>
+<text x="820" y="950" font-size="10" fill="#4b5563">pull requests, merges,</text>
+<text x="820" y="963" font-size="10" fill="#4b5563">GitOps state repository</text>
+
+<!-- ============ PROCESSES (numbered circles) ============ -->
+<g>
+  <!-- 1.0 Sentinel -->
+  <circle cx="300" cy="240" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="300" y="222" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">1.0</text>
+  <text x="300" y="240" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Sentinel</text>
+  <text x="300" y="257" text-anchor="middle" font-size="10" fill="#4b5563">statistical anomaly</text>
+  <text x="300" y="270" text-anchor="middle" font-size="10" fill="#4b5563">detection</text>
+
+  <!-- 2.0 Pathfinder -->
+  <circle cx="590" cy="240" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="590" y="222" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">2.0</text>
+  <text x="590" y="240" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Pathfinder</text>
+  <text x="590" y="257" text-anchor="middle" font-size="10" fill="#4b5563">graph-evidence</text>
+  <text x="590" y="270" text-anchor="middle" font-size="10" fill="#4b5563">diagnosis</text>
+
+  <!-- 3.0 Synthesiser -->
+  <circle cx="880" cy="240" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="880" y="222" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">3.0</text>
+  <text x="880" y="240" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Synthesiser</text>
+  <text x="880" y="257" text-anchor="middle" font-size="10" fill="#4b5563">classify + route</text>
+  <text x="880" y="270" text-anchor="middle" font-size="10" fill="#4b5563">to specialists</text>
+
+  <!-- 4.0 Architect -->
+  <circle cx="1170" cy="240" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="1170" y="222" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">4.0</text>
+  <text x="1170" y="240" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Architect</text>
+  <text x="1170" y="257" text-anchor="middle" font-size="10" fill="#4b5563">repair plan +</text>
+  <text x="1170" y="270" text-anchor="middle" font-size="10" fill="#4b5563">interface contract</text>
+
+  <!-- 5.0 Backend -->
+  <circle cx="1170" cy="520" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="1170" y="502" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">5.0</text>
+  <text x="1170" y="520" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Backend</text>
+  <text x="1170" y="537" text-anchor="middle" font-size="10" fill="#4b5563">minimal-diff</text>
+  <text x="1170" y="550" text-anchor="middle" font-size="10" fill="#4b5563">code patch</text>
+
+  <!-- 6.0 Quality Assurance -->
+  <circle cx="880" cy="520" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="880" y="496" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">6.0</text>
+  <text x="880" y="514" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Quality</text>
+  <text x="880" y="529" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Assurance</text>
+  <text x="880" y="546" text-anchor="middle" font-size="10" fill="#4b5563">property tests</text>
+
+  <!-- 7.0 DevOps -->
+  <circle cx="590" cy="520" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="590" y="502" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">7.0</text>
+  <text x="590" y="520" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">DevOps</text>
+  <text x="590" y="537" text-anchor="middle" font-size="10" fill="#4b5563">deployment</text>
+  <text x="590" y="550" text-anchor="middle" font-size="10" fill="#4b5563">manifests</text>
+
+  <!-- 8.0 Data Engineer -->
+  <circle cx="300" cy="520" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="300" y="502" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">8.0</text>
+  <text x="300" y="520" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Data Engineer</text>
+  <text x="300" y="537" text-anchor="middle" font-size="10" fill="#4b5563">migrations +</text>
+  <text x="300" y="550" text-anchor="middle" font-size="10" fill="#4b5563">drift checks</text>
+
+  <!-- 9.0 Validator -->
+  <circle cx="300" cy="800" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="300" y="782" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">9.0</text>
+  <text x="300" y="800" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Validator</text>
+  <text x="300" y="817" text-anchor="middle" font-size="10" fill="#4b5563">container shadow</text>
+  <text x="300" y="830" text-anchor="middle" font-size="10" fill="#4b5563">sandbox</text>
+
+  <!-- 10.0 Approval Gate (accent) -->
+  <circle cx="590" cy="800" r="56" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <text x="590" y="782" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">10.0</text>
+  <text x="590" y="800" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Approval Gate</text>
+  <text x="590" y="817" text-anchor="middle" font-size="10" fill="#4b5563">severity-routed</text>
+  <text x="590" y="830" text-anchor="middle" font-size="10" fill="#4b5563">human review</text>
+
+  <!-- 11.0 GitOps Deploy -->
+  <circle cx="880" cy="800" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="880" y="782" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">11.0</text>
+  <text x="880" y="800" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">GitOps Deploy</text>
+  <text x="880" y="817" text-anchor="middle" font-size="10" fill="#4b5563">pull request +</text>
+  <text x="880" y="830" text-anchor="middle" font-size="10" fill="#4b5563">manifest sync</text>
+
+  <!-- 12.0 Rollback Probe -->
+  <circle cx="1170" cy="800" r="56" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="1170" y="782" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">12.0</text>
+  <text x="1170" y="800" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#1f2937">Rollback Probe</text>
+  <text x="1170" y="817" text-anchor="middle" font-size="10" fill="#4b5563">post-deploy</text>
+  <text x="1170" y="830" text-anchor="middle" font-size="10" fill="#4b5563">SLO watch</text>
+</g>
+
+<!-- ============ DATA STORES (open-ended rectangles) ============ -->
+<g stroke="#1f2937" stroke-width="1.4">
+  <!-- D1 incidents_raw -->
+  <path d="M620 350 H380 V414 H620" fill="none"/>
+  <line x1="414" y1="350" x2="414" y2="414"/>
+  <!-- D2 Neo4j -->
+  <path d="M960 350 H700 V414 H960" fill="none"/>
+  <line x1="734" y1="350" x2="734" y2="414"/>
+  <!-- D3 MinIO -->
+  <path d="M700 620 H420 V684 H700" fill="none"/>
+  <line x1="454" y1="620" x2="454" y2="684"/>
+  <!-- D4 approvals + feedback -->
+  <path d="M1060 620 H760 V684 H1060" fill="none"/>
+  <line x1="794" y1="620" x2="794" y2="684"/>
+  <!-- D5 deployments + lineage -->
+  <path d="M1400 620 H1120 V684 H1400" fill="none"/>
+  <line x1="1154" y1="620" x2="1154" y2="684"/>
+</g>
+<g font-size="11" font-weight="bold" fill="#6b7280" text-anchor="middle">
+  <text x="397" y="386">D1</text>
+  <text x="717" y="386">D2</text>
+  <text x="437" y="656">D3</text>
+  <text x="777" y="656">D4</text>
+  <text x="1137" y="656">D5</text>
+</g>
+<g color="#1f2937">
+  <use href="#i-database" x="424" y="370" width="24" height="24"/>
+  <use href="#i-graph" x="744" y="370" width="24" height="24"/>
+  <use href="#i-bucket" x="464" y="640" width="24" height="24"/>
+  <use href="#i-database" x="804" y="640" width="24" height="24"/>
+  <use href="#i-database" x="1164" y="640" width="24" height="24"/>
+</g>
+<text x="458" y="378" font-size="11.5" font-weight="bold" fill="#1f2937">incidents_raw</text>
+<text x="458" y="394" font-size="10" fill="#4b5563">PostgreSQL table</text>
+<text x="778" y="378" font-size="11.5" font-weight="bold" fill="#1f2937">Neo4j (code graph)</text>
+<text x="778" y="394" font-size="10" fill="#4b5563">dependency + blast radius</text>
+<text x="498" y="648" font-size="11.5" font-weight="bold" fill="#1f2937">MinIO (patch store)</text>
+<text x="498" y="664" font-size="10" fill="#4b5563">Amazon S3–compatible objects</text>
+<text x="838" y="642" font-size="11.5" font-weight="bold" fill="#1f2937">approval_decisions and</text>
+<text x="838" y="656" font-size="11.5" font-weight="bold" fill="#1f2937">feedback_examples</text>
+<text x="838" y="671" font-size="10" fill="#4b5563">PostgreSQL tables</text>
+<text x="1198" y="642" font-size="11.5" font-weight="bold" fill="#1f2937">deployments and</text>
+<text x="1198" y="656" font-size="11.5" font-weight="bold" fill="#1f2937">lineage_events</text>
+<text x="1198" y="671" font-size="10" fill="#4b5563">PostgreSQL tables</text>
+
+<!-- ============ MAIN CHAIN FLOWS ============ -->
+<g stroke="#1f2937" stroke-width="1.3" fill="none" marker-end="url(#ah)">
+  <path d="M358 240 H 532"/>
+  <path d="M648 240 H 822"/>
+  <path d="M938 240 H 1112"/>
+  <path d="M1170 298 V 462"/>
+  <path d="M1112 520 H 940"/>
+  <path d="M822 520 H 650"/>
+  <path d="M532 520 H 360"/>
+  <path d="M300 578 V 742"/>
+  <path d="M358 800 H 532"/>
+  <path d="M648 800 H 822"/>
+  <path d="M938 800 H 1112"/>
+</g>
+<g font-size="10" fill="#4b5563" text-anchor="middle">
+  <text x="445" y="228">confirmed anomaly</text>
+  <text x="735" y="228">root-cause hypothesis</text>
+  <text x="1025" y="228">classified fix task</text>
+  <text x="445" y="788">sandbox verdict</text>
+  <text x="735" y="788">approved change</text>
+  <text x="1025" y="788">deployment event</text>
+  <text x="985" y="508">minimal-diff patch</text>
+  <text x="735" y="508">patch + property tests</text>
+  <text x="445" y="508">patch + deploy manifests</text>
+</g>
+<text x="1182" y="376" font-size="10" fill="#4b5563">implementation plan</text>
+<text x="1182" y="390" font-size="10" fill="#4b5563">+ interface contract</text>
+<text x="288" y="655" font-size="10" fill="#4b5563" text-anchor="end">patch + migrations</text>
+
+<!-- ============ EXTERNAL ENTITY FLOWS ============ -->
+<g stroke="#1f2937" stroke-width="1.3" fill="none" marker-end="url(#ah)">
+  <!-- fault source into 1.0 -->
+  <path d="M300 152 V 182"/>
+  <!-- LLM Provider pair with 4.0 -->
+  <path d="M1156 152 V 182"/>
+  <path d="M1184 186 V 156"/>
+  <!-- Owner pair with 10.0 -->
+  <path d="M568 852 V 908"/>
+  <path d="M612 908 V 858"/>
+  <!-- GitHub pair with 11.0 -->
+  <path d="M866 856 V 908"/>
+  <path d="M894 908 V 858"/>
+</g>
+<text x="312" y="172" font-size="10" fill="#4b5563">fault webhooks</text>
+<text x="1196" y="162" font-size="10" fill="#4b5563">prompts / structured JSON completions</text>
+<text x="1196" y="176" font-size="10" fill="#4b5563">(serves reasoning processes 2.0 – 8.0)</text>
+<text x="556" y="886" font-size="10" fill="#4b5563" text-anchor="end">approval request</text>
+<text x="624" y="886" font-size="10" fill="#4b5563">approve / reject / modify</text>
+<text x="906" y="886" font-size="10" fill="#4b5563">pull request / merge status</text>
+
+<!-- ============ STORE READ / WRITE FLOWS ============ -->
+<g stroke="#1f2937" stroke-width="1.3" fill="none" marker-end="url(#ah)">
+  <!-- 1.0 writes incidents_raw -->
+  <path d="M340 280 L 408 348"/>
+  <!-- Neo4j read by 2.0 -->
+  <path d="M720 350 L 634 284"/>
+  <!-- 9.0 writes patch bundle to MinIO -->
+  <path d="M338 758 L 446 687"/>
+  <!-- MinIO read by 10.0 -->
+  <path d="M620 686 L 604 742"/>
+  <!-- 10.0 writes decision to D4 -->
+  <path d="M641 776 L 812 689"/>
+  <!-- D4 feedback examples up to 3.0 (learning loop) -->
+  <path d="M1040 618 V 288 H 914"/>
+  <!-- 11.0 writes deployments + lineage -->
+  <path d="M920 760 L 1118 673"/>
+  <!-- D5 read by 12.0 -->
+  <path d="M1240 686 L 1203 752"/>
+</g>
+<text x="392" y="322" font-size="10" fill="#4b5563">normalised incident</text>
+<text x="700" y="324" font-size="10" fill="#4b5563">code-graph evidence</text>
+<text x="398" y="756" font-size="10" fill="#4b5563">validated patch bundle</text>
+<text x="628" y="722" font-size="10" fill="#4b5563">patch diff for review</text>
+<text x="736" y="758" font-size="10" fill="#4b5563">decision + rationale</text>
+<text x="1050" y="596" font-size="10" fill="#4b5563">curated feedback examples</text>
+<text x="1050" y="610" font-size="10" fill="#4b5563">(learning loop)</text>
+<text x="988" y="750" font-size="10" fill="#4b5563">deployment + lineage record</text>
+<text x="1250" y="732" font-size="10" fill="#4b5563">deployment baseline</text>
+
+<!-- ============ ROLLBACK RETURN (closes the loop) ============ -->
+<path d="M1170 858 V 1010 H 120 V 240 H 240" stroke="#b91c1c" stroke-width="1.6" fill="none" marker-end="url(#ahr)"/>
+<rect x="462" y="988" width="376" height="17" fill="#ffffff"/>
+<text x="650" y="1001" font-size="10.5" fill="#b91c1c" text-anchor="middle">Service Level Objective (SLO) breach re-enters as a fresh incident</text>
+
+<text x="750" y="1062" text-anchor="middle" font-size="11" fill="#6b7280">Data Flow Diagram notation — numbered circles: processes; rectangles: external entities; open-ended rectangles: data stores; red arrow: rollback path closing the self-healing loop.</text>
+</svg>

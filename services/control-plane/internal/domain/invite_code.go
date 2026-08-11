@@ -13,12 +13,12 @@ import "time"
 // revocation sets ExpiresAt = now() rather than deleting the row so the audit
 // trail stays intact.
 type InviteCode struct {
-	Code        string
-	MaxUses     int
-	UsedCount   int
-	ExpiresAt   *time.Time
-	CreatedBy   *string // user_id; nil for system-seeded codes
-	CreatedAt   time.Time
+	Code      string
+	MaxUses   int
+	UsedCount int
+	ExpiresAt *time.Time
+	CreatedBy *string // user_id; nil for system-seeded codes
+	CreatedAt time.Time
 }
 
 // Active reports whether the code can still be redeemed at the given instant.

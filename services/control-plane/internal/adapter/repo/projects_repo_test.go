@@ -281,7 +281,7 @@ func TestProjectsRepo_MatchByFingerprint_NoMatch_ReturnsFalse(t *testing.T) {
 	mustCreateProject(t, ctx, fix, "unrelated-nm", "unrelated")
 
 	id, ok, err := fix.repo.MatchByFingerprint(ctx, fix.orgID, domain.IncidentFingerprint{
-		Source:     "sentry",
+		Source:                 "sentry",
 		SentryOrganizationSlug: "no-such-org",
 		SentryProjectSlug:      "no-such-proj",
 	})

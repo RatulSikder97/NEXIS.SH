@@ -8,9 +8,9 @@ type Chunk struct {
 	OrgID      string
 	RepoSHA    string
 	FilePath   string
-	ChunkStart int     // 1-indexed
-	ChunkEnd   int     // inclusive end line
-	Content    string  // exact slice (whitespace preserved)
+	ChunkStart int    // 1-indexed
+	ChunkEnd   int    // inclusive end line
+	Content    string // exact slice (whitespace preserved)
 	Embedding  []float32
 	Similarity float32 // populated by TopK; 1.0 = perfect match
 }

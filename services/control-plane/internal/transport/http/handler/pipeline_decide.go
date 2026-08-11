@@ -12,10 +12,12 @@ import (
 	appmw "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/middleware"
 )
 
-// pipelineDecideReq is the request body for the approve/reject endpoints.
-// Both endpoints share this shape — only the URL distinguishes them.
+// pipelineDecideReq is the request body for the approve/reject/modify
+// endpoints. All three share this shape — only the URL distinguishes them;
+// modified_diff is read only by the modify endpoint.
 type pipelineDecideReq struct {
-	Notes string `json:"notes,omitempty"`
+	Notes        string `json:"notes,omitempty"`
+	ModifiedDiff string `json:"modified_diff,omitempty"`
 }
 
 // PipelineApprove wires POST /v1/workspaces/{ws_id}/pipelines/{run_id}/approve.
@@ -30,6 +32,17 @@ func PipelineApprove(signaler *approval.SignalerService) http.HandlerFunc {
 // Same shape as PipelineApprove but with rejected decision.
 func PipelineReject(signaler *approval.SignalerService) http.HandlerFunc {
 	return decideHandler(signaler, domain.ApprovalRejected)
+}
+
+// PipelineModify wires POST /v1/workspaces/{ws_id}/pipelines/{run_id}/modify.
+// The RLHF "modify-then-approve" flow: the engineer submits an edited
+// unified diff in `modified_diff`, the workflow deploys THAT diff instead of
+// the agent's original, and the (original, edited) pair lands in
+// feedback_examples as a correction example. Same signaler path + RBAC gate
+// as approve/reject; the 400 on a missing diff comes from the signaler's
+// validation.
+func PipelineModify(signaler *approval.SignalerService) http.HandlerFunc {
+	return decideHandler(signaler, domain.ApprovalModified)
 }
 
 func decideHandler(signaler *approval.SignalerService, decision domain.ApprovalDecisionState) http.HandlerFunc {
@@ -52,12 +65,17 @@ func decideHandler(signaler *approval.SignalerService, decision domain.ApprovalD
 				return
 			}
 		}
+		if decision == domain.ApprovalModified && req.ModifiedDiff == "" {
+			writeError(w, http.StatusBadRequest, "modified_diff required")
+			return
+		}
 		err := signaler.Decide(r.Context(), approval.DecideInput{
 			Principal:     princ,
 			WorkspaceID:   wsID,
 			WorkflowRunID: runID,
 			Decision:      decision,
 			Notes:         req.Notes,
+			ModifiedDiff:  req.ModifiedDiff,
 		})
 		if err != nil {
 			switch {

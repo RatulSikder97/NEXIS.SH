@@ -5,10 +5,17 @@
 // Renders a "View patch" disclosure that lazily fetches the unified-diff
 // text from the control-plane's patch-store proxy
 // (`/v1/workspaces/{ws}/pipelines/{run}/patches/{patch_key}`) when the
-// user expands the <details> element. The brief explicitly defers
-// syntax highlighting — we render the raw diff inside a monospace <pre>
-// with `whitespace-pre-wrap` so long lines wrap rather than overflowing
-// horizontally.
+// user expands the <details> element. The loaded diff renders in Monaco's
+// DiffEditor: we reconstruct approximate original/modified texts from the
+// unified diff (see lib/unified-diff.ts) so Monaco can paint a real
+// two-pane view with per-language highlighting for single-file patches
+// (multi-file patches fall back to one combined plaintext pane pair).
+//
+// Monaco brings ~2MB of editor + worker chunks, so — same as the eval
+// detail page — we lazy-load via next/dynamic with { ssr: false }. The
+// editor only ever mounts once state.kind === "loaded"; every other state
+// (idle/loading/missing/error) renders the same lightweight markup as
+// before.
 //
 // Lifecycle:
 //   • collapsed       → no network traffic
@@ -19,10 +26,18 @@
 //                       outer page already owns user-facing toasts)
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { ChevronDown, ChevronRight, FileDiff, Loader2 } from "lucide-react";
+import { useTheme } from "next-themes";
 
 import { pipelines } from "@/lib/pipelines";
+import { inferLanguage, parseUnifiedDiff } from "@/lib/unified-diff";
 import { cn } from "@/lib/utils";
+
+const DiffEditor = dynamic(
+  () => import("@monaco-editor/react").then((m) => m.DiffEditor),
+  { ssr: false },
+);
 
 type FetchState =
   | { kind: "idle" }
@@ -80,8 +95,7 @@ export function PatchDiffViewer({
         if (cancelled) return;
         setState({
           kind: "error",
-          message:
-            err instanceof Error ? err.message : "Failed to load patch.",
+          message: err instanceof Error ? err.message : "Failed to load patch.",
         });
       }
     })();
@@ -147,13 +161,48 @@ export function PatchDiffViewer({
             {state.message}
           </p>
         )}
-        {state.kind === "loaded" && (
-          <pre className="max-h-[60vh] overflow-auto rounded-md bg-[var(--color-muted)]/40 p-2 font-mono text-xs leading-snug whitespace-pre-wrap text-[var(--color-foreground)]">
-            {state.diff}
-          </pre>
-        )}
+        {state.kind === "loaded" && <PatchDiffEditor diff={state.diff} />}
       </div>
     </details>
+  );
+}
+
+// PatchDiffEditor renders the fetched unified diff through Monaco's
+// DiffEditor, mirroring the eval detail page's PatchDiffBlock integration
+// (next/dynamic + ssr:false, readOnly, side-by-side, fixed 400px height so
+// the editor can't steal the page's scroll). Unlike that block we feed
+// Monaco reconstructed original/modified texts instead of the raw diff
+// string, and we follow next-themes' resolved theme instead of hardcoding
+// light — the component is client-only and mounts well after hydration
+// (post fetch), so resolvedTheme is already settled by first paint.
+function PatchDiffEditor({ diff }: { diff: string }) {
+  const { resolvedTheme } = useTheme();
+  const { original, modified, files } = React.useMemo(
+    () => parseUnifiedDiff(diff),
+    [diff],
+  );
+  const language = React.useMemo(() => inferLanguage(files), [files]);
+  return (
+    <div
+      data-testid="patch-diff"
+      className="overflow-hidden rounded-md border border-[var(--color-border)]"
+    >
+      <DiffEditor
+        height="400px"
+        language={language}
+        theme={resolvedTheme === "dark" ? "vs-dark" : "light"}
+        original={original}
+        modified={modified}
+        options={{
+          readOnly: true,
+          renderSideBySide: true,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          fontSize: 12,
+          wordWrap: "on",
+        }}
+      />
+    </div>
   );
 }
 

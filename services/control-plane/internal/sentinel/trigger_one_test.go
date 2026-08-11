@@ -44,11 +44,11 @@ func (r *recordingAudit) Write(_ context.Context, p domain.Principal, action, su
 }
 
 // TestDetector_TriggerOne_HappyPath fires a synthetic trigger and confirms:
-//   1. Workflow.Start is called once with WorkflowType + a WorkspaceID
-//      resolved from the workspaces port.
-//   2. The principal is the system principal with the right OrgID.
-//   3. The input JSON carries the manual-trigger marker.
-//   4. The audit writer receives one row with action="incident.sentinel_admin_triggered".
+//  1. Workflow.Start is called once with WorkflowType + a WorkspaceID
+//     resolved from the workspaces port.
+//  2. The principal is the system principal with the right OrgID.
+//  3. The input JSON carries the manual-trigger marker.
+//  4. The audit writer receives one row with action="incident.sentinel_admin_triggered".
 func TestDetector_TriggerOne_HappyPath(t *testing.T) {
 	const orgID = "org-T"
 	const wsID = "ws-T"

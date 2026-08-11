@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1100" viewBox="0 0 1500 1100" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#333"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1500" height="1100" fill="#ffffff"/>
+  <text x="750" y="36" text-anchor="middle" font-size="22" font-weight="bold" fill="#111">NEXIS System Architecture</text>
+
+  <!-- Client layer -->
+  <rect x="40" y="70" width="1420" height="70" rx="6" fill="#eef4ff" stroke="#2c5aa0" stroke-width="1.2"/>
+  <text x="60" y="95" font-size="13" font-weight="bold" fill="#2c5aa0">CLIENTS</text>
+  <rect x="60" y="102" width="220" height="30" rx="4" fill="#ffffff" stroke="#2c5aa0"/>
+  <text x="170" y="122" text-anchor="middle" font-size="12">Browser (apps/web, Next.js 16)</text>
+  <rect x="310" y="102" width="220" height="30" rx="4" fill="#ffffff" stroke="#2c5aa0"/>
+  <text x="420" y="122" text-anchor="middle" font-size="12">GitHub Webhooks</text>
+  <rect x="560" y="102" width="260" height="30" rx="4" fill="#ffffff" stroke="#2c5aa0"/>
+  <text x="690" y="122" text-anchor="middle" font-size="12">Sentry / Datadog / PagerDuty webhooks</text>
+  <rect x="850" y="102" width="220" height="30" rx="4" fill="#ffffff" stroke="#2c5aa0"/>
+  <text x="960" y="122" text-anchor="middle" font-size="12">Slack (interactivity)</text>
+  <rect x="1100" y="102" width="330" height="30" rx="4" fill="#ffffff" stroke="#2c5aa0"/>
+  <text x="1265" y="122" text-anchor="middle" font-size="12">CLI / curl (deploy-engine, API)</text>
+
+  <!-- Control plane -->
+  <rect x="40" y="180" width="900" height="260" rx="6" fill="#fff7e6" stroke="#b8860b" stroke-width="1.2"/>
+  <text x="60" y="204" font-size="13" font-weight="bold" fill="#8a6100">CONTROL-PLANE (Go, Temporal-orchestrated, :8080)</text>
+
+  <rect x="60" y="216" width="220" height="46" rx="4" fill="#ffffff" stroke="#8a6100"/>
+  <text x="170" y="235" text-anchor="middle" font-size="11.5" font-weight="bold">HTTP API (chi router)</text>
+  <text x="170" y="250" text-anchor="middle" font-size="10">auth · RBAC · RLS · rate-limit</text>
+
+  <rect x="300" y="216" width="220" height="46" rx="4" fill="#ffffff" stroke="#8a6100"/>
+  <text x="410" y="235" text-anchor="middle" font-size="11.5" font-weight="bold">Sentinel Detector</text>
+  <text x="410" y="250" text-anchor="middle" font-size="10">EWMA + 3σ spike detection</text>
+
+  <rect x="540" y="216" width="220" height="46" rx="4" fill="#ffffff" stroke="#8a6100"/>
+  <text x="650" y="235" text-anchor="middle" font-size="11.5" font-weight="bold">Cron scheduler</text>
+  <text x="650" y="250" text-anchor="middle" font-size="10">digest · QA-loop · billing · drift</text>
+
+  <rect x="60" y="278" width="860" height="150" rx="4" fill="#fffdf5" stroke="#b8860b"/>
+  <text x="490" y="298" text-anchor="middle" font-size="12" font-weight="bold">Temporal RecoveryPipeline workflow — 9-agent self-healing loop</text>
+  <!-- agent chips -->
+  <g font-size="10.5">
+    <rect x="75" y="312" width="92" height="34" rx="14" fill="#e8f0ff" stroke="#2c5aa0"/><text x="121" y="333" text-anchor="middle">Sentinel</text>
+    <rect x="177" y="312" width="98" height="34" rx="14" fill="#e8f0ff" stroke="#2c5aa0"/><text x="226" y="333" text-anchor="middle">Pathfinder</text>
+    <rect x="285" y="312" width="102" height="34" rx="14" fill="#e8f0ff" stroke="#2c5aa0"/><text x="336" y="333" text-anchor="middle">Synthesiser</text>
+    <rect x="397" y="312" width="94" height="34" rx="14" fill="#e9f9ec" stroke="#2f8f4e"/><text x="444" y="333" text-anchor="middle">Architect</text>
+    <rect x="501" y="312" width="90" height="34" rx="14" fill="#e9f9ec" stroke="#2f8f4e"/><text x="546" y="333" text-anchor="middle">Backend</text>
+    <rect x="601" y="312" width="66" height="34" rx="14" fill="#e9f9ec" stroke="#2f8f4e"/><text x="634" y="333" text-anchor="middle">QA</text>
+    <rect x="677" y="312" width="90" height="34" rx="14" fill="#e9f9ec" stroke="#2f8f4e"/><text x="722" y="333" text-anchor="middle">DevOps</text>
+    <rect x="777" y="312" width="128" height="34" rx="14" fill="#e9f9ec" stroke="#2f8f4e"/><text x="841" y="333" text-anchor="middle">Data Engineer</text>
+
+    <rect x="75" y="356" width="130" height="34" rx="14" fill="#fdeee0" stroke="#c15b0f"/><text x="140" y="377" text-anchor="middle">Validator (sandbox)</text>
+    <rect x="215" y="356" width="150" height="34" rx="14" fill="#fdeee0" stroke="#c15b0f"/><text x="290" y="377" text-anchor="middle">Approval Gate (HITL)</text>
+    <rect x="375" y="356" width="120" height="34" rx="14" fill="#fdeee0" stroke="#c15b0f"/><text x="435" y="377" text-anchor="middle">GitOps Deploy</text>
+    <rect x="505" y="356" width="150" height="34" rx="14" fill="#fdeee0" stroke="#c15b0f"/><text x="580" y="377" text-anchor="middle">Deploy-Engine Redeploy</text>
+    <rect x="665" y="356" width="150" height="34" rx="14" fill="#fdeee0" stroke="#c15b0f"/><text x="740" y="377" text-anchor="middle">ArgoCD Rollback</text>
+  </g>
+  <text x="490" y="410" text-anchor="middle" font-size="10" fill="#555">detect → diagnose → plan → design → code → test → package/migrate ‖ → approve (severity-routed) → deploy → verify → rollback-if-needed</text>
+
+  <!-- Agent services (LLM) -->
+  <rect x="960" y="180" width="500" height="260" rx="6" fill="#f3ecff" stroke="#6a3fb0" stroke-width="1.2"/>
+  <text x="980" y="204" font-size="13" font-weight="bold" fill="#5a2f9c">LLM SPINE</text>
+  <rect x="980" y="216" width="220" height="50" rx="4" fill="#ffffff" stroke="#6a3fb0"/>
+  <text x="1090" y="236" text-anchor="middle" font-size="11.5" font-weight="bold">OpenAI (gpt-4o family)</text>
+  <text x="1090" y="252" text-anchor="middle" font-size="10">prod default</text>
+  <rect x="1220" y="216" width="220" height="50" rx="4" fill="#ffffff" stroke="#6a3fb0"/>
+  <text x="1330" y="236" text-anchor="middle" font-size="11.5" font-weight="bold">Ollama (local)</text>
+  <text x="1330" y="252" text-anchor="middle" font-size="10">gpt-oss:20b · qwen2.5-coder:14b</text>
+  <rect x="980" y="286" width="460" height="60" rx="4" fill="#ffffff" stroke="#6a3fb0"/>
+  <text x="1210" y="308" text-anchor="middle" font-size="11.5" font-weight="bold">pgvector retrieval (code_embeddings)</text>
+  <text x="1210" y="324" text-anchor="middle" font-size="10">RAG context for Architect / Backend / QA</text>
+  <rect x="980" y="360" width="460" height="60" rx="4" fill="#ffffff" stroke="#6a3fb0"/>
+  <text x="1210" y="382" text-anchor="middle" font-size="11.5" font-weight="bold">Structured-output schema validation</text>
+  <text x="1210" y="398" text-anchor="middle" font-size="10">per-agent JSON Schema + retry-on-mismatch</text>
+
+  <!-- Sidecar services row -->
+  <rect x="40" y="460" width="1420" height="150" rx="6" fill="#eafaf1" stroke="#1f8a5a" stroke-width="1.2"/>
+  <text x="60" y="484" font-size="13" font-weight="bold" fill="#146641">SIDECAR SERVICES (independent Go/Python modules)</text>
+
+  <rect x="60" y="498" width="270" height="96" rx="4" fill="#ffffff" stroke="#1f8a5a"/>
+  <text x="195" y="518" text-anchor="middle" font-size="12" font-weight="bold">validator :8081</text>
+  <text x="195" y="536" text-anchor="middle" font-size="10">Docker-sandboxed test runner</text>
+  <text x="195" y="550" text-anchor="middle" font-size="10">--network=none · cap-drop=ALL</text>
+  <text x="195" y="564" text-anchor="middle" font-size="10">Hypothesis property tests</text>
+  <text x="195" y="580" text-anchor="middle" font-size="10">shadow-validates every patch</text>
+
+  <rect x="350" y="498" width="270" height="96" rx="4" fill="#ffffff" stroke="#1f8a5a"/>
+  <text x="485" y="518" text-anchor="middle" font-size="12" font-weight="bold">gitops :8082</text>
+  <text x="485" y="536" text-anchor="middle" font-size="10">GitHub App PR automation</text>
+  <text x="485" y="550" text-anchor="middle" font-size="10">blob → tree → commit → ref → PR</text>
+  <text x="485" y="564" text-anchor="middle" font-size="10">bearer-authed from control-plane</text>
+
+  <rect x="640" y="498" width="270" height="96" rx="4" fill="#ffffff" stroke="#1f8a5a"/>
+  <text x="775" y="518" text-anchor="middle" font-size="12" font-weight="bold">causal-inference :8090</text>
+  <text x="775" y="536" text-anchor="middle" font-size="10">FastAPI graph-evidence ranker</text>
+  <text x="775" y="550" text-anchor="middle" font-size="10">Pathfinder root-cause scoring</text>
+  <text x="775" y="564" text-anchor="middle" font-size="10">proximity + evidence + text overlap</text>
+
+  <rect x="930" y="498" width="270" height="96" rx="4" fill="#ffffff" stroke="#1f8a5a"/>
+  <text x="1065" y="518" text-anchor="middle" font-size="12" font-weight="bold">deploy-engine :8091</text>
+  <text x="1065" y="536" text-anchor="middle" font-size="10">clone → detect stack → build</text>
+  <text x="1065" y="550" text-anchor="middle" font-size="10">run + health-check container</text>
+  <text x="1065" y="564" text-anchor="middle" font-size="10">preview URL · Docker/Podman</text>
+
+  <rect x="1220" y="498" width="210" height="96" rx="4" fill="#ffffff" stroke="#1f8a5a"/>
+  <text x="1325" y="518" text-anchor="middle" font-size="12" font-weight="bold">argocd client</text>
+  <text x="1325" y="536" text-anchor="middle" font-size="10">Sync + Rollback</text>
+  <text x="1325" y="550" text-anchor="middle" font-size="10">post-deploy SLO probe</text>
+
+  <!-- Data layer -->
+  <rect x="40" y="630" width="1420" height="150" rx="6" fill="#fdeef0" stroke="#a52a4a" stroke-width="1.2"/>
+  <text x="60" y="654" font-size="13" font-weight="bold" fill="#7d1f39">DATA + STATE LAYER</text>
+
+  <path d="M75 668 h190 v72 a95 10 0 0 1 -190 0 z" fill="#ffffff" stroke="#a52a4a"/>
+  <ellipse cx="170" cy="668" rx="95" ry="10" fill="#ffffff" stroke="#a52a4a"/>
+  <text x="170" y="704" text-anchor="middle" font-size="12" font-weight="bold">PostgreSQL 17</text>
+  <text x="170" y="720" text-anchor="middle" font-size="10">+ pgvector · RLS multi-tenant</text>
+  <text x="170" y="734" text-anchor="middle" font-size="10">33 migrations</text>
+
+  <path d="M295 668 h150 v72 a75 10 0 0 1 -150 0 z" fill="#ffffff" stroke="#a52a4a"/>
+  <ellipse cx="370" cy="668" rx="75" ry="10" fill="#ffffff" stroke="#a52a4a"/>
+  <text x="370" y="704" text-anchor="middle" font-size="12" font-weight="bold">Neo4j</text>
+  <text x="370" y="720" text-anchor="middle" font-size="10">code dependency graph</text>
+
+  <path d="M475 668 h150 v72 a75 10 0 0 1 -150 0 z" fill="#ffffff" stroke="#a52a4a"/>
+  <ellipse cx="550" cy="668" rx="75" ry="10" fill="#ffffff" stroke="#a52a4a"/>
+  <text x="550" y="704" text-anchor="middle" font-size="12" font-weight="bold">Temporal</text>
+  <text x="550" y="720" text-anchor="middle" font-size="10">workflow durability</text>
+
+  <path d="M655 668 h150 v72 a75 10 0 0 1 -150 0 z" fill="#ffffff" stroke="#a52a4a"/>
+  <ellipse cx="730" cy="668" rx="75" ry="10" fill="#ffffff" stroke="#a52a4a"/>
+  <text x="730" y="704" text-anchor="middle" font-size="12" font-weight="bold">Redis</text>
+  <text x="730" y="720" text-anchor="middle" font-size="10">rate-limit · cache</text>
+
+  <path d="M835 668 h170 v72 a85 10 0 0 1 -170 0 z" fill="#ffffff" stroke="#a52a4a"/>
+  <ellipse cx="920" cy="668" rx="85" ry="10" fill="#ffffff" stroke="#a52a4a"/>
+  <text x="920" y="704" text-anchor="middle" font-size="12" font-weight="bold">MinIO / S3</text>
+  <text x="920" y="720" text-anchor="middle" font-size="10">encrypted patch store</text>
+
+  <rect x="1035" y="668" width="380" height="80" rx="4" fill="#ffffff" stroke="#a52a4a"/>
+  <text x="1225" y="690" text-anchor="middle" font-size="12" font-weight="bold">Key tenant-scoped tables</text>
+  <text x="1225" y="708" text-anchor="middle" font-size="10">users · org_members · projects · incidents_raw · workflow_runs</text>
+  <text x="1225" y="723" text-anchor="middle" font-size="10">approval_decisions · deployments · lineage_events · audit_log</text>
+  <text x="1225" y="738" text-anchor="middle" font-size="10">feedback_examples · role_recommendations · digest_reports</text>
+
+  <!-- External integrations -->
+  <rect x="40" y="810" width="1420" height="110" rx="6" fill="#eef2f7" stroke="#555" stroke-width="1.2"/>
+  <text x="60" y="834" font-size="13" font-weight="bold" fill="#333">EXTERNAL INTEGRATIONS</text>
+  <g font-size="11">
+    <rect x="60" y="846" width="150" height="46" rx="4" fill="#ffffff" stroke="#555"/><text x="135" y="874" text-anchor="middle">GitHub App</text>
+    <rect x="225" y="846" width="150" height="46" rx="4" fill="#ffffff" stroke="#555"/><text x="300" y="874" text-anchor="middle">Sentry</text>
+    <rect x="390" y="846" width="150" height="46" rx="4" fill="#ffffff" stroke="#555"/><text x="465" y="874" text-anchor="middle">Datadog</text>
+    <rect x="555" y="846" width="150" height="46" rx="4" fill="#ffffff" stroke="#555"/><text x="630" y="874" text-anchor="middle">PagerDuty</text>
+    <rect x="720" y="846" width="150" height="46" rx="4" fill="#ffffff" stroke="#555"/><text x="795" y="874" text-anchor="middle">Slack</text>
+    <rect x="885" y="846" width="150" height="46" rx="4" fill="#ffffff" stroke="#555"/><text x="960" y="874" text-anchor="middle">ArgoCD</text>
+    <rect x="1050" y="846" width="150" height="46" rx="4" fill="#ffffff" stroke="#555"/><text x="1125" y="874" text-anchor="middle">Stripe (billing)</text>
+    <rect x="1215" y="846" width="185" height="46" rx="4" fill="#ffffff" stroke="#555"/><text x="1307" y="874" text-anchor="middle">SES / SMTP (mail)</text>
+  </g>
+
+  <!-- deployment env -->
+  <text x="750" y="950" text-anchor="middle" font-size="12" fill="#444">Deployment target: nexis.sh (domain registered, not yet live) · docker-compose profiles: default / agents / observability</text>
+  <text x="750" y="970" text-anchor="middle" font-size="12" fill="#444">Observability: OpenTelemetry → Prometheus + Loki + Tempo → Grafana · Infra-as-code: Terraform (AWS ECS + ALB)</text>
+
+  <!-- connecting arrows (indicative) -->
+  <path d="M170 140 L170 178" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)" fill="none"/>
+  <path d="M490 440 L490 458" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)" fill="none"/>
+  <path d="M760 320 L960 300" stroke="#333" stroke-width="1.2" marker-end="url(#arrow)" fill="none" stroke-dasharray="4 3"/>
+  <path d="M490 610 L490 628" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)" fill="none"/>
+  <path d="M490 780 L490 808" stroke="#333" stroke-width="1.4" marker-end="url(#arrow)" fill="none"/>
+</svg>

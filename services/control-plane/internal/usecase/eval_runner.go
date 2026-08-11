@@ -33,14 +33,27 @@ import (
 )
 
 // scenarioFixtureFiles maps a CLI/HTTP scenario label to the JSON fixture
-// under services/validator/fixtures/incidents/. Keep in sync with
-// transport/http/handler/pipelines.go:scenarioToFixture.
+// under services/control-plane/fixtures/scenarios/ (legacy validator
+// fixtures/incidents/ are still searched as a fallback). Keep in sync with
+// transport/http/handler/pipelines.go:scenarioToFixture. Labels not in the
+// map fall back to "<label>.json" so fixtures dropped into the scenarios
+// directory are runnable without touching this table.
 var scenarioFixtureFiles = map[string]string{
-	"schema-drift":       "schema-drift.json",
-	"null-deref":         "demo-null-pointer.json",
-	"oom":                "demo-null-pointer.json",
-	"synthetic":          "demo-null-pointer.json",
-	"demo-null-pointer":  "demo-null-pointer.json",
+	"schema-drift":      "demo-schema-drift.json",
+	"null-deref":        "demo-null-pointer.json",
+	"oom":               "demo-oom.json",
+	"synthetic":         "demo-null-pointer.json",
+	"demo-null-pointer": "demo-null-pointer.json",
+	// Fault-injection classes for the evaluation benchmark (fault classes
+	// beyond the three demo scenarios; see docs/PROJECT_PLAN.md §7).
+	"zero-div":               "demo-zero-div.json",
+	"api-contract-violation": "demo-api-contract-violation.json",
+	"dependency-breakage":    "demo-dependency-breakage.json",
+	"conn-pool-exhaustion":   "demo-conn-pool-exhaustion.json",
+	"deadlock":               "demo-deadlock.json",
+	"memory-leak":            "demo-memory-leak.json",
+	"rate-limit-cascade":     "demo-rate-limit-cascade.json",
+	"disk-exhaustion":        "demo-disk-exhaustion.json",
 }
 
 // EvalRunner is the per-process harness. Wired in cmd/server/main.go for
@@ -349,10 +362,19 @@ func copyMap(in map[string]any) map[string]any {
 func loadFixtureIncidentForRunner(scenario string) *domain.IncidentPayload {
 	file, ok := scenarioFixtureFiles[scenario]
 	if !ok {
-		return nil
+		// Labels follow the "<basename>.json" convention — try that before
+		// giving up so new fixtures don't require a map edit.
+		file = scenario + ".json"
 	}
 	bases := []string{
 		os.Getenv("FIXTURE_INCIDENTS_DIR"),
+		// Control-plane-owned fault-injection fixtures (preferred).
+		"services/control-plane/fixtures/scenarios",
+		"fixtures/scenarios",
+		"/app/fixtures/scenarios",
+		"../../services/control-plane/fixtures/scenarios",
+		"../../../services/control-plane/fixtures/scenarios",
+		// Legacy validator fixtures.
 		"services/validator/fixtures/incidents",
 		"/app/fixtures/incidents",
 		"../../services/validator/fixtures/incidents",
@@ -400,4 +422,3 @@ func rawToIncident(raw map[string]any, label string) *domain.IncidentPayload {
 		Logs:        get("logs", "log"),
 	}
 }
-

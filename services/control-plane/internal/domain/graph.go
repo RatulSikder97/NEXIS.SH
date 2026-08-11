@@ -38,10 +38,17 @@ type GraphNode struct {
 
 // GraphEdge is the directed (From → To) relationship used by both the
 // neighbours traversal and the seeder upsert path.
+//
+// Hops is populated only by the Neighbours traversal: the path length (in
+// edges) from the queried symbol to To. The seeder leaves it zero — a
+// direct upsert edge has no traversal context. Pathfinder folds Hops into
+// the distance_from_symptom metadata it forwards to the causal sidecar's
+// candidate ranking.
 type GraphEdge struct {
 	From GraphNode
 	To   GraphNode
 	Kind GraphEdgeKind
+	Hops int
 }
 
 // Graph is the port the Pathfinder agent depends on. Implementations live in

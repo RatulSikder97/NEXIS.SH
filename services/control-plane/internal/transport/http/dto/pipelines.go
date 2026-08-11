@@ -60,7 +60,7 @@ type CreatePipelineReq struct {
 // "oom", and "synthetic" are accepted. Empty defaults to "synthetic" so the
 // dashboard's plain "trigger demo" button still works without payload.
 type PipelineDemoReq struct {
-	Scenario  string `json:"scenario,omitempty"`
+	Scenario string `json:"scenario,omitempty"`
 	// ProjectID is optional. When set, the recovery pipeline loads the
 	// project at workflow start and reads its selectors + recovery policy
 	// (per-project github_repo, slack_channel_id, auto-merge thresholds,

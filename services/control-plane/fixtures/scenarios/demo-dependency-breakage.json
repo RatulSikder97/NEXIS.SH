@@ -1,0 +1,18 @@
+{
+  "label": "demo-dependency-breakage",
+  "title": "checkout-api cannot decode inventory-svc /v2/reserve response after breaking upstream release",
+  "service": "checkout-api",
+  "environment": "production",
+  "stacktrace": "json: cannot unmarshal string into Go struct field ReserveResponse.reservation_id of type int64\n\tgithub.com/nexis-demo/checkout-api/internal/client/inventory.(*Client).Reserve\n\t\tinventory_client.go:57\n\tgithub.com/nexis-demo/checkout-api/internal/checkout.(*Service).PlaceOrder\n\t\tplace_order.go:112\n\tgithub.com/nexis-demo/checkout-api/internal/httpapi.(*OrdersHandler).Create\n\t\torders_handler.go:69",
+  "logs": "ts=2026-08-10T11:31:07Z level=info service=inventory-svc msg=deploy_complete version=2.0.0 note=\"reservation_id (int64) renamed to reservation_ref (string uuid)\"\nts=2026-08-10T11:31:52Z level=error service=checkout-api msg=decode_reserve_response_failed upstream=inventory-svc endpoint=\"POST /v2/reserve\" err=\"json: cannot unmarshal string into Go struct field ReserveResponse.reservation_id of type int64\"\nts=2026-08-10T11:33:20Z level=warn service=checkout-api msg=circuit_breaker_open upstream=inventory-svc failures=50 window=90s\nts=2026-08-10T11:33:21Z level=error service=checkout-api msg=place_order_failed status=502 orders_affected=317",
+  "metadata": {
+    "service_name": "checkout-api",
+    "upstream_service": "inventory-svc",
+    "upstream_version": "2.0.0",
+    "breaking_change": "ReserveResponse.reservation_id int64 -> reservation_ref string",
+    "circuit_breaker": "open",
+    "orders_affected": 317,
+    "incident_kind": "dependency-breakage",
+    "expected_scenario": "unknown"
+  }
+}

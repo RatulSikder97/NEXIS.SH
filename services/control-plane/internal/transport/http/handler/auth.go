@@ -203,9 +203,11 @@ func Signup(
 			return
 		}
 		res, err := p.Signup(r.Context(), domain.SignupInput{
-			Email:    req.Email,
-			Password: req.Password,
-			OrgName:  req.OrgName,
+			Email:     req.Email,
+			Password:  req.Password,
+			OrgName:   req.OrgName,
+			UserAgent: r.UserAgent(),
+			IP:        clientIPFromRequest(r),
 		})
 		if err != nil {
 			mapAuthErrorSafe(w, err, "signup", cfg)
@@ -246,9 +248,11 @@ func Login(p domain.AuthProvider, aud domain.AuditWriter, cfg config.Config, ws 
 			return
 		}
 		tok, err := p.Login(r.Context(), domain.LoginInput{
-			Email:    req.Email,
-			Password: req.Password,
-			MFACode:  req.MFACode,
+			Email:     req.Email,
+			Password:  req.Password,
+			MFACode:   req.MFACode,
+			UserAgent: r.UserAgent(),
+			IP:        clientIPFromRequest(r),
 		})
 		if err != nil {
 			mapAuthErrorSafe(w, err, "login", cfg)

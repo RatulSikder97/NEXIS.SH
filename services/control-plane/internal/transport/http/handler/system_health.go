@@ -70,11 +70,15 @@ func runHealthProbe(ctx context.Context, deps SystemHealthDeps) dto.SystemHealth
 		*out = probe(cctx)
 	}
 	wg.Add(5)
-	go timed(func(ctx context.Context) integration.ProbeResult { return integration.ProbePostgres(ctx, deps.AdminPool) }, &pgRes)
+	go timed(func(ctx context.Context) integration.ProbeResult {
+		return integration.ProbePostgres(ctx, deps.AdminPool)
+	}, &pgRes)
 	go timed(func(ctx context.Context) integration.ProbeResult { return integration.ProbeRedis(ctx, deps.RedisAddr) }, &rdRes)
 	go timed(func(ctx context.Context) integration.ProbeResult { return integration.ProbeNeo4j(ctx, deps.Neo4j) }, &neoRes)
 	go timed(func(ctx context.Context) integration.ProbeResult { return integration.ProbeMinIO(ctx, deps.MinIO) }, &minRes)
-	go timed(func(ctx context.Context) integration.ProbeResult { return integration.ProbeTemporal(ctx, deps.Temporal) }, &tempRes)
+	go timed(func(ctx context.Context) integration.ProbeResult {
+		return integration.ProbeTemporal(ctx, deps.Temporal)
+	}, &tempRes)
 	wg.Wait()
 
 	resp.Postgres = toCheck(pgRes, now)

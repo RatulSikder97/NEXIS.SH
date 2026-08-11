@@ -3,11 +3,16 @@
 // Phase 6 Stage 9 — DecisionDialog.
 //
 // Small Radix Dialog wrapping a single optional `notes` textarea + confirm /
-// cancel buttons. The caller decides whether the dialog is an approve or a
-// reject by passing `kind`; the button colour + label flip to match.
+// cancel buttons. The caller decides whether the dialog is an approve, a
+// reject, or a modify by passing `kind`; the button colour + label flip to
+// match. The RLHF `modify` kind adds a required unified-diff textarea
+// (prefilled from `initialDiff` when the parent could resolve the pending
+// patch) — the submitted diff replaces the agent's patch in the deploy and
+// the (original, edited) pair is recorded as a training example.
 //
-// The form submits to the parent via `onConfirm(notes)`. The parent is
-// responsible for calling approvals.approve / approvals.reject and removing
+// The form submits to the parent via `onConfirm(notes, modifiedDiff)` —
+// `modifiedDiff` is only non-empty for kind="modify". The parent is
+// responsible for calling approvals.approve / reject / modify and removing
 // the row from the table on success. We expose a `pending` flag so the parent
 // can disable the confirm button while the POST is in flight.
 
@@ -18,7 +23,7 @@ import { Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
-export type DecisionKind = "approve" | "reject";
+export type DecisionKind = "approve" | "reject" | "modify";
 
 export function DecisionDialog({
   open,
@@ -29,6 +34,7 @@ export function DecisionDialog({
   pending,
   error,
   onConfirm,
+  initialDiff,
 }: {
   open: boolean;
   onOpenChange: (next: boolean) => void;
@@ -37,9 +43,12 @@ export function DecisionDialog({
   scenario: string | null;
   pending: boolean;
   error: string | null;
-  onConfirm: (notes: string) => void | Promise<void>;
+  onConfirm: (notes: string, modifiedDiff?: string) => void | Promise<void>;
+  /** kind="modify" only: the agent's original diff to prefill the editor. */
+  initialDiff?: string | null;
 }) {
   const [notes, setNotes] = React.useState("");
+  const [diff, setDiff] = React.useState("");
 
   // Initial focus target — the notes textarea. Without this Radix would
   // land focus on the Close button (the first tabbable child in source
@@ -56,18 +65,33 @@ export function DecisionDialog({
   const [prevOpen, setPrevOpen] = React.useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (open) setNotes("");
+    if (open) {
+      setNotes("");
+      setDiff(initialDiff ?? "");
+    }
   }
+
+  const isModify = kind === "modify";
+  const diffMissing = isModify && diff.trim().length === 0;
 
   const title =
     kind === "approve"
       ? `Approve run ${runIdShort}`
-      : `Reject run ${runIdShort}`;
+      : kind === "modify"
+        ? `Modify & approve run ${runIdShort}`
+        : `Reject run ${runIdShort}`;
   const description =
     kind === "approve"
       ? "Signal the workflow to proceed to GitOps. The patch will be opened as a PR."
-      : "Signal the workflow to abort. The pipeline will exit with status=failed and no PR will be opened.";
-  const confirmLabel = kind === "approve" ? "Approve" : "Reject";
+      : kind === "modify"
+        ? "Edit the proposed patch below, then approve. The PR ships YOUR version of the diff, and the edit is recorded as agent feedback."
+        : "Signal the workflow to abort. The pipeline will exit with status=failed and no PR will be opened.";
+  const confirmLabel =
+    kind === "approve"
+      ? "Approve"
+      : kind === "modify"
+        ? "Modify & approve"
+        : "Reject";
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -116,10 +140,28 @@ export function DecisionDialog({
             className="mt-4 space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              if (pending) return;
-              void onConfirm(notes.trim());
+              if (pending || diffMissing) return;
+              void onConfirm(notes.trim(), isModify ? diff : undefined);
             }}
           >
+            {isModify && (
+              <label className="block text-xs font-medium text-[var(--color-muted-foreground)]">
+                Patch (unified diff){" "}
+                <span className="font-normal">(required)</span>
+                <textarea
+                  value={diff}
+                  onChange={(e) => setDiff(e.target.value)}
+                  rows={10}
+                  spellCheck={false}
+                  placeholder={
+                    "diff --git a/src/service.py b/src/service.py\n--- a/src/service.py\n+++ b/src/service.py\n@@ ..."
+                  }
+                  className="mt-1 block w-full resize-y rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 font-mono text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                  disabled={pending}
+                  aria-invalid={diffMissing}
+                />
+              </label>
+            )}
             <label className="block text-xs font-medium text-[var(--color-muted-foreground)]">
               Notes <span className="font-normal">(optional)</span>
               <textarea
@@ -130,7 +172,9 @@ export function DecisionDialog({
                 placeholder={
                   kind === "approve"
                     ? "e.g. patch reviewed, tests green"
-                    : "e.g. rolling back, plan rerun"
+                    : kind === "modify"
+                      ? "e.g. narrowed the retry scope before merging"
+                      : "e.g. rolling back, plan rerun"
                 }
                 className="mt-1 block w-full resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
                 disabled={pending}
@@ -146,14 +190,19 @@ export function DecisionDialog({
             )}
             <div className="flex items-center justify-end gap-2 pt-2">
               <Dialog.Close asChild>
-                <Button type="button" variant="ghost" size="sm" disabled={pending}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={pending}
+                >
                   Cancel
                 </Button>
               </Dialog.Close>
               <Button
                 type="submit"
                 size="sm"
-                disabled={pending}
+                disabled={pending || diffMissing}
                 className={cn(
                   kind === "reject" &&
                     "!bg-red-600 !text-white hover:!opacity-90",

@@ -1,14 +1,17 @@
-"""Phase 6 canned scenario -> root_cause lookup.
+"""Demo-fixture scenario prior — the empty-candidates fallback only.
 
-This is the deliberately-narrow Phase 6 stand-in for the Phase 7 DoWhy
-estimand search. Each entry maps a demo scenario label (mirroring the
-fixture incident labels under ``services/validator/fixtures/incidents/``)
-to a deterministic root cause hypothesis + an evidence chain.
+The primary inference path is ``ranking.rank_candidates`` over the
+``root_cause_candidates`` the Pathfinder forwards from its Neo4j
+traversal; this table is consulted *only* when a request carries no
+candidates at all (graph adapter down, or a bare demo invocation), and
+responses served from it are labelled ``method="scenario_prior_fallback"``
+so nothing downstream can mistake a prior lookup for ranked inference.
 
-The keys are the same scenario labels the Sentinel / Pathfinder pipeline
-emits — keep this table in sync with the fixture JSON files. The default
-fallback returns a zero-confidence "unknown" answer so callers can still
-decide whether to short-circuit the agent chain.
+Each entry maps a demo scenario label (mirroring the fixture incident
+labels under ``services/validator/fixtures/incidents/``) to a
+deterministic root-cause hypothesis + evidence chain. Keep the keys in
+sync with the fixture JSON files. The default returns a zero-confidence
+"unknown" answer so callers can still short-circuit the agent chain.
 """
 
 from __future__ import annotations

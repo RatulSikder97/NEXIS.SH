@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -30,11 +31,25 @@ type Store interface {
 	CreateSession(ctx context.Context, s *domain.Session) error
 	GetSession(ctx context.Context, id string) (*domain.Session, error)
 	RevokeSession(ctx context.Context, id string) error
+	// Phase 9 — session management. ListSessionsByUser returns only live
+	// rows (unrevoked, unexpired at `now`), newest first. TouchSession
+	// stamps last_seen_at; RevokeSessionsForUser bulk-revokes every live
+	// session (used after a password reset) and is a no-op when none exist.
+	ListSessionsByUser(ctx context.Context, userID string, now time.Time) ([]domain.Session, error)
+	TouchSession(ctx context.Context, id string, at time.Time) error
+	RevokeSessionsForUser(ctx context.Context, userID string) error
 
 	// magic
 	CreateMagicToken(ctx context.Context, hash []byte, userID, purpose string, expiresAt time.Time) error
 	GetMagicToken(ctx context.Context, hash []byte) (userID, purpose string, expiresAt time.Time, usedAt *time.Time, err error)
 	MarkMagicTokenUsed(ctx context.Context, hash []byte) error
+
+	// Phase 9 — password reset tokens. Same hash-at-rest contract as magic
+	// tokens: callers pass the SHA-256 of the plaintext, never the plaintext.
+	CreatePasswordResetToken(ctx context.Context, hash []byte, userID string, expiresAt time.Time) error
+	GetPasswordResetToken(ctx context.Context, hash []byte) (userID string, expiresAt time.Time, consumedAt *time.Time, err error)
+	MarkPasswordResetConsumed(ctx context.Context, hash []byte) error
+	UpdateUserPassword(ctx context.Context, userID, passwordHash string) error
 
 	// api keys
 	CreateAPIKey(ctx context.Context, k *domain.APIKey, hash []byte) error
@@ -68,8 +83,9 @@ type MemStore struct {
 	sessions    map[string]domain.Session
 	magic       map[string]magicEntry // hex(hash) → entry
 	apiKeys     map[string]apiKeyEntry
-	invites     map[string]domain.Invite // hex(tokenHash) → invite
+	invites     map[string]domain.Invite  // hex(tokenHash) → invite
 	prefs       map[string]map[string]any // userID → preferences
+	resets      map[string]resetEntry     // hex(hash) → entry
 	mailer      *TestMailer
 }
 
@@ -91,6 +107,12 @@ type apiKeyEntry struct {
 	hash []byte
 }
 
+type resetEntry struct {
+	userID     string
+	expiresAt  time.Time
+	consumedAt *time.Time
+}
+
 func NewMemStore() *MemStore {
 	return &MemStore{
 		orgs:        map[string]domain.Organization{},
@@ -102,6 +124,7 @@ func NewMemStore() *MemStore {
 		apiKeys:     map[string]apiKeyEntry{},
 		invites:     map[string]domain.Invite{},
 		prefs:       map[string]map[string]any{},
+		resets:      map[string]resetEntry{},
 	}
 }
 
@@ -245,6 +268,59 @@ func (m *MemStore) RevokeSession(_ context.Context, id string) error {
 	return nil
 }
 
+// ListSessionsByUser returns live sessions (unrevoked, unexpired at now) for
+// userID, newest first. Copies are returned so callers can't mutate state.
+func (m *MemStore) ListSessionsByUser(_ context.Context, userID string, now time.Time) ([]domain.Session, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := []domain.Session{}
+	for _, s := range m.sessions {
+		if s.UserID != userID || s.RevokedAt != nil || now.After(s.ExpiresAt) {
+			continue
+		}
+		cp := s
+		if s.LastSeenAt != nil {
+			t := *s.LastSeenAt
+			cp.LastSeenAt = &t
+		}
+		out = append(out, cp)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
+// TouchSession stamps last_seen_at on the row. Missing rows are a no-op —
+// the touch is best-effort telemetry, not a correctness path.
+func (m *MemStore) TouchSession(_ context.Context, id string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.sessions[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	t := at
+	s.LastSeenAt = &t
+	m.sessions[id] = s
+	return nil
+}
+
+// RevokeSessionsForUser marks every live session for userID revoked. No error
+// when the user has none — the reset flow calls this unconditionally.
+func (m *MemStore) RevokeSessionsForUser(_ context.Context, userID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := time.Now().UTC()
+	for id, s := range m.sessions {
+		if s.UserID != userID || s.RevokedAt != nil {
+			continue
+		}
+		t := now
+		s.RevokedAt = &t
+		m.sessions[id] = s
+	}
+	return nil
+}
+
 func (m *MemStore) CreateMagicToken(_ context.Context, hash []byte, userID, purpose string, expiresAt time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -279,6 +355,62 @@ func (m *MemStore) MarkMagicTokenUsed(_ context.Context, hash []byte) error {
 	now := time.Now().UTC()
 	e.usedAt = &now
 	m.magic[k] = e
+	return nil
+}
+
+// --- password reset tokens (Phase 9) ---------------------------------------
+
+// CreatePasswordResetToken persists a reset entry keyed by hex(hash),
+// mirroring PGStore's bytea-PK table.
+func (m *MemStore) CreatePasswordResetToken(_ context.Context, hash []byte, userID string, expiresAt time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.resets[hex.EncodeToString(hash)] = resetEntry{userID: userID, expiresAt: expiresAt}
+	return nil
+}
+
+// GetPasswordResetToken returns the entry for the given hash, or ErrNotFound.
+func (m *MemStore) GetPasswordResetToken(_ context.Context, hash []byte) (string, time.Time, *time.Time, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	e, ok := m.resets[hex.EncodeToString(hash)]
+	if !ok {
+		return "", time.Time{}, nil, domain.ErrNotFound
+	}
+	var consumed *time.Time
+	if e.consumedAt != nil {
+		t := *e.consumedAt
+		consumed = &t
+	}
+	return e.userID, e.expiresAt, consumed, nil
+}
+
+// MarkPasswordResetConsumed stamps consumed_at exactly once; a second call
+// returns ErrNotFound, matching PGStore's `AND consumed_at IS NULL` guard.
+func (m *MemStore) MarkPasswordResetConsumed(_ context.Context, hash []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	k := hex.EncodeToString(hash)
+	e, ok := m.resets[k]
+	if !ok || e.consumedAt != nil {
+		return domain.ErrNotFound
+	}
+	now := time.Now().UTC()
+	e.consumedAt = &now
+	m.resets[k] = e
+	return nil
+}
+
+// UpdateUserPassword overwrites the stored bcrypt hash for userID.
+func (m *MemStore) UpdateUserPassword(_ context.Context, userID, passwordHash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.users[userID]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	u.PasswordHash = passwordHash
+	m.users[userID] = u
 	return nil
 }
 

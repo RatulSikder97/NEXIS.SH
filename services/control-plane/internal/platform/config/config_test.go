@@ -202,8 +202,8 @@ func TestFatalIfLocalInCloud(t *testing.T) {
 	})
 	t.Run("prod_with_local_fails", func(t *testing.T) {
 		c := &Config{
-			AppEnv:          "prod",
-			AuthProvider:    "local",
+			AppEnv:       "prod",
+			AuthProvider: "local",
 		}
 		if err := c.FatalIfLocalInCloud(); err == nil {
 			t.Fatalf("prod with local auth must error")

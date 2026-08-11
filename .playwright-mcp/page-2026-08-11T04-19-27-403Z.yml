@@ -1,0 +1,144 @@
+- generic [active] [ref=f50e1]:
+  - generic [ref=f50e2]:
+    - link "Skip to content" [ref=f50e3] [cursor=pointer]:
+      - /url: "#main"
+    - complementary [ref=f50e4]:
+      - generic [ref=f50e5]:
+        - generic [ref=f50e6]: NEXIS
+        - button "Collapse sidebar" [ref=f50e9]
+      - navigation "Console navigation" [ref=f50e15]:
+        - generic [ref=f50e16]:
+          - paragraph [ref=f50e17]: Workspace
+          - list [ref=f50e18]:
+            - listitem [ref=f50e19]:
+              - link "Dashboard" [ref=f50e20] [cursor=pointer]:
+                - /url: /console
+            - listitem [ref=f50e28]:
+              - link "Projects" [ref=f50e29] [cursor=pointer]:
+                - /url: /console/projects
+            - listitem [ref=f50e42]:
+              - link "Incidents" [ref=f50e43] [cursor=pointer]:
+                - /url: /console/incidents
+            - listitem [ref=f50e48]:
+              - link "Approvals" [ref=f50e49] [cursor=pointer]:
+                - /url: /console/approvals
+            - listitem [ref=f50e56]:
+              - link "Audit Log" [ref=f50e57] [cursor=pointer]:
+                - /url: /console/audit
+        - generic [ref=f50e63]:
+          - paragraph [ref=f50e64]: Fleet
+          - list [ref=f50e65]:
+            - listitem [ref=f50e66]:
+              - link "Agents 9 items" [ref=f50e67] [cursor=pointer]:
+                - /url: /console/agents
+                - generic [ref=f50e73]: Agents
+                - generic "9 items" [ref=f50e75]: "9"
+            - listitem [ref=f50e76]:
+              - link "Workflows" [ref=f50e77] [cursor=pointer]:
+                - /url: /console/workflows
+            - listitem [ref=f50e84]:
+              - link "Activity Stream" [ref=f50e85] [cursor=pointer]:
+                - /url: /console/activity
+            - listitem [ref=f50e90]:
+              - link "Validator Sandbox" [ref=f50e91] [cursor=pointer]:
+                - /url: /console/validator
+        - generic [ref=f50e98]:
+          - paragraph [ref=f50e99]: Observability
+          - list [ref=f50e100]:
+            - listitem [ref=f50e101]:
+              - link "Performance" [ref=f50e102] [cursor=pointer]:
+                - /url: /console/performance
+            - listitem [ref=f50e108]:
+              - link "Cost Tracker" [ref=f50e109] [cursor=pointer]:
+                - /url: /console/cost
+            - listitem [ref=f50e114]:
+              - link "System Health" [ref=f50e115] [cursor=pointer]:
+                - /url: /console/health
+        - generic [ref=f50e121]:
+          - paragraph [ref=f50e122]: Integrations
+          - list [ref=f50e123]:
+            - listitem [ref=f50e124]:
+              - link "All Integrations 0/6 connected" [ref=f50e125] [cursor=pointer]:
+                - /url: /console/integrations
+                - generic [ref=f50e128]: All Integrations
+                - generic "0/6 connected" [ref=f50e130]: 0/6
+            - listitem [ref=f50e131]:
+              - link "Webhook Activity" [ref=f50e132] [cursor=pointer]:
+                - /url: /console/webhooks
+            - listitem [ref=f50e139]:
+              - link "Connection Health" [ref=f50e140] [cursor=pointer]:
+                - /url: /console/connections
+        - generic [ref=f50e148]:
+          - paragraph [ref=f50e149]: Operations
+          - list [ref=f50e150]:
+            - listitem [ref=f50e151]:
+              - link "Recovery Pipeline" [ref=f50e152] [cursor=pointer]:
+                - /url: /console/recovery
+            - listitem [ref=f50e157]:
+              - link "Eval Harness" [ref=f50e158] [cursor=pointer]:
+                - /url: /console/eval
+            - listitem [ref=f50e163]:
+              - link "Live Demo 1 items" [ref=f50e164] [cursor=pointer]:
+                - /url: /console/live-demo
+                - generic [ref=f50e168]: Live Demo
+                - generic "1 items" [ref=f50e170]: "1"
+            - listitem [ref=f50e171]:
+              - link "Knowledge Base" [ref=f50e172] [cursor=pointer]:
+                - /url: /console/knowledge
+      - link "Settings" [ref=f50e178] [cursor=pointer]:
+        - /url: /console/settings/profile
+      - generic [ref=f50e184]:
+        - paragraph [ref=f50e185]: Live
+        - 'link "System status: Status unknown" [ref=f50e192] [cursor=pointer]':
+          - /url: /console/health
+          - generic [ref=f50e194]: Status unknown
+    - generic [ref=f50e195]:
+      - banner [ref=f50e196]:
+        - generic [ref=f50e197]:
+          - generic "Workspace Production in us-east-1" [ref=f50e198]:
+            - generic [ref=f50e199]: 🇺🇸
+            - generic [ref=f50e200]: Production
+            - generic [ref=f50e201]: us-east-1
+          - navigation "Breadcrumb" [ref=f50e204]:
+            - generic [ref=f50e205]: Approvals
+        - generic [ref=f50e206]:
+          - button "Open command palette" [ref=f50e207]:
+            - generic [ref=f50e208]: Jump to…
+            - generic [ref=f50e209]: ⌘K
+          - button "Open notifications" [ref=f50e211]
+          - button "Switch to dark mode" [ref=f50e215]
+          - button "Account menu" [ref=f50e218]:
+            - generic [ref=f50e219]: D
+            - generic [ref=f50e220]: demo
+      - main [ref=f50e223]:
+        - generic [ref=f50e224]:
+          - generic [ref=f50e225]:
+            - generic [ref=f50e226]:
+              - heading "Approvals" [level=1] [ref=f50e227]
+              - paragraph [ref=f50e228]: Pending human-in-the-loop decisions for this workspace. Approving signals the workflow to proceed to GitOps; rejecting blocks the patch from opening a PR.
+            - button "Refresh" [ref=f50e230]
+          - table [ref=f50e238]:
+            - rowgroup [ref=f50e239]:
+              - row [ref=f50e240]:
+                - columnheader "Severity" [ref=f50e241]
+                - columnheader "Run" [ref=f50e242]
+                - columnheader "Scenario" [ref=f50e243]
+                - columnheader "Awaiting" [ref=f50e244]
+                - columnheader "Synthesiser" [ref=f50e245]
+                - columnheader "Decision" [ref=f50e246]
+            - rowgroup [ref=f50e247]:
+              - row [ref=f50e248]:
+                - cell "Medium" [ref=f50e249]
+                - cell [ref=f50e252]:
+                  - link "70cfb324" [ref=f50e253] [cursor=pointer]:
+                    - /url: /console/incidents/70cfb324-7792-45b1-81b9-8a78aac961ed
+                - cell "Unknown" [ref=f50e254]
+                - cell "55s ago" [ref=f50e255]
+                - cell "—" [ref=f50e256]
+                - cell [ref=f50e257]:
+                  - generic [ref=f50e258]:
+                    - button "Reject" [ref=f50e259]
+                    - button "Modify" [ref=f50e260]
+                    - button "Approve" [ref=f50e261]
+  - button "Open Next.js Dev Tools" [ref=f50e267] [cursor=pointer]
+  - alert [ref=f50e271]

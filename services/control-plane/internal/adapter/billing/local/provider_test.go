@@ -161,8 +161,8 @@ func TestLocal_NeverPersistsPAN(t *testing.T) {
 	p := New(store)
 	princ := domain.Principal{OrgID: "orgPan"}
 	in := domain.AddCardInput{
-		CardNumber:   "4111 1111 1111 1111",
-		ExpMonth:     12, ExpYear: time.Now().Year() + 5,
+		CardNumber: "4111 1111 1111 1111",
+		ExpMonth:   12, ExpYear: time.Now().Year() + 5,
 		CVC:          "9876",
 		PostalCode:   "10001",
 		BillingEmail: "leak@example.com",

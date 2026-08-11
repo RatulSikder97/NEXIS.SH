@@ -43,7 +43,7 @@ func TestNormaliseStatus(t *testing.T) {
 		{domain.EvalRunStatusSucceeded, "succeeded"},
 		{domain.EvalRunStatusFailed, "failed"},
 		{domain.EvalRunStatusError, "failed"}, // error → failed for the UI
-		{"", "queued"},                         // empty → queued
+		{"", "queued"},                        // empty → queued
 		{"weird-future-state", "weird-future-state"},
 	}
 	for _, tc := range cases {

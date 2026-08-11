@@ -160,7 +160,7 @@ func workflowsCommitAndReopen(t *testing.T, ctx context.Context, fix *workflowsT
 }
 
 // TestWorkflowRepo_InsertRun_RoundTrip covers the full insert/get path
-// including project_id stamping (NULLIF($15,'')::uuid) and the JSON columns.
+// including project_id stamping (NULLIF($15,”)::uuid) and the JSON columns.
 func TestWorkflowRepo_InsertRun_RoundTrip(t *testing.T) {
 	ctx, fix := workflowsFixture(t)
 	defer fix.Close()
@@ -206,7 +206,7 @@ func TestWorkflowRepo_InsertRun_RoundTrip(t *testing.T) {
 }
 
 // TestWorkflowRepo_InsertRun_EmptyProjectIDLandsAsNull confirms the
-// NULLIF($15,'')::uuid coercion: an empty ProjectID must NOT crash the cast.
+// NULLIF($15,”)::uuid coercion: an empty ProjectID must NOT crash the cast.
 func TestWorkflowRepo_InsertRun_EmptyProjectIDLandsAsNull(t *testing.T) {
 	ctx, fix := workflowsFixture(t)
 	defer fix.Close()

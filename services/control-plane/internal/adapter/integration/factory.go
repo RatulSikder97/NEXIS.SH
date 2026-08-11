@@ -38,11 +38,11 @@ type Registry struct {
 // Deps bundles every dependency NewRegistry needs. Constructed in
 // cmd/server/main.go.
 type Deps struct {
-	Repo                *repo.IntegrationsRepo
-	KV                  domain.KeyVault
-	IncidentSink        domain.IncidentSink
-	GitHubDefaultSecret []byte
-	PagerDutyFromEmail  string
+	Repo                 *repo.IntegrationsRepo
+	KV                   domain.KeyVault
+	IncidentSink         domain.IncidentSink
+	GitHubDefaultSecret  []byte
+	PagerDutyFromEmail   string
 	DatadogSigningSecret []byte
 }
 

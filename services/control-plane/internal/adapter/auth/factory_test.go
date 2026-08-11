@@ -1,9 +1,9 @@
 // Phase 2 SQA §9 — exercise the AUTH_PROVIDER decision tree:
 //
-//   • local (or "") → Provider, no error.
-//   • workos + ALLOW_STUB_WORKOS=1 → local provider with a warning log.
-//   • workos + ALLOW_STUB_WORKOS=0 → error (fail-fast at boot).
-//   • anything else → unknown-provider error.
+//   - local (or "") → Provider, no error.
+//   - workos + ALLOW_STUB_WORKOS=1 → local provider with a warning log.
+//   - workos + ALLOW_STUB_WORKOS=0 → error (fail-fast at boot).
+//   - anything else → unknown-provider error.
 //
 // The fail-fast case is the load-bearing one: silently substituting the
 // local provider for "workos" would let a misconfigured prod deploy boot

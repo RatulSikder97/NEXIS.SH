@@ -59,12 +59,12 @@ func TestCanonicalJSON_NilMap(t *testing.T) {
 // nested values too).
 func TestCanonicalJSON_ValueTypes(t *testing.T) {
 	m := map[string]any{
-		"num":   42,
-		"flt":   1.5,
-		"bool":  true,
-		"null":  nil,
-		"arr":   []any{1, 2, "three"},
-		"str":   "hello",
+		"num":  42,
+		"flt":  1.5,
+		"bool": true,
+		"null": nil,
+		"arr":  []any{1, 2, "three"},
+		"str":  "hello",
 	}
 	got := string(canonicalJSON(m))
 	expected := `{"arr":[1,2,"three"],"bool":true,"flt":1.5,"null":null,"num":42,"str":"hello"}`

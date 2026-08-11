@@ -23,6 +23,31 @@ type MagicReq struct {
 	Purpose string `json:"purpose"`
 }
 
+// PasswordResetRequestReq is the payload accepted by
+// POST /v1/auth/password-reset/request.
+type PasswordResetRequestReq struct {
+	Email string `json:"email"`
+}
+
+// PasswordResetConfirmReq is the payload accepted by
+// POST /v1/auth/password-reset/confirm.
+type PasswordResetConfirmReq struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
+}
+
+// SessionResp is one entry in the response from GET /v1/me/sessions.
+// Timestamps are RFC3339; LastSeenAt is empty when the session predates
+// last-seen tracking. IsCurrent marks the session backing this request.
+type SessionResp struct {
+	ID         string `json:"id"`
+	CreatedAt  string `json:"created_at"`
+	LastSeenAt string `json:"last_seen_at"`
+	UserAgent  string `json:"user_agent"`
+	IP         string `json:"ip"`
+	IsCurrent  bool   `json:"is_current"`
+}
+
 // AuthResp is the success body returned on Signup / Login / magic-link
 // consumption. The session cookie is also set; the body lets API consumers
 // extract user/org ids without re-decoding the JWT.

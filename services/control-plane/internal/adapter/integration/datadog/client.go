@@ -8,9 +8,9 @@
 // redaction. We expose two typed methods:
 //
 //   - Validate    — GET /api/v1/validate to confirm api_key + app_key on
-//                   Connect, and as the cheap probe used by Status.
+//     Connect, and as the cheap probe used by Status.
 //   - MonitorState — GET /api/v1/monitor and bucket the response by state so
-//                   Status can surface "alerting / ok" counts in the UI.
+//     Status can surface "alerting / ok" counts in the UI.
 //
 // Auth headers are DD-API-KEY + DD-APPLICATION-KEY. The HTTP wrapper redacts
 // Authorization but not these two, so callers must keep secrets out of slog
@@ -30,11 +30,11 @@ import (
 // Supported Datadog sites. Anything outside this set is rejected at Connect
 // time so we never emit a request to an unknown host.
 const (
-	SiteUS1    = "datadoghq.com"
-	SiteUS3    = "us3.datadoghq.com"
-	SiteUS5    = "us5.datadoghq.com"
-	SiteEU1    = "datadoghq.eu"
-	SiteUSGov  = "ddog-gov.com"
+	SiteUS1     = "datadoghq.com"
+	SiteUS3     = "us3.datadoghq.com"
+	SiteUS5     = "us5.datadoghq.com"
+	SiteEU1     = "datadoghq.eu"
+	SiteUSGov   = "ddog-gov.com"
 	defaultSite = SiteUS1
 )
 

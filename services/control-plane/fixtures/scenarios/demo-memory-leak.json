@@ -1,0 +1,19 @@
+{
+  "label": "demo-memory-leak",
+  "title": "notifications-api gradual heap growth ends in OOMKilled restart loop",
+  "service": "notifications-api",
+  "environment": "production",
+  "stacktrace": "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\n 1: 0xb7a940 node::Abort() [node]\n 2: 0xa8e823 node::FatalError(char const*, char const*) [node]\n 3: 0xd693ee v8::internal::V8::FatalProcessOutOfMemory(v8::internal::Isolate*, char const*) [node]\n 4: 0xd69567 v8::internal::Heap::CollectGarbage(v8::internal::AllocationSpace, v8::internal::GarbageCollectionReason) [node]\n 5: 0xf4c8e1 v8::internal::Factory::NewFillerObject(int, bool, v8::internal::AllocationType) [node]",
+  "logs": "ts=2026-08-09T20:00:00Z level=info service=notifications-api msg=rss_sample rss_mb=412 uptime_h=1\nts=2026-08-10T02:00:00Z level=info service=notifications-api msg=rss_sample rss_mb=1071 uptime_h=7\nts=2026-08-10T08:00:00Z level=warn service=notifications-api msg=rss_sample rss_mb=1688 uptime_h=13 gc_major_pause_ms=2210\nts=2026-08-10T08:41:12Z level=warn service=notifications-api msg=MaxListenersExceededWarning emitter=slackClient event=message listeners=8120 note=\"listener registered per request on shared client, never removed\"\nts=2026-08-10T09:02:40Z level=fatal service=notifications-api msg=container_oom_killed reason=OOMKilled exit_code=137 restart_count=6 limit_mb=1792",
+  "metadata": {
+    "service_name": "notifications-api",
+    "leak_rate_mb_per_hour": 106,
+    "leak_suspect": "per-request event listener registration on shared slackClient",
+    "container_memory_limit_mb": 1792,
+    "exit_code": 137,
+    "restart_count": 6,
+    "onset": "gradual (13h climb), distinct from sudden-allocation OOM",
+    "incident_kind": "memory-leak",
+    "expected_scenario": "oom"
+  }
+}

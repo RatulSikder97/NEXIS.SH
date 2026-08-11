@@ -23,10 +23,10 @@ import (
 
 // Exit codes per spec Appendix E.
 const (
-	exitOK              = 0
-	exitSchemaMismatch  = 2
-	exitBudgetExceeded  = 3
-	exitInfraFailure    = 4
+	exitOK             = 0
+	exitSchemaMismatch = 2
+	exitBudgetExceeded = 3
+	exitInfraFailure   = 4
 )
 
 func main() {
@@ -90,15 +90,15 @@ func main() {
 	}
 
 	runner := &usecase.EvalRunner{
-		Cfg:         cfg,
-		AppPool:     appPool,
-		AdminPool:   adminPool,
-		EvalRepo:    evalRepo,
-		LedgerRepo:  ledger,
+		Cfg:          cfg,
+		AppPool:      appPool,
+		AdminPool:    adminPool,
+		EvalRepo:     evalRepo,
+		LedgerRepo:   ledger,
 		WorkflowRepo: workflowRepo,
-		AuditWriter: auditWriter,
-		Logger:      logger,
-		Providers:   providerList,
+		AuditWriter:  auditWriter,
+		Logger:       logger,
+		Providers:    providerList,
 	}
 
 	p := domain.Principal{OrgID: orgID, Role: domain.RoleOwner}

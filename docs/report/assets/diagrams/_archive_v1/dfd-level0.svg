@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="820" viewBox="0 0 1100 820" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#333"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="820" fill="#ffffff"/>
+  <text x="550" y="34" text-anchor="middle" font-size="20" font-weight="bold">Figure: DFD Diagram Level 0</text>
+
+  <!-- external entities -->
+  <rect x="40" y="90" width="170" height="54" fill="#dfeeff" stroke="#1c4e91" stroke-width="1.4"/>
+  <text x="125" y="122" text-anchor="middle" font-size="12">User (Owner/Admin,</text>
+  <text x="125" y="136" text-anchor="middle" font-size="12">Engineer, Viewer)</text>
+
+  <rect x="890" y="90" width="170" height="54" fill="#dfeeff" stroke="#1c4e91" stroke-width="1.4"/>
+  <text x="975" y="122" text-anchor="middle" font-size="12">GitHub / GitOps</text>
+
+  <rect x="40" y="640" width="170" height="54" fill="#dfeeff" stroke="#1c4e91" stroke-width="1.4"/>
+  <text x="125" y="672" text-anchor="middle" font-size="12">Sentry / Datadog /</text>
+  <text x="125" y="686" text-anchor="middle" font-size="12">PagerDuty / Slack</text>
+
+  <rect x="890" y="640" width="170" height="54" fill="#dfeeff" stroke="#1c4e91" stroke-width="1.4"/>
+  <text x="975" y="672" text-anchor="middle" font-size="12">LLM Provider</text>
+  <text x="975" y="686" text-anchor="middle" font-size="12">(OpenAI / Ollama)</text>
+
+  <!-- central process -->
+  <circle cx="550" cy="410" r="150" fill="#cfe3ff" stroke="#1c4e91" stroke-width="1.6"/>
+  <text x="550" y="400" text-anchor="middle" font-size="15" font-weight="bold">NEXIS Autonomous</text>
+  <text x="550" y="420" text-anchor="middle" font-size="15" font-weight="bold">Engineering Platform</text>
+  <text x="550" y="440" text-anchor="middle" font-size="11">(control-plane + 9-agent loop)</text>
+
+  <!-- data stores -->
+  <rect x="40" y="370" width="200" height="40" fill="#fdf3d8" stroke="#8a6100" stroke-width="1.3"/>
+  <text x="140" y="395" text-anchor="middle" font-size="12">D1 — Tenant DB (Postgres)</text>
+
+  <rect x="860" y="370" width="200" height="40" fill="#fdf3d8" stroke="#8a6100" stroke-width="1.3"/>
+  <text x="960" y="395" text-anchor="middle" font-size="12">D2 — Code graph (Neo4j)</text>
+
+  <rect x="450" y="700" width="200" height="40" fill="#fdf3d8" stroke="#8a6100" stroke-width="1.3"/>
+  <text x="550" y="725" text-anchor="middle" font-size="12">D3 — Patch store (MinIO)</text>
+
+  <!-- flows -->
+  <path d="M210 117 L 430 340" stroke="#333" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+  <text x="260" y="220" font-size="10.5">login · commands · approvals</text>
+
+  <path d="M430 350 L 210 130" stroke="#333" stroke-width="1.3" fill="none" marker-end="url(#ar)" stroke-dasharray="0"/>
+  <text x="640" y="90" font-size="10.5" text-anchor="end"></text>
+
+  <path d="M700 340 L 890 130" stroke="#333" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+  <text x="770" y="215" font-size="10.5">open PR / read Dockerfile</text>
+  <path d="M890 150 L 700 355" stroke="#333" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+  <text x="800" y="260" font-size="10.5">PR URL / commit SHA</text>
+
+  <path d="M210 660 L 430 460" stroke="#333" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+  <text x="240" y="600" font-size="10.5">fault / alert webhook</text>
+
+  <path d="M700 470 L 890 660" stroke="#333" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+  <text x="760" y="600" font-size="10.5">completion request</text>
+  <path d="M890 645 L 705 480" stroke="#333" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+  <text x="920" y="600" font-size="10.5" text-anchor="end">patch / plan JSON</text>
+
+  <path d="M400 410 L 240 400" stroke="#333" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+  <path d="M700 410 L 860 400" stroke="#333" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+  <path d="M550 560 L 550 700" stroke="#333" stroke-width="1.3" fill="none" marker-end="url(#ar)"/>
+  <text x="565" y="640" font-size="10.5">encrypted diff blob</text>
+
+  <text x="550" y="790" text-anchor="middle" font-size="12" fill="#444">Every external call (GitHub, LLM, ArgoCD, Slack) is mediated by the control-plane — no direct human-to-integration path exists.</text>
+</svg>

@@ -226,6 +226,35 @@ func (*Provider) IssueMagicLink(_ context.Context, _, _ string) error {
 	return domain.ErrNotImplemented
 }
 
+// RequestPasswordReset / ResetPassword are not supported in WorkOS mode —
+// WorkOS owns the credential lifecycle via its hosted UI, so a local reset
+// would desync the two stores. Callers get ErrNotImplemented, same as the
+// other credential-management stubs above.
+func (*Provider) RequestPasswordReset(_ context.Context, _ string) error {
+	return domain.ErrNotImplemented
+}
+
+func (*Provider) ResetPassword(_ context.Context, _, _ string) error {
+	return domain.ErrNotImplemented
+}
+
+// ListSessions / RevokeSession delegate to Local for the same reason
+// VerifyToken and Logout do — the session rows are created and owned by the
+// wrapped local provider even in WorkOS mode.
+func (p *Provider) ListSessions(ctx context.Context, userID string) ([]domain.Session, error) {
+	if p.cfg.Local == nil {
+		return nil, domain.ErrNotImplemented
+	}
+	return p.cfg.Local.ListSessions(ctx, userID)
+}
+
+func (p *Provider) RevokeSession(ctx context.Context, userID, sessionID string) error {
+	if p.cfg.Local == nil {
+		return domain.ErrNotImplemented
+	}
+	return p.cfg.Local.RevokeSession(ctx, userID, sessionID)
+}
+
 func (*Provider) ConsumeMagicLink(_ context.Context, _ string) (domain.SessionToken, error) {
 	return domain.SessionToken{}, domain.ErrNotImplemented
 }

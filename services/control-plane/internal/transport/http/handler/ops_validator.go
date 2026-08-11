@@ -28,12 +28,12 @@ import (
 //
 // SQL shape:
 //
-//   The validator_l2 agent emits a started frame at run begin and one of
-//   succeeded/failed/timed_out at run end. We group by workflow_run_id +
-//   pick the earliest started ts (start) + latest terminal ts (end), then
-//   derive duration_ms. patch_sha + stdout/stderr_head are pulled out of
-//   the latest payload column when present (the agent's contract carries
-//   them; in stub mode they are absent and we leave them blank).
+//	The validator_l2 agent emits a started frame at run begin and one of
+//	succeeded/failed/timed_out at run end. We group by workflow_run_id +
+//	pick the earliest started ts (start) + latest terminal ts (end), then
+//	derive duration_ms. patch_sha + stdout/stderr_head are pulled out of
+//	the latest payload column when present (the agent's contract carries
+//	them; in stub mode they are absent and we leave them blank).
 //
 // The admin pool drives this read because the operator endpoint already
 // enforces tenancy via the principal's OrgID — and the activity_events
@@ -87,10 +87,10 @@ func ValidatorRuns(pool *pgxpool.Pool) http.HandlerFunc {
 		out := []dto.ValidatorRunResp{}
 		for rows.Next() {
 			var (
-				runID                            string
-				startedAt, finishedAt            *time.Time
-				anyFailed, anyStarted, anySucc   bool
-				payloadStr                       string
+				runID                          string
+				startedAt, finishedAt          *time.Time
+				anyFailed, anyStarted, anySucc bool
+				payloadStr                     string
 			)
 			if err := rows.Scan(
 				&runID, &startedAt, &finishedAt,

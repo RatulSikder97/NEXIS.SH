@@ -16,8 +16,8 @@ import (
 // fakeMailer captures every SendMagicLink call so the test can assert the
 // addresses and links the notifier dispatched. Satisfies local.Mailer.
 type fakeMailer struct {
-	mu     sync.Mutex
-	sends  []sendCall
+	mu      sync.Mutex
+	sends   []sendCall
 	sendErr error
 }
 
@@ -27,6 +27,15 @@ type sendCall struct {
 }
 
 func (f *fakeMailer) SendMagicLink(_ context.Context, email, link string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sends = append(f.sends, sendCall{Email: email, Link: link})
+	return f.sendErr
+}
+
+// SendPasswordReset keeps fakeMailer conformant with local.Mailer (Phase 9).
+// The notifier never sends resets; recording keeps behaviour symmetric.
+func (f *fakeMailer) SendPasswordReset(_ context.Context, email, link string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sends = append(f.sends, sendCall{Email: email, Link: link})

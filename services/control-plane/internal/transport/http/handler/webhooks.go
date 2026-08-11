@@ -56,8 +56,8 @@ func payloadEventType(provider string, hdrs map[string]string, body []byte) stri
 	// field. We deliberately limit the unmarshal target to a tiny map so we
 	// don't allocate the full payload twice.
 	var probe struct {
-		Event string `json:"event"`
-		Type  string `json:"type"`
+		Event  string `json:"event"`
+		Type   string `json:"type"`
 		Action string `json:"action"`
 	}
 	if len(body) > 0 && len(body) < 256*1024 {

@@ -1,12 +1,14 @@
 "use client";
 
-// Phase 3 Stage 8 — Members & Roles client.
+// Phase 3 Stage 8 + Phase 9 — Members & Roles client.
 //
-// Renders the current-user row (the only "member" surfaced by the Phase 3
-// API — a real list endpoint lands in Phase 4) and the pending-invites
-// table. Owners see an "Invite member" button that opens a Radix Dialog
-// with email + role inputs; admins can revoke pending invites but not
-// issue new ones (mirrors the control-plane RBAC matrix).
+// Renders the member table (real list when the Phase 9 endpoint is mounted,
+// current-user fallback row otherwise), the intelligent role-recommendation
+// banner (owner|admin: accept/dismiss with the analyser's plain-language
+// rationale, plus an on-demand "Run analysis" trigger), and the
+// pending-invites table. Owners see an "Invite member" button that opens a
+// Radix Dialog with email + role inputs; admins can revoke pending invites
+// but not issue new ones (mirrors the control-plane RBAC matrix).
 
 import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -15,6 +17,11 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
 import { invites, type PendingInvite } from "@/lib/invites";
+import {
+  roleRecommendations,
+  type OrgMember,
+  type RoleRecommendation,
+} from "@/lib/roleRecommendations";
 import type { MeResp } from "@/lib/auth";
 
 function formatExpiry(iso: string): string {
@@ -31,14 +38,31 @@ function formatExpiry(iso: string): string {
   }
 }
 
+function formatLastLogin(iso?: string): string {
+  if (!iso) return "Never logged in";
+  try {
+    return `Last login ${new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })}`;
+  } catch {
+    return iso;
+  }
+}
+
 export function MembersClient({
   me,
   pending,
+  members,
+  recommendations,
   canIssue,
   canManage,
 }: {
   me: MeResp;
   pending: PendingInvite[];
+  members: OrgMember[] | null;
+  recommendations: RoleRecommendation[] | null;
   canIssue: boolean;
   canManage: boolean;
 }) {
@@ -50,6 +74,9 @@ export function MembersClient({
   const [error, setError] = React.useState<string | null>(null);
   const [lastIssued, setLastIssued] = React.useState<string | null>(null);
   const [revoking, setRevoking] = React.useState<string | null>(null);
+  const [deciding, setDeciding] = React.useState<string | null>(null);
+  const [analysing, setAnalysing] = React.useState(false);
+  const [analysisNote, setAnalysisNote] = React.useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -82,6 +109,43 @@ export function MembersClient({
     }
   }
 
+  async function decide(recId: string, action: "accept" | "dismiss") {
+    setDeciding(recId);
+    setError(null);
+    setAnalysisNote(null);
+    try {
+      await roleRecommendations.decide(me.org.id, recId, action);
+      router.refresh();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : `Failed to ${action} recommendation`,
+      );
+    } finally {
+      setDeciding(null);
+    }
+  }
+
+  async function runAnalysis() {
+    setAnalysing(true);
+    setError(null);
+    setAnalysisNote(null);
+    try {
+      const r = await roleRecommendations.refresh(me.org.id);
+      setAnalysisNote(
+        r.created === 0
+          ? "Analysis complete — no new recommendations."
+          : `Analysis complete — ${r.created} new recommendation${r.created === 1 ? "" : "s"}.`,
+      );
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run analysis");
+    } finally {
+      setAnalysing(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-4">
@@ -100,7 +164,8 @@ export function MembersClient({
 
       {lastIssued && (
         <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
-          Invite sent. Token prefix: <span className="font-mono">{lastIssued}…</span>
+          Invite sent. Token prefix:{" "}
+          <span className="font-mono">{lastIssued}…</span>
         </div>
       )}
 
@@ -113,38 +178,136 @@ export function MembersClient({
         </div>
       )}
 
+      {analysisNote && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+          {analysisNote}
+        </div>
+      )}
+
+      {canManage && recommendations !== null && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-sm font-medium uppercase tracking-widest text-[var(--color-muted-foreground)]">
+              Role recommendations
+            </h2>
+            <Button
+              size="sm"
+              variant="outline"
+              type="button"
+              disabled={analysing}
+              onClick={runAnalysis}
+            >
+              {analysing && <Loader2 className="h-4 w-4 animate-spin" />}
+              Run analysis
+            </Button>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
+            {recommendations.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-[var(--color-muted-foreground)]">
+                No pending recommendations. The analyser reviews member activity
+                and login patterns — run it to check for role adjustments.
+              </p>
+            ) : (
+              <ul className="divide-y divide-[var(--color-border)]">
+                {recommendations.map((rec) => (
+                  <li
+                    key={rec.id}
+                    className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-sm font-medium">
+                        {rec.email}
+                        <span className="ml-2 text-xs uppercase text-[var(--color-muted-foreground)]">
+                          {rec.current_role} → {rec.recommended_role}
+                        </span>
+                      </p>
+                      <p className="text-sm text-[var(--color-muted-foreground)]">
+                        {rec.rationale}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        size="sm"
+                        type="button"
+                        disabled={deciding === rec.id}
+                        onClick={() => decide(rec.id, "accept")}
+                      >
+                        {deciding === rec.id && (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        )}
+                        Accept
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        disabled={deciding === rec.id}
+                        onClick={() => decide(rec.id, "dismiss")}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
       <section className="space-y-3">
         <h2 className="text-sm font-medium uppercase tracking-widest text-[var(--color-muted-foreground)]">
           Members
         </h2>
         <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] text-sm">
-            <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
-              <tr>
-                <th className="px-4 py-2 font-medium">Email</th>
-                <th className="px-4 py-2 font-medium">Role</th>
-                <th className="px-4 py-2 font-medium" aria-hidden></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t border-[var(--color-border)]">
-                <td className="px-4 py-3">{me.user.email}</td>
-                <td className="px-4 py-3 uppercase text-[var(--color-muted-foreground)]">
-                  {me.role}
-                </td>
-                <td className="px-4 py-3 text-right text-xs text-[var(--color-muted-foreground)]">
-                  You
-                </td>
-              </tr>
-            </tbody>
-          </table>
+            <table className="w-full min-w-[480px] text-sm">
+              <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Email</th>
+                  <th className="px-4 py-2 font-medium">Role</th>
+                  <th className="px-4 py-2 font-medium" aria-hidden></th>
+                </tr>
+              </thead>
+              <tbody>
+                {members !== null && members.length > 0 ? (
+                  members.map((m) => (
+                    <tr
+                      key={m.user_id}
+                      className="border-t border-[var(--color-border)]"
+                    >
+                      <td className="px-4 py-3">{m.email}</td>
+                      <td className="px-4 py-3 uppercase text-[var(--color-muted-foreground)]">
+                        {m.role}
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs text-[var(--color-muted-foreground)]">
+                        {m.user_id === me.user.id
+                          ? "You"
+                          : formatLastLogin(m.last_login_at)}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr className="border-t border-[var(--color-border)]">
+                    <td className="px-4 py-3">{me.user.email}</td>
+                    <td className="px-4 py-3 uppercase text-[var(--color-muted-foreground)]">
+                      {me.role}
+                    </td>
+                    <td className="px-4 py-3 text-right text-xs text-[var(--color-muted-foreground)]">
+                      You
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-        <p className="text-[11px] text-[var(--color-muted-foreground)]">
-          Full member list lands in Phase 4. Until then, invite acceptance is
-          how members join.
-        </p>
+        {members === null && (
+          <p className="text-[11px] text-[var(--color-muted-foreground)]">
+            Showing only your own membership — the full member list requires
+            owner or admin access.
+          </p>
+        )}
       </section>
 
       {canManage && (
@@ -159,48 +322,48 @@ export function MembersClient({
               </p>
             ) : (
               <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-sm">
-                <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
-                  <tr>
-                    <th className="px-4 py-2 font-medium">Email</th>
-                    <th className="px-4 py-2 font-medium">Role</th>
-                    <th className="px-4 py-2 font-medium">Expires</th>
-                    <th className="px-4 py-2 font-medium" aria-hidden></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pending.map((p) => (
-                    <tr
-                      key={p.token_hash}
-                      className="border-t border-[var(--color-border)]"
-                    >
-                      <td className="px-4 py-3">{p.email}</td>
-                      <td className="px-4 py-3 uppercase text-[var(--color-muted-foreground)]">
-                        {p.role}
-                      </td>
-                      <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                        {formatExpiry(p.expires_at)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {canIssue && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            type="button"
-                            disabled={revoking === p.token_hash}
-                            onClick={() => revoke(p.token_hash)}
-                          >
-                            {revoking === p.token_hash && (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            )}
-                            Revoke
-                          </Button>
-                        )}
-                      </td>
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
+                    <tr>
+                      <th className="px-4 py-2 font-medium">Email</th>
+                      <th className="px-4 py-2 font-medium">Role</th>
+                      <th className="px-4 py-2 font-medium">Expires</th>
+                      <th className="px-4 py-2 font-medium" aria-hidden></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {pending.map((p) => (
+                      <tr
+                        key={p.token_hash}
+                        className="border-t border-[var(--color-border)]"
+                      >
+                        <td className="px-4 py-3">{p.email}</td>
+                        <td className="px-4 py-3 uppercase text-[var(--color-muted-foreground)]">
+                          {p.role}
+                        </td>
+                        <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
+                          {formatExpiry(p.expires_at)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {canIssue && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              type="button"
+                              disabled={revoking === p.token_hash}
+                              onClick={() => revoke(p.token_hash)}
+                            >
+                              {revoking === p.token_hash && (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              )}
+                              Revoke
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -257,7 +420,9 @@ export function MembersClient({
                 <select
                   id="invite-role"
                   value={role}
-                  onChange={(e) => setRole(e.target.value as "admin" | "member")}
+                  onChange={(e) =>
+                    setRole(e.target.value as "admin" | "member")
+                  }
                   className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                 >
                   <option value="member">Member</option>
@@ -279,7 +444,9 @@ export function MembersClient({
                   Cancel
                 </Button>
                 <Button type="submit" disabled={pendingSubmit || !email}>
-                  {pendingSubmit && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {pendingSubmit && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
                   Send invite
                 </Button>
               </div>

@@ -1,0 +1,23 @@
+{
+  "label": "demo-api-contract-violation",
+  "title": "Contract violation: undeclared field 'discount_cents' in orders-api OrderTotal response",
+  "service": "payments-gateway",
+  "environment": "production",
+  "stacktrace": "contract validation failed: response for GET /v2/orders/{id}/total does not match schema \"OrderTotal\" (openapi/orders-v2.yaml)\nunexpected field: \"discount_cents\" (strict decoding enabled)\n\tgithub.com/nexis-demo/payments-gateway/internal/client/orders.(*Client).GetTotal\n\t\torders_client.go:88\n\tgithub.com/nexis-demo/payments-gateway/internal/checkout.(*Service).Capture\n\t\tcapture.go:41",
+  "logs": "ts=2026-08-10T09:14:03Z level=info service=orders-api msg=deploy_complete sha=9f31c02 changed_files=\"internal/http/handlers/total.go,internal/billing/discount.go\" declared_scope=\"internal/billing/rounding.go\"\nts=2026-08-10T09:15:41Z level=error service=payments-gateway msg=contract_violation upstream=orders-api endpoint=\"GET /v2/orders/{id}/total\" schema=OrderTotal unexpected_fields=[\"discount_cents\"] contract=openapi/orders-v2.yaml\nts=2026-08-10T09:15:41Z level=error service=payments-gateway msg=capture_aborted order_id=ord-55817 reason=contract_violation\nts=2026-08-10T09:16:02Z level=error service=payments-gateway msg=error_rate_breach route=/capture window=5m error_pct=100.0",
+  "metadata": {
+    "service_name": "payments-gateway",
+    "upstream_service": "orders-api",
+    "contract": "openapi/orders-v2.yaml",
+    "schema": "OrderTotal",
+    "unexpected_fields": ["discount_cents"],
+    "declared_scope": ["internal/billing/rounding.go"],
+    "actual_changed_files": [
+      "internal/http/handlers/total.go",
+      "internal/billing/discount.go"
+    ],
+    "upstream_deploy_sha": "9f31c02",
+    "incident_kind": "api-contract-violation",
+    "expected_scenario": "unknown"
+  }
+}

@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="950" viewBox="0 0 1300 950" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ar3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#333"/>
+    </marker>
+  </defs>
+  <rect width="1300" height="950" fill="#ffffff"/>
+  <text x="650" y="32" text-anchor="middle" font-size="20" font-weight="bold">Figure: DFD Level 1 — Self-Healing Loop (9-Agent Fleet)</text>
+
+  <!-- external entities -->
+  <rect x="30" y="70" width="150" height="50" fill="#dfeeff" stroke="#1c4e91" stroke-width="1.4"/>
+  <text x="105" y="99" text-anchor="middle" font-size="12">Sentry / Datadog /</text>
+  <text x="105" y="113" text-anchor="middle" font-size="12">PagerDuty webhook</text>
+
+  <rect x="1120" y="70" width="150" height="50" fill="#dfeeff" stroke="#1c4e91" stroke-width="1.4"/>
+  <text x="1195" y="99" text-anchor="middle" font-size="12">LLM Provider</text>
+  <text x="1195" y="113" text-anchor="middle" font-size="12">(OpenAI / Ollama)</text>
+
+  <rect x="1120" y="820" width="150" height="50" fill="#dfeeff" stroke="#1c4e91" stroke-width="1.4"/>
+  <text x="1195" y="849" text-anchor="middle" font-size="12">GitHub / GitOps /</text>
+  <text x="1195" y="863" text-anchor="middle" font-size="12">deploy-engine</text>
+
+  <rect x="30" y="820" width="150" height="50" fill="#dfeeff" stroke="#1c4e91" stroke-width="1.4"/>
+  <text x="105" y="849" text-anchor="middle" font-size="12">Owner / Admin</text>
+  <text x="105" y="863" text-anchor="middle" font-size="12">(approval gate)</text>
+
+  <!-- process chain -->
+  <g font-size="11.5">
+    <circle cx="230" cy="180" r="52" fill="#e8f0ff" stroke="#2c5aa0"/><text x="230" y="176" text-anchor="middle">1.0</text><text x="230" y="190" text-anchor="middle">Sentinel</text><text x="230" y="203" text-anchor="middle" font-size="9">EWMA/3σ detect</text>
+
+    <circle cx="230" cy="330" r="52" fill="#e8f0ff" stroke="#2c5aa0"/><text x="230" y="326" text-anchor="middle">2.0</text><text x="230" y="340" text-anchor="middle">Pathfinder</text><text x="230" y="353" text-anchor="middle" font-size="9">graph-evidence diagnose</text>
+
+    <circle cx="230" cy="480" r="52" fill="#e8f0ff" stroke="#2c5aa0"/><text x="230" y="476" text-anchor="middle">3.0</text><text x="230" y="490" text-anchor="middle">Synthesiser</text><text x="230" y="503" text-anchor="middle" font-size="9">classify + route agents</text>
+
+    <circle cx="450" cy="180" r="52" fill="#e9f9ec" stroke="#2f8f4e"/><text x="450" y="176" text-anchor="middle">4.0</text><text x="450" y="190" text-anchor="middle">Architect</text><text x="450" y="203" text-anchor="middle" font-size="9">plan + contract</text>
+
+    <circle cx="450" cy="330" r="52" fill="#e9f9ec" stroke="#2f8f4e"/><text x="450" y="326" text-anchor="middle">5.0</text><text x="450" y="340" text-anchor="middle">Backend</text><text x="450" y="353" text-anchor="middle" font-size="9">minimal-diff codegen</text>
+
+    <circle cx="450" cy="480" r="52" fill="#e9f9ec" stroke="#2f8f4e"/><text x="450" y="476" text-anchor="middle">6.0</text><text x="450" y="490" text-anchor="middle">QA</text><text x="450" y="503" text-anchor="middle" font-size="9">property test-gen</text>
+
+    <circle cx="670" cy="230" r="52" fill="#e9f9ec" stroke="#2f8f4e"/><text x="670" y="220" text-anchor="middle">7.0</text><text x="670" y="234" text-anchor="middle">DevOps</text><text x="670" y="247" text-anchor="middle" font-size="9">CI/CD manifest</text>
+
+    <circle cx="670" cy="410" r="52" fill="#e9f9ec" stroke="#2f8f4e"/><text x="670" y="400" text-anchor="middle">8.0</text><text x="670" y="414" text-anchor="middle">Data Engineer</text><text x="670" y="427" text-anchor="middle" font-size="9">migrations + drift</text>
+
+    <circle cx="880" cy="330" r="55" fill="#fdeee0" stroke="#c15b0f"/><text x="880" y="320" text-anchor="middle">9.0</text><text x="880" y="334" text-anchor="middle">Validator</text><text x="880" y="347" text-anchor="middle" font-size="9">Docker shadow sandbox</text>
+
+    <circle cx="880" cy="480" r="55" fill="#fdeee0" stroke="#c15b0f"/><text x="880" y="470" text-anchor="middle">10.0</text><text x="880" y="484" text-anchor="middle">Approval Gate</text><text x="880" y="497" text-anchor="middle" font-size="9">severity-routed HITL</text>
+
+    <circle cx="880" cy="630" r="55" fill="#fdeee0" stroke="#c15b0f"/><text x="880" y="620" text-anchor="middle">11.0</text><text x="880" y="634" text-anchor="middle">GitOps Deploy</text><text x="880" y="647" text-anchor="middle" font-size="9">open PR / redeploy</text>
+
+    <circle cx="880" cy="780" r="55" fill="#fdeee0" stroke="#c15b0f"/><text x="880" y="770" text-anchor="middle">12.0</text><text x="880" y="784" text-anchor="middle">Rollback Probe</text><text x="880" y="797" text-anchor="middle" font-size="9">post-deploy SLO check</text>
+  </g>
+
+  <!-- data stores -->
+  <g font-size="10.5">
+    <rect x="1040" y="180" width="130" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="1105" y="202" text-anchor="middle">incidents_raw</text>
+    <rect x="1040" y="240" width="130" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="1105" y="262" text-anchor="middle">Neo4j graph</text>
+    <rect x="1040" y="480" width="130" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="1105" y="502" text-anchor="middle">patchstore (MinIO)</text>
+    <rect x="1040" y="540" width="130" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="1105" y="562" text-anchor="middle">approval_decisions</text>
+    <rect x="1040" y="600" width="130" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="1105" y="622" text-anchor="middle">feedback_examples</text>
+    <rect x="1040" y="660" width="130" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="1105" y="682" text-anchor="middle">lineage_events</text>
+    <rect x="1040" y="720" width="130" height="34" fill="#fdf3d8" stroke="#8a6100"/><text x="1105" y="742" text-anchor="middle">deployments DB</text>
+  </g>
+
+  <!-- flows -->
+  <g stroke="#333" stroke-width="1.2" fill="none">
+    <path d="M180 105 L 200 145" marker-end="url(#ar3)"/>
+    <path d="M230 232 L 230 278" marker-end="url(#ar3)"/>
+    <path d="M230 382 L 230 428" marker-end="url(#ar3)"/>
+    <path d="M282 460 L 405 210" marker-end="url(#ar3)"/>
+    <path d="M502 180 L 620 220" marker-end="url(#ar3)"/>
+    <path d="M502 330 L 630 380" marker-end="url(#ar3)"/>
+    <path d="M282 480 L 405 480" marker-end="url(#ar3)"/>
+    <path d="M722 245 L 840 310" marker-end="url(#ar3)"/>
+    <path d="M722 395 L 840 350" marker-end="url(#ar3)"/>
+    <path d="M502 480 L 830 470" marker-end="url(#ar3)"/>
+    <path d="M880 385 L 880 425" marker-end="url(#ar3)"/>
+    <path d="M880 535 L 880 575" marker-end="url(#ar3)"/>
+    <path d="M880 685 L 880 725" marker-end="url(#ar3)"/>
+    <path d="M180 830 L 850 505" marker-end="url(#ar3)"/>
+    <text x="450" y="700" font-size="10.5">approve / reject / modify</text>
+    <path d="M935 630 L 1120 830" marker-end="url(#ar3)"/>
+    <path d="M935 780 L 1120 840" marker-end="url(#ar3)"/>
+    <path d="M1120 100 L 500 190" marker-end="url(#ar3)" stroke-dasharray="4 3"/>
+    <path d="M1120 100 L 500 340" marker-end="url(#ar3)" stroke-dasharray="4 3"/>
+    <text x="750" y="130" font-size="10.5">structured JSON completion</text>
+
+    <path d="M270 200 L 1040 195" marker-end="url(#ar3)" stroke="#888"/>
+    <path d="M280 340 L 1040 255" marker-end="url(#ar3)" stroke="#888"/>
+    <path d="M932 340 L 1040 490" marker-end="url(#ar3)" stroke="#888"/>
+    <path d="M932 490 L 1040 550" marker-end="url(#ar3)" stroke="#888"/>
+    <path d="M932 500 L 1040 615" marker-end="url(#ar3)" stroke="#888"/>
+    <path d="M700 405 L 1040 670" marker-end="url(#ar3)" stroke="#888"/>
+    <path d="M932 640 L 1040 730" marker-end="url(#ar3)" stroke="#888"/>
+  </g>
+
+  <text x="650" y="910" text-anchor="middle" font-size="12" fill="#444">12.0 Rollback Probe closes the loop: an SLO breach after deploy re-enters the pipeline as a fresh Sentinel-detected incident.</text>
+</svg>

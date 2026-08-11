@@ -10,10 +10,11 @@
 #     + neo4j + minio. Enough to run the E2E test from a cold clone.
 #   - observability: prometheus, grafana, loki, tempo, otel-collector. Opt in
 #     when you actually need to inspect traces/dashboards.
-#   - agents: validator, gitops, causal-inference. Opt in when you need to
-#     exercise the recovery pipeline end-to-end (PR creation, sandbox runs,
-#     causal inference). The control-plane tolerates each of these being
-#     absent — it falls back to stub/disabled paths and logs a warning.
+#   - agents: validator, gitops, causal-inference, deploy-engine. Opt in when
+#     you need to exercise the recovery pipeline end-to-end (PR creation,
+#     sandbox runs, causal inference, preview deploys). The control-plane
+#     tolerates each of these being absent — it falls back to stub/disabled
+#     paths and logs a warning.
 #
 # Usage:
 #   docker compose up -d                                       # slim stack
@@ -392,6 +393,8 @@ services:
       TEMPORAL_TASK_QUEUE: nexis-recovery
       VALIDATOR_URL: http://validator:8081
       VALIDATOR_TOKEN: ${VALIDATOR_TOKEN:?VALIDATOR_TOKEN required — see .env.example}
+      DEPLOY_ENGINE_URL: http://deploy-engine:8091
+      DEPLOY_ENGINE_TOKEN: ${DEPLOY_ENGINE_TOKEN:?DEPLOY_ENGINE_TOKEN required — see .env.example}
       PATCH_STORE: minio
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
@@ -502,6 +505,42 @@ services:
       timeout: 3s
       retries: 10
       start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks: [nexis]
+
+  deploy-engine:
+    build:
+      context: services/deploy-engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    <<: *default-logging
+    profiles: ["agents"]
+    environment:
+      PORT: "8091"
+      DEPLOY_ENGINE_TOKEN: ${DEPLOY_ENGINE_TOKEN:?DEPLOY_ENGINE_TOKEN required — see .env.example}
+      DOCKER_HOST: unix:///var/run/docker.sock
+      # Preview containers publish ports on the HOST daemon (the socket is
+      # the host's), so health polls from inside this container must dial
+      # the host gateway, not localhost.
+      DEPLOY_HEALTH_HOST: host.docker.internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "127.0.0.1:8091:8091"
+    # The deploy-engine image is alpine with curl installed (see its
+    # Dockerfile) so a vanilla curl-based healthcheck works here, mirroring
+    # the validator service.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8091/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         limits:

@@ -189,19 +189,25 @@ func (s *PGStore) ClearUserMFA(ctx context.Context, userID string) error {
 // --- sessions --------------------------------------------------------------
 
 func (s *PGStore) CreateSession(ctx context.Context, sess *domain.Session) error {
+	// user_agent / ip are stored as NULL (not '') when absent so the
+	// session-management UI can distinguish "not captured" from real values.
 	const q = `
-		INSERT INTO sessions (id, user_id, org_id, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO sessions (id, user_id, org_id, created_at, expires_at, user_agent, ip)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''))
 		RETURNING id, created_at`
-	return s.pool.QueryRow(ctx, q, sess.ID, sess.UserID, sess.OrgID, sess.CreatedAt, sess.ExpiresAt).
+	return s.pool.QueryRow(ctx, q, sess.ID, sess.UserID, sess.OrgID, sess.CreatedAt, sess.ExpiresAt, sess.UserAgent, sess.IP).
 		Scan(&sess.ID, &sess.CreatedAt)
 }
 
 func (s *PGStore) GetSession(ctx context.Context, id string) (*domain.Session, error) {
-	const q = `SELECT id, user_id, org_id, created_at, expires_at, revoked_at FROM sessions WHERE id = $1`
+	const q = `
+		SELECT id, user_id, org_id, created_at, expires_at, revoked_at,
+		       last_seen_at, COALESCE(user_agent, ''), COALESCE(ip, '')
+		FROM sessions WHERE id = $1`
 	var sess domain.Session
 	err := s.pool.QueryRow(ctx, q, id).Scan(
 		&sess.ID, &sess.UserID, &sess.OrgID, &sess.CreatedAt, &sess.ExpiresAt, &sess.RevokedAt,
+		&sess.LastSeenAt, &sess.UserAgent, &sess.IP,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrNotFound
@@ -210,6 +216,59 @@ func (s *PGStore) GetSession(ctx context.Context, id string) (*domain.Session, e
 		return nil, err
 	}
 	return &sess, nil
+}
+
+// ListSessionsByUser returns live sessions for userID, newest first. Pool-
+// bound like the other session methods — sessions are bootstrap state keyed
+// by the admin pool, and the caller (Provider.ListSessions) has already
+// scoped the query to the authenticated user's own id.
+func (s *PGStore) ListSessionsByUser(ctx context.Context, userID string, now time.Time) ([]domain.Session, error) {
+	const q = `
+		SELECT id, user_id, org_id, created_at, expires_at, revoked_at,
+		       last_seen_at, COALESCE(user_agent, ''), COALESCE(ip, '')
+		FROM sessions
+		WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > $2
+		ORDER BY created_at DESC`
+	rows, err := s.pool.Query(ctx, q, userID, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.Session{}
+	for rows.Next() {
+		var sess domain.Session
+		if err := rows.Scan(
+			&sess.ID, &sess.UserID, &sess.OrgID, &sess.CreatedAt, &sess.ExpiresAt, &sess.RevokedAt,
+			&sess.LastSeenAt, &sess.UserAgent, &sess.IP,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, sess)
+	}
+	return out, rows.Err()
+}
+
+// TouchSession stamps last_seen_at. Missing rows return ErrNotFound; callers
+// treat the touch as best-effort.
+func (s *PGStore) TouchSession(ctx context.Context, id string, at time.Time) error {
+	const q = `UPDATE sessions SET last_seen_at = $2 WHERE id = $1`
+	tag, err := s.pool.Exec(ctx, q, id, at)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// RevokeSessionsForUser bulk-revokes every live session for userID. Zero
+// affected rows is not an error — the password-reset flow calls this even
+// when the user has no open sessions.
+func (s *PGStore) RevokeSessionsForUser(ctx context.Context, userID string) error {
+	const q = `UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`
+	_, err := s.pool.Exec(ctx, q, userID)
+	return err
 }
 
 func (s *PGStore) RevokeSession(ctx context.Context, id string) error {
@@ -258,6 +317,62 @@ func (s *PGStore) MarkMagicTokenUsed(ctx context.Context, hash []byte) error {
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("mark magic token used: already used or missing: %w", domain.ErrNotFound)
+	}
+	return nil
+}
+
+// --- password reset tokens (Phase 9) ---------------------------------------
+//
+// Pool-bound like magic_tokens: the reset flow runs before any session
+// exists, so there's no RLS tx to thread. Only the SHA-256 hash ever touches
+// the table.
+
+func (s *PGStore) CreatePasswordResetToken(ctx context.Context, hash []byte, userID string, expiresAt time.Time) error {
+	const q = `
+		INSERT INTO password_reset_tokens (token_hash, user_id, expires_at)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (token_hash) DO UPDATE SET expires_at = EXCLUDED.expires_at, consumed_at = NULL`
+	_, err := s.pool.Exec(ctx, q, hash, userID, expiresAt)
+	return err
+}
+
+func (s *PGStore) GetPasswordResetToken(ctx context.Context, hash []byte) (string, time.Time, *time.Time, error) {
+	const q = `SELECT user_id, expires_at, consumed_at FROM password_reset_tokens WHERE token_hash = $1`
+	var userID string
+	var expiresAt time.Time
+	var consumedAt *time.Time
+	err := s.pool.QueryRow(ctx, q, hash).Scan(&userID, &expiresAt, &consumedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", time.Time{}, nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return "", time.Time{}, nil, err
+	}
+	return userID, expiresAt, consumedAt, nil
+}
+
+func (s *PGStore) MarkPasswordResetConsumed(ctx context.Context, hash []byte) error {
+	const q = `UPDATE password_reset_tokens SET consumed_at = now() WHERE token_hash = $1 AND consumed_at IS NULL`
+	tag, err := s.pool.Exec(ctx, q, hash)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("mark password reset consumed: already consumed or missing: %w", domain.ErrNotFound)
+	}
+	return nil
+}
+
+// UpdateUserPassword overwrites the stored bcrypt hash. users is not an
+// org-scoped table, so this runs on the pool like the other user mutations.
+func (s *PGStore) UpdateUserPassword(ctx context.Context, userID, passwordHash string) error {
+	const q = `UPDATE users SET password_hash = $2 WHERE id = $1`
+	tag, err := s.pool.Exec(ctx, q, userID, passwordHash)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
 	}
 	return nil
 }

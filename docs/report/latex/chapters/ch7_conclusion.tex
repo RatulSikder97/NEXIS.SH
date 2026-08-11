@@ -1,0 +1,160 @@
+\chapter{Conclusion and Future Work}
+
+\section{Overview}
+
+This project set out to build a system that does what existing AI developer
+tools do not: close the loop between detecting a software failure and
+deploying a verified fix for it, with a human involved as a single decision
+point rather than as the pipeline itself. The delivered platform, Nexis,
+realises that goal as a working, verified system rather than a design
+proposal.
+
+The central deliverable is the nine-agent closed-loop self-healing pipeline,
+durably orchestrated by Temporal \cite{temporal}. A five-agent Execution Team
+(Architect, Backend, QA, DevOps, Data Engineer) performs the engineering
+work, while a four-agent Self-Healing Loop (Sentinel, Pathfinder,
+Synthesiser, Validator) detects faults, localises root causes over the Neo4j
+dependency graph \cite{neo4j}, sandbox-validates every candidate patch, and
+routes the result through a severity-classified Approval Gate offering
+Approve, Reject, and Modify decisions. This pipeline was not merely
+implemented but exercised live: Chapter 6 reports two complete end-to-end
+recovery runs against a real local language model \cite{ollama} -- one in
+which the 120-second approval window genuinely elapsed and the run was
+timeout-rejected exactly as the safety design intends, and one in which a
+detected fault proceeded through planning, patch generation, property-based
+test validation, human approval, and deployment to a Succeeded terminal
+state in approximately one minute and forty seconds.
+
+The second major deliverable is the from-scratch Docker preview-deploy
+engine \cite{docker}. Given a connected repository, it clones the code,
+detects the technology stack, generates a working Dockerfile when none
+exists, builds and runs the container under resource limits, and returns a
+live preview URL; build and health-check failures feed back into the same
+self-healing pipeline as any other incident source. This too was proven
+live: a real public repository with no Dockerfile was cloned, containerised,
+built, served, HTTP-verified, and cleanly stopped in a single recorded run.
+
+Around these two engines sits a complete multi-tenant platform: JWT and SSO
+authentication with MFA and session management \cite{workos}, role-based
+access control enforced down to the database row via PostgreSQL Row-Level
+Security \cite{pgrls}, the heuristic role-recommendation engine that turns
+audit-log evidence into explainable privilege suggestions, Stripe-based
+billing \cite{stripe}, webhook-driven integrations with GitHub, Sentry,
+Datadog, PagerDuty, and Slack \cite{sentry,datadog,pagerduty,slackapi}, and
+an observability surface (dashboards, cost tracking, system health probes,
+hash-chained audit log) built on OpenTelemetry \cite{otel}. All Go modules,
+the Python causal-inference service, and the Next.js console pass their full
+build, vet, lint, and test suites, as documented in Chapter 6.
+
+\section{Limitations of the Project}
+
+Academic integrity requires that the boundary between what was demonstrated
+and what was not be stated plainly. The following limitations are real,
+known, and deliberate; none is hidden behind softer wording.
+
+\begin{itemize}
+  \item \textbf{No production credentials were exercised.} No real GitHub
+  App or OpenAI production credentials existed in the evaluation environment
+  used for this report. The live evidence was produced with local Ollama
+  models \cite{ollama} and an unauthenticated clone of a public repository;
+  a fully credentialed production path -- ending in a real merged GitHub
+  pull request -- was not exercised end-to-end.
+  \item \textbf{The platform is not yet live on its domain.} The
+  \texttt{nexis.sh} domain is registered but the platform is not yet
+  deployed to it. All evidence in this report comes from local, native
+  execution. Docker was unavailable in the build environment, so Podman
+  \cite{podman} was substituted as a Docker-API-compatible runtime and shown
+  to behave identically.
+  \item \textbf{Fine-tuning is a manual step by design.} The RLHF
+  data-export pipeline is real and tested -- every terminal approval
+  decision, including engineer-edited diffs, is persisted and exportable as
+  JSONL -- but actually submitting a fine-tuning job against that export is
+  a deliberate manual step involving real money and a real external API
+  call, not an automated one.
+  \item \textbf{One of twenty-seven demo scenarios is fully wired.} The
+  Live-Demo console lists 27 curated fault scenarios, of which exactly one
+  is wired end-to-end to a real fixture and classification path today; the
+  remaining 26 are UI-complete but backend-pending.
+  \item \textbf{The causal ranking is a proxy, not a fitted causal model.}
+  The causal-inference sidecar ranks root-cause candidates using an honest
+  statistical and graph-structural scoring method with a transparent
+  per-component confidence breakdown. It is explicitly not a fitted DoWhy
+  structural causal model \cite{dowhy}, because no interventional production
+  data exists against which such a model could be fitted; claiming otherwise
+  would be an overstatement.
+  \item \textbf{A known unrelated bug was left unfixed.} A pre-existing bug
+  in the workspace-onboarding progress poller (a 404 from
+  \texttt{/v1/workspaces/\{id\}/events}) was found during evaluation and
+  intentionally left unfixed as out of scope; the workspace itself
+  provisions successfully server-side regardless.
+  \item \textbf{No formal load testing was performed.} As noted in
+  Chapter 6, no formal concurrent-load performance benchmark was run; the
+  reported latencies come from single-run live executions, not from a
+  controlled load harness.
+\end{itemize}
+
+\section{Future Work}
+
+Each item below is grounded in the existing architecture and represents a
+concrete next step rather than a generic aspiration.
+
+\begin{itemize}
+  \item \textbf{Credentialed production deployment.} Deploy the platform to
+  the registered \texttt{nexis.sh} domain behind a real GitHub App
+  installation and a paid OpenAI account, so that the full production path
+  -- authenticated clone, real pull-request creation, real merge-triggered
+  redeploy -- is exercised with production credentials end-to-end.
+  \item \textbf{Complete the scenario library.} Wire the remaining 26
+  Live-Demo scenario cards to real fixtures and classification paths,
+  extending the existing 11-scenario fault-injection library across the
+  application, database, deploy, observability, and security categories it
+  already enumerates.
+  \item \textbf{Finer-grained Sentinel baselines.} The Sentinel's
+  statistical spike rule currently maintains its EWMA mean and variance
+  baseline per organisation; extending it to per-(organisation, service)
+  baselines would let a noisy service stop masking a quiet one.
+  \item \textbf{A fitted causal model.} Once production incident data with
+  genuine interventions accumulates, fit a real DoWhy structural causal
+  model \cite{dowhy} and evaluate it against the current graph-evidence
+  proxy, which was designed from the outset to be replaceable.
+  \item \textbf{Execute a fine-tuning run.} Once the accumulated RLHF export
+  contains enough approve/reject/modify examples, submit an actual
+  fine-tuning job against it and measure whether the tuned model reduces
+  rejection and modification rates at the approval gate.
+  \item \textbf{Real preview subdomains.} Add a reverse-proxy layer (for
+  example Traefik) in front of the deploy engine so that preview
+  deployments receive stable per-project subdomains instead of
+  \texttt{localhost} ports, which is a prerequisite for sharing preview
+  URLs beyond the local machine.
+  \item \textbf{Formal load benchmarking.} Run a controlled concurrent-load
+  benchmark against the control plane and the recovery pipeline to
+  characterise throughput, queue behaviour under simultaneous incidents,
+  and Temporal worker saturation.
+  \item \textbf{Human-subjects usability study.} Conduct the planned
+  NASA-TLX cognitive-workload study \cite{nasatlx} with external
+  participants; the survey instrument is already integrated into the
+  post-incident flow, so the remaining work is recruitment and analysis
+  rather than implementation.
+\end{itemize}
+
+\section{Conclusion}
+
+The central claim of this report is deliberately narrow and deliberately
+strong: that a software fault can travel from automatic detection, through
+multi-agent diagnosis, patch generation, sandboxed validation, and a single
+human approval decision, to a deployed fix -- inside one continuous,
+durable, observable pipeline. That claim is not asserted; it is demonstrated
+with reproducible, live evidence. One recorded run shows the loop refusing
+to proceed when its human gate was not answered in time, and another shows
+the same loop carrying a real fault to an approved, deployed resolution in
+under two minutes, with every agent step, token count, and decision recorded
+in a durable timeline. The preview-deploy engine extends the same principle
+to infrastructure, turning its own build failures into self-healing targets.
+Equally important is what this report declines to claim. The honest
+accounting in Section 7.2 -- local models rather than production
+credentials, a registered but not yet live domain, a proxy rather than a
+fitted causal model, one wired demo scenario out of twenty-seven -- is not a
+list of apologies but part of the project's rigor: the boundary of the
+evidence is drawn exactly where the evidence stops. Within that boundary,
+Nexis stands as a complete, working demonstration that closed-loop fault
+recovery, gated by a single human decision point, is buildable today.

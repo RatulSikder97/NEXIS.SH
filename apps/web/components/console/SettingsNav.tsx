@@ -23,6 +23,7 @@ const ITEMS: Item[] = [
   { href: "/console/settings/members", label: "Members & Roles" },
   { href: "/console/settings/workspaces", label: "Workspaces" },
   { href: "/console/settings/api-keys", label: "API Keys" },
+  { href: "/console/settings/sessions", label: "Sessions" },
   { href: "/console/settings/billing", label: "Billing" },
   { href: "/console/settings/preferences", label: "Preferences" },
 ];
@@ -35,7 +36,8 @@ export function SettingsNav() {
         Settings
       </p>
       {ITEMS.map((it) => {
-        const active = pathname === it.href || pathname.startsWith(it.href + "/");
+        const active =
+          pathname === it.href || pathname.startsWith(it.href + "/");
         return (
           <a
             key={it.href}

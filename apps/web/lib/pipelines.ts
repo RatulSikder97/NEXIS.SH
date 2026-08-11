@@ -23,8 +23,10 @@
 
 const API =
   typeof window === "undefined"
-    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
-    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    ? (process.env.API_URL_INTERNAL ??
+      process.env.NEXT_PUBLIC_API_URL ??
+      "http://localhost:8080")
+    : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080");
 
 // WorkflowRunStatus tracks the lifecycle of a single pipeline run. Mirrors
 // domain.WorkflowRunStatus on the Go side.
@@ -72,7 +74,8 @@ export type ActivityEventStatus =
   | "succeeded"
   | "failed"
   | "retrying"
-  | "timed_out";
+  | "timed_out"
+  | "skipped";
 
 // Phase 6 — typed payloads for the L2 agents. Each carries the fields the
 // summary cards render in the incident detail header. These are kept as
@@ -173,7 +176,9 @@ export const AGENT_LABELS: Record<AgentRole, string> = {
 
 async function failOr<T>(r: Response): Promise<T> {
   if (!r.ok) {
-    const body = (await r.json().catch(() => ({}) as Record<string, unknown>)) as {
+    const body = (await r
+      .json()
+      .catch(() => ({}) as Record<string, unknown>)) as {
       error?: string;
     };
     throw new Error(body.error ?? r.statusText);
@@ -337,7 +342,9 @@ export const pipelines = {
       );
       if (r.status === 404) return null;
       if (!r.ok) {
-        const body = (await r.json().catch(() => ({}) as Record<string, unknown>)) as {
+        const body = (await r
+          .json()
+          .catch(() => ({}) as Record<string, unknown>)) as {
           error?: string;
         };
         throw new Error(body.error ?? r.statusText);

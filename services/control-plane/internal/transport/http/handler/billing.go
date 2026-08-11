@@ -19,9 +19,9 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
-	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/dto"
 	appmw "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/middleware"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
 )
 
 // toPaymentMethodResp converts a domain.PaymentMethod into the wire shape.
@@ -257,12 +257,12 @@ func BillingUsage(billingRepo *repo.BillingRepo) http.HandlerFunc {
 			return
 		}
 		httpJSON(w, http.StatusOK, map[string]any{
-			"since":              since.Format(time.RFC3339),
-			"until":              until.Format(time.RFC3339),
-			"total_cents":        breakdown.TotalCents,
-			"total_cents_exact":  breakdown.TotalCentsExact,
-			"by_workspace":       breakdown.ByWorkspace,
-			"by_kind":            breakdown.ByKind,
+			"since":             since.Format(time.RFC3339),
+			"until":             until.Format(time.RFC3339),
+			"total_cents":       breakdown.TotalCents,
+			"total_cents_exact": breakdown.TotalCentsExact,
+			"by_workspace":      breakdown.ByWorkspace,
+			"by_kind":           breakdown.ByKind,
 		})
 	}
 }

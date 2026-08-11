@@ -2,9 +2,9 @@
 //
 // Two protected endpoints under /v1/me/preferences:
 //
-//   * GET  → returns the current user's preferences JSON object (or {} if
+//   - GET  → returns the current user's preferences JSON object (or {} if
 //     none have been set). Open to any authenticated principal.
-//   * PATCH → overwrites preferences with the supplied JSON body.
+//   - PATCH → overwrites preferences with the supplied JSON body.
 //
 // The endpoint validates the `theme` key when present — only "light", "dark",
 // and "system" are accepted. Other keys pass through unchanged so future

@@ -101,6 +101,19 @@ func TestPathfinder_HappyPath_GraphAndCausalWired(t *testing.T) {
 				From: domain.GraphNode{Name: "get_user"},
 				To:   domain.GraphNode{Name: "UndefinedColumn"},
 				Kind: domain.GraphEdgeRaised,
+				Hops: 1,
+			},
+			{
+				From: domain.GraphNode{Name: "get_user"},
+				To:   domain.GraphNode{Kind: domain.GraphKindSymbol, Name: "load_columns"},
+				Kind: domain.GraphEdgeCalls,
+				Hops: 2,
+			},
+			{
+				From: domain.GraphNode{Name: "get_user"},
+				To:   domain.GraphNode{Kind: domain.GraphKindExceptionType, Name: "OperationalError"},
+				Kind: domain.GraphEdgeRaised,
+				Hops: 2,
 			},
 		},
 	}
@@ -134,6 +147,45 @@ func TestPathfinder_HappyPath_GraphAndCausalWired(t *testing.T) {
 	}
 	if causal.last.RootCauseNode != "get_user" {
 		t.Errorf("rootCauseNode not propagated to causal: %+v", causal.last)
+	}
+
+	// Candidate set: symptom symbol at distance 0 with its subgraph degree,
+	// Symbol-kind neighbours with hop distance + path multiplicity, and
+	// ExceptionType neighbours excluded (they are evidence, not hypotheses).
+	cands := causal.last.Candidates
+	if len(cands) != 3 {
+		t.Fatalf("expected 3 candidates (get_user, UndefinedColumn, load_columns), got %+v", cands)
+	}
+	root := cands[0]
+	if root.Node != "get_user" || root.DistanceFromSymptom != 0 {
+		t.Errorf("first candidate should be symptom symbol at distance 0: %+v", root)
+	}
+	if root.OutDegree != 1 {
+		t.Errorf("root subgraph degree should count only 1-hop edges, got %d", root.OutDegree)
+	}
+	if len(root.Evidence) == 0 {
+		t.Errorf("root candidate must carry its own evidence: %+v", root)
+	}
+	byName := map[string]domain.CausalCandidate{}
+	for _, c := range cands {
+		byName[c.Node] = c
+	}
+	uc, ok := byName["UndefinedColumn"]
+	if !ok {
+		t.Fatalf("UndefinedColumn (empty Kind -> Symbol fallback) missing: %+v", cands)
+	}
+	if uc.DistanceFromSymptom != 1 || uc.InDegree != 1 {
+		t.Errorf("UndefinedColumn should be distance=1 in_degree=1, got %+v", uc)
+	}
+	lc, ok := byName["load_columns"]
+	if !ok {
+		t.Fatalf("load_columns Symbol neighbour missing: %+v", cands)
+	}
+	if lc.DistanceFromSymptom != 2 {
+		t.Errorf("load_columns hop distance should be 2, got %+v", lc)
+	}
+	if _, present := byName["OperationalError"]; present {
+		t.Errorf("ExceptionType neighbour must not become a candidate: %+v", cands)
 	}
 
 	rcn, _ := out.Structured["root_cause_node"].(string)
@@ -184,6 +236,9 @@ func TestPathfinder_GraphMissing(t *testing.T) {
 	}
 	if causal.last.RootCauseNode != "" {
 		t.Errorf("rootCauseNode should be empty when graph is nil, got %q", causal.last.RootCauseNode)
+	}
+	if len(causal.last.Candidates) != 0 {
+		t.Errorf("candidates should be empty when graph is nil (sidecar falls back to its prior), got %+v", causal.last.Candidates)
 	}
 	ev, _ := out.Structured["evidence_chain"].([]string)
 	if len(ev) == 0 {

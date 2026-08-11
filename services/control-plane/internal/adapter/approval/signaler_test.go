@@ -14,10 +14,10 @@ import (
 )
 
 type signalerFakeRepo struct {
-	mu       sync.Mutex
-	row      domain.ApprovalDecision
-	rowErr   error
-	updates  int
+	mu      sync.Mutex
+	row     domain.ApprovalDecision
+	rowErr  error
+	updates int
 }
 
 func (f *signalerFakeRepo) Create(_ context.Context, _ domain.ApprovalDecision) (string, error) {

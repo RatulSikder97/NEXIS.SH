@@ -9,6 +9,10 @@ type NotificationKind string
 const (
 	NotifApprovalRequested NotificationKind = "approval_requested"
 	NotifPipelineComplete  NotificationKind = "pipeline_complete"
+	// NotifDailyDigest is the DailyDigest cron's "your daily summary is
+	// ready" ping. The full report lives in digest_reports; the email deep-
+	// links to the console dashboard.
+	NotifDailyDigest NotificationKind = "daily_digest"
 )
 
 // ChannelTarget identifies a delivery destination. Used by the multi-fanout

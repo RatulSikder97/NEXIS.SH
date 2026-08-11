@@ -230,8 +230,12 @@ func TestMe_HappyPath(t *testing.T) {
 		t.Fatalf("status: %d body=%s", rec.Code, rec.Body.String())
 	}
 	var me struct {
-		User struct{ Email string `json:"email"` } `json:"user"`
-		Org  struct{ Name string `json:"name"` }  `json:"org"`
+		User struct {
+			Email string `json:"email"`
+		} `json:"user"`
+		Org struct {
+			Name string `json:"name"`
+		} `json:"org"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&me); err != nil {
 		t.Fatalf("decode: %v", err)

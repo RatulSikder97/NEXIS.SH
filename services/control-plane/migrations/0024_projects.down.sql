@@ -1,7 +1,7 @@
 -- 0024_projects.down.sql
 
 ALTER TABLE webhook_deliveries DROP COLUMN IF EXISTS project_id;
-ALTER TABLE approvals          DROP COLUMN IF EXISTS project_id;
+ALTER TABLE approval_decisions DROP COLUMN IF EXISTS project_id;
 ALTER TABLE incidents_raw      DROP COLUMN IF EXISTS project_id;
 ALTER TABLE workflow_runs      DROP COLUMN IF EXISTS project_id;
 

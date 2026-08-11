@@ -1,0 +1,280 @@
+- generic [active] [ref=f52e1]:
+  - generic [ref=f52e2]:
+    - link "Skip to content" [ref=f52e3] [cursor=pointer]:
+      - /url: "#main"
+    - complementary [ref=f52e4]:
+      - generic [ref=f52e5]:
+        - generic [ref=f52e6]: NEXIS
+        - button "Collapse sidebar" [ref=f52e9]
+      - 'button "Workspace: Production" [ref=f52e967]':
+        - generic [ref=f52e969]:
+          - generic [ref=f52e970]: Production
+          - generic [ref=f52e971]: us-east-1
+      - navigation "Console navigation" [ref=f52e15]:
+        - generic [ref=f52e16]:
+          - paragraph [ref=f52e17]: Workspace
+          - list [ref=f52e18]:
+            - listitem [ref=f52e19]:
+              - link "Dashboard" [ref=f52e20] [cursor=pointer]:
+                - /url: /console
+            - listitem [ref=f52e28]:
+              - link "Projects" [ref=f52e29] [cursor=pointer]:
+                - /url: /console/projects
+            - listitem [ref=f52e42]:
+              - link "Incidents" [ref=f52e43] [cursor=pointer]:
+                - /url: /console/incidents
+            - listitem [ref=f52e48]:
+              - link "Approvals" [ref=f52e49] [cursor=pointer]:
+                - /url: /console/approvals
+            - listitem [ref=f52e55]:
+              - link "Audit Log" [ref=f52e56] [cursor=pointer]:
+                - /url: /console/audit
+        - generic [ref=f52e62]:
+          - paragraph [ref=f52e63]: Fleet
+          - list [ref=f52e64]:
+            - listitem [ref=f52e65]:
+              - link "Agents 9 items" [ref=f52e66] [cursor=pointer]:
+                - /url: /console/agents
+                - generic [ref=f52e72]: Agents
+                - generic "9 items" [ref=f52e74]: "9"
+            - listitem [ref=f52e75]:
+              - link "Workflows" [ref=f52e76] [cursor=pointer]:
+                - /url: /console/workflows
+            - listitem [ref=f52e83]:
+              - link "Activity Stream" [ref=f52e84] [cursor=pointer]:
+                - /url: /console/activity
+            - listitem [ref=f52e89]:
+              - link "Validator Sandbox" [ref=f52e90] [cursor=pointer]:
+                - /url: /console/validator
+        - generic [ref=f52e97]:
+          - paragraph [ref=f52e98]: Observability
+          - list [ref=f52e99]:
+            - listitem [ref=f52e100]:
+              - link "Performance" [ref=f52e101] [cursor=pointer]:
+                - /url: /console/performance
+            - listitem [ref=f52e107]:
+              - link "Cost Tracker" [ref=f52e108] [cursor=pointer]:
+                - /url: /console/cost
+            - listitem [ref=f52e113]:
+              - link "System Health" [ref=f52e114] [cursor=pointer]:
+                - /url: /console/health
+        - generic [ref=f52e120]:
+          - paragraph [ref=f52e121]: Integrations
+          - list [ref=f52e122]:
+            - listitem [ref=f52e123]:
+              - link "All Integrations 0/6 connected" [ref=f52e124] [cursor=pointer]:
+                - /url: /console/integrations
+                - generic [ref=f52e127]: All Integrations
+                - generic "0/6 connected" [ref=f52e129]: 0/6
+            - listitem [ref=f52e130]:
+              - link "Webhook Activity" [ref=f52e131] [cursor=pointer]:
+                - /url: /console/webhooks
+            - listitem [ref=f52e138]:
+              - link "Connection Health" [ref=f52e139] [cursor=pointer]:
+                - /url: /console/connections
+        - generic [ref=f52e147]:
+          - paragraph [ref=f52e148]: Operations
+          - list [ref=f52e149]:
+            - listitem [ref=f52e150]:
+              - link "Recovery Pipeline" [ref=f52e151] [cursor=pointer]:
+                - /url: /console/recovery
+            - listitem [ref=f52e156]:
+              - link "Eval Harness" [ref=f52e157] [cursor=pointer]:
+                - /url: /console/eval
+            - listitem [ref=f52e162]:
+              - link "Live Demo 1 items" [ref=f52e163] [cursor=pointer]:
+                - /url: /console/live-demo
+                - generic [ref=f52e168]: Live Demo
+                - generic "1 items" [ref=f52e170]: "1"
+            - listitem [ref=f52e171]:
+              - link "Knowledge Base" [ref=f52e172] [cursor=pointer]:
+                - /url: /console/knowledge
+      - link "Settings" [ref=f52e178] [cursor=pointer]:
+        - /url: /console/settings/profile
+      - generic [ref=f52e184]:
+        - paragraph [ref=f52e185]: Live
+        - link "View activity stream" [ref=f52e976] [cursor=pointer]:
+          - /url: /console/activity
+          - generic [ref=f52e977]:
+            - generic [ref=f52e978]: Agent Invoked
+            - generic [ref=f52e979]: just now
+          - paragraph [ref=f52e980]: 5fda8280-03d7-4c00-9e8f-d6918c2cd2f7
+        - 'link "System status: Status unknown" [ref=f52e192] [cursor=pointer]':
+          - /url: /console/health
+          - generic [ref=f52e194]: Status unknown
+    - generic [ref=f52e195]:
+      - banner [ref=f52e196]:
+        - generic [ref=f52e197]:
+          - generic "Workspace Production in us-east-1" [ref=f52e198]:
+            - generic [ref=f52e199]: 🇺🇸
+            - generic [ref=f52e200]: Production
+            - generic [ref=f52e201]: us-east-1
+          - navigation "Breadcrumb" [ref=f52e204]:
+            - generic [ref=f52e981]: Incidents
+            - generic [ref=f52e982]: /
+            - generic [ref=f52e983]: 5fda8280 03d7 4c00 9e8f D6918c2cd2f7
+        - generic [ref=f52e206]:
+          - button "Open command palette" [ref=f52e207]:
+            - generic [ref=f52e208]: Jump to…
+            - generic [ref=f52e209]: ⌘K
+          - button "5 unread notifications" [ref=f52e984]:
+            - generic [ref=f52e985]: "5"
+          - button "Switch to dark mode" [ref=f52e986]
+          - button "Account menu" [ref=f52e216]:
+            - generic [ref=f52e217]: D
+            - generic [ref=f52e218]: demo
+      - main [ref=f52e221]:
+        - generic [ref=f52e989]:
+          - link "Back to incidents" [ref=f52e991] [cursor=pointer]:
+            - /url: /console/incidents
+          - status [ref=f52e994]:
+            - generic [ref=f52e995]: Live demo — incident at Aug 11, 10:22:41 AM
+            - generic [ref=f52e998]: Watching the loop. SSE pinned below.
+          - generic [ref=f52e999]:
+            - generic [ref=f52e1000]:
+              - heading "5fda8280RecoveryPipeline" [level=1] [ref=f52e1001]
+              - generic [ref=f52e1002]:
+                - generic [ref=f52e1003]: Started Aug 11, 10:22:41 AM
+                - generic [ref=f52e1004]: ·
+                - generic [ref=f52e1005]: 1m 26s
+            - generic [ref=f52e1006]:
+              - generic [ref=f52e1007]:
+                - generic [ref=f52e1011]: Medium
+                - generic [ref=f52e1013]: Pending
+              - generic [ref=f52e1014]: Queued
+              - generic [ref=f52e1016]: Live
+          - region "Phase 6 agent summary" [ref=f52e1019]:
+            - generic [ref=f52e1020]:
+              - generic [ref=f52e1021]: Pathfinder · Root cause
+              - generic [ref=f52e1026]: —
+            - generic [ref=f52e1027]:
+              - generic [ref=f52e1028]: Synthesiser · Plan
+              - generic [ref=f52e1040]: —
+            - generic [ref=f52e1041]:
+              - generic [ref=f52e1042]: Validator · Results
+              - generic [ref=f52e1046]: —
+          - region "Activity timeline" [ref=f52e1047]:
+            - list [ref=f52e1048]:
+              - listitem [ref=f52e1049]:
+                - generic [ref=f52e1055]:
+                  - generic [ref=f52e1056]:
+                    - generic [ref=f52e1057]: Sentinel · Detect
+                    - paragraph [ref=f52e1066]: agent=sentinel stub completed
+                    - button "Payload" [ref=f52e1068]
+                  - generic [ref=f52e1071]:
+                    - generic "Tokens in · tokens out · cost" [ref=f52e1072]:
+                      - generic [ref=f52e1073]: 0 in
+                      - generic [ref=f52e1074]: ·
+                      - generic [ref=f52e1075]: 128 out
+                      - generic [ref=f52e1076]: ·
+                      - generic [ref=f52e1077]: $0.00
+                    - generic [ref=f52e1078]: 21ms
+              - listitem [ref=f52e1079]:
+                - generic [ref=f52e1086]:
+                  - generic [ref=f52e1087]:
+                    - generic [ref=f52e1088]: Pathfinder · Diagnose
+                    - paragraph [ref=f52e1093]: agent=pathfinder stub completed
+                    - button "Payload" [ref=f52e1095]
+                  - generic [ref=f52e1098]:
+                    - generic "Tokens in · tokens out · cost" [ref=f52e1099]:
+                      - generic [ref=f52e1100]: 0 in
+                      - generic [ref=f52e1101]: ·
+                      - generic [ref=f52e1102]: 128 out
+                      - generic [ref=f52e1103]: ·
+                      - generic [ref=f52e1104]: $0.00
+                    - generic [ref=f52e1105]: 14ms
+              - listitem [ref=f52e1106]:
+                - generic [ref=f52e1113]:
+                  - generic [ref=f52e1114]:
+                    - generic [ref=f52e1115]: Synthesiser · Plan
+                    - paragraph [ref=f52e1127]: agent=synthesiser stub completed
+                    - button "Payload" [ref=f52e1129]
+                  - generic [ref=f52e1132]:
+                    - generic "Tokens in · tokens out · cost" [ref=f52e1133]:
+                      - generic [ref=f52e1134]: 0 in
+                      - generic [ref=f52e1135]: ·
+                      - generic [ref=f52e1136]: 128 out
+                      - generic [ref=f52e1137]: ·
+                      - generic [ref=f52e1138]: $0.00
+                    - generic [ref=f52e1139]: 18ms
+              - listitem [ref=f52e1140]:
+                - generic [ref=f52e1147]:
+                  - generic [ref=f52e1148]:
+                    - generic [ref=f52e1149]: Architect · Solution
+                    - paragraph [ref=f52e1157]: agent=architect tokens=748/219 cost_cents=0.0000
+                    - button "Payload" [ref=f52e1159]
+                  - generic [ref=f52e1162]:
+                    - generic "Tokens in · tokens out · cost" [ref=f52e1163]:
+                      - generic [ref=f52e1164]: 748 in
+                      - generic [ref=f52e1165]: ·
+                      - generic [ref=f52e1166]: 219 out
+                      - generic [ref=f52e1167]: ·
+                      - generic [ref=f52e1168]: $0.00
+                    - generic [ref=f52e1169]: 10.4s
+              - listitem [ref=f52e1170]:
+                - generic [ref=f52e1177]:
+                  - generic [ref=f52e1178]:
+                    - generic [ref=f52e1179]: Backend · Codegen
+                    - paragraph [ref=f52e1185]: agent=backend tokens=558/196 cost_cents=0.0000
+                    - button "Payload" [ref=f52e1187]
+                  - generic [ref=f52e1190]:
+                    - generic "Tokens in · tokens out · cost" [ref=f52e1191]:
+                      - generic [ref=f52e1192]: 558 in
+                      - generic [ref=f52e1193]: ·
+                      - generic [ref=f52e1194]: 196 out
+                      - generic [ref=f52e1195]: ·
+                      - generic [ref=f52e1196]: $0.00
+                    - generic [ref=f52e1197]: 18.8s
+              - listitem [ref=f52e1198]:
+                - generic [ref=f52e1205]:
+                  - generic [ref=f52e1206]:
+                    - generic [ref=f52e1207]: QA · TestGen
+                    - paragraph [ref=f52e1211]: agent=qa tokens=635/215 cost_cents=0.0000
+                    - button "Payload" [ref=f52e1213]
+                  - generic [ref=f52e1216]:
+                    - generic "Tokens in · tokens out · cost" [ref=f52e1217]:
+                      - generic [ref=f52e1218]: 635 in
+                      - generic [ref=f52e1219]: ·
+                      - generic [ref=f52e1220]: 215 out
+                      - generic [ref=f52e1221]: ·
+                      - generic [ref=f52e1222]: $0.00
+                    - generic [ref=f52e1223]: 13.1s
+              - listitem [ref=f52e1224]:
+                - generic [ref=f52e1231]:
+                  - generic [ref=f52e1232]:
+                    - generic [ref=f52e1233]: DevOps · Pipeline
+                    - paragraph [ref=f52e1237]: agent=devops tokens=511/324 cost_cents=0.0000
+                    - button "Payload" [ref=f52e1239]
+                  - generic [ref=f52e1242]:
+                    - generic "Tokens in · tokens out · cost" [ref=f52e1243]:
+                      - generic [ref=f52e1244]: 511 in
+                      - generic [ref=f52e1245]: ·
+                      - generic [ref=f52e1246]: 324 out
+                      - generic [ref=f52e1247]: ·
+                      - generic [ref=f52e1248]: $0.00
+                    - generic [ref=f52e1249]: 17.1s
+              - listitem [ref=f52e1250]:
+                - generic [ref=f52e1257]:
+                  - generic [ref=f52e1258]:
+                    - generic [ref=f52e1259]: Data Engineer · Migrations
+                    - paragraph [ref=f52e1265]: agent=data_engineer tokens=635/12 cost_cents=0.0000
+                    - button "Payload" [ref=f52e1267]
+                  - generic [ref=f52e1270]:
+                    - generic "Tokens in · tokens out · cost" [ref=f52e1271]:
+                      - generic [ref=f52e1272]: 635 in
+                      - generic [ref=f52e1273]: ·
+                      - generic [ref=f52e1274]: 12 out
+                      - generic [ref=f52e1275]: ·
+                      - generic [ref=f52e1276]: $0.00
+                    - generic [ref=f52e1277]: 28.3s
+              - listitem [ref=f52e1278]:
+                - generic [ref=f52e1285]:
+                  - generic [ref=f52e1286]:
+                    - generic [ref=f52e1287]: Approval Gate · Route
+                    - paragraph [ref=f52e1292]: approval pending — severity=medium scenario=
+                    - button "Payload" [ref=f52e1294]
+                  - generic [ref=f52e1297]: 19ms
+              - listitem [ref=f52e1299]:
+                - generic [ref=f52e1306]: Pipeline · Complete
+  - button "Open Next.js Dev Tools" [ref=f52e963] [cursor=pointer]
+  - alert [ref=f52e1313]

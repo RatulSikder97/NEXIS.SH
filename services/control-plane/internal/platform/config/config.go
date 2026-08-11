@@ -66,17 +66,23 @@ type Config struct {
 	UsageTickSeconds       int     // default 60
 	WorkspaceProvisionFail float64 // default 0.0 — fraction of provisioning runs that should fail synthetically
 
+	// QA continuous test loop — how often the cron replays persisted QA
+	// suites against the validator sandbox. Sourced from
+	// QA_LOOP_INTERVAL_MINUTES; default 30. <=0 disables the job (cron.Start
+	// skips non-positive intervals).
+	QALoopIntervalMinutes int
+
 	// Phase 4 — Temporal + validator + patch storage.
-	TemporalHostPort  string // 'temporal:7233' in compose; Cloud HostPort in Phase 7
-	TemporalNamespace string // 'default' for dev; 'nexis-prod' in Phase 7
-	TemporalTaskQueue string // 'nexis-recovery'
-	ValidatorURL      string // 'http://validator:8081'
-	ValidatorToken    string // shared bearer between control-plane + validator
-	PatchStore        string // 'minio' | 's3'
-	MinIOEndpoint     string
-	MinIOAccessKey    string
-	MinIOSecretKey    string
-	MinIOUseSSL       bool
+	TemporalHostPort       string // 'temporal:7233' in compose; Cloud HostPort in Phase 7
+	TemporalNamespace      string // 'default' for dev; 'nexis-prod' in Phase 7
+	TemporalTaskQueue      string // 'nexis-recovery'
+	ValidatorURL           string // 'http://validator:8081'
+	ValidatorToken         string // shared bearer between control-plane + validator
+	PatchStore             string // 'minio' | 's3'
+	MinIOEndpoint          string
+	MinIOAccessKey         string
+	MinIOSecretKey         string
+	MinIOUseSSL            bool
 	WorkflowStubDurationMs int // default 0 — when >0 each stub activity sleeps this long
 
 	// Phase 5 — agents L1 + LLM spine.
@@ -103,28 +109,28 @@ type Config struct {
 	FixtureSHA string
 
 	// Phase 6 — Agents L2 + Approval Gate + GitOps + Slack + Neo4j + Causal.
-	SentinelEnabled              bool
-	SentinelPollIntervalMs       int
-	Neo4jURI                     string
-	Neo4jUser                    string
-	Neo4jPass                    string
-	CausalGRPCEndpoint           string
-	CausalEnabled                bool
-	PathfinderLLMRefine          bool
-	GitOpsURL                    string
-	GitOpsToken                  string
-	GitHubAppID                  int64
-	GitHubAppPrivateKeyPath      string
+	SentinelEnabled         bool
+	SentinelPollIntervalMs  int
+	Neo4jURI                string
+	Neo4jUser               string
+	Neo4jPass               string
+	CausalGRPCEndpoint      string
+	CausalEnabled           bool
+	PathfinderLLMRefine     bool
+	GitOpsURL               string
+	GitOpsToken             string
+	GitHubAppID             int64
+	GitHubAppPrivateKeyPath string
 	// GitHubAppPrivateKeyPEM is the raw PEM bytes of the GitHub App private
 	// key. Sourced from GITHUB_APP_PRIVATE_KEY_PEM (base64-encoded so the env
 	// var stays on one line) at boot, falling back to reading the file at
 	// GitHubAppPrivateKeyPath when the env var is empty. Empty when neither
 	// is configured — the github adapter operates in stub mode in that case.
-	GitHubAppPrivateKeyPEM       []byte
+	GitHubAppPrivateKeyPEM []byte
 	// GitHubAppSlug is the slug from the GitHub App settings page (e.g.
 	// "nexis-recovery"). Used to build the install-redirect URL surfaced via
 	// Status.Metadata.app_slug so the UI can deep-link to the App settings.
-	GitHubAppSlug                string
+	GitHubAppSlug string
 	// GitHubWebhookSecret is the per-App webhook secret configured in the
 	// GitHub App UI. Distinct from GitHubDefaultWebhookSecret, which is the
 	// dev-only fallback used before any tenant has connected — once the App
@@ -136,6 +142,21 @@ type Config struct {
 	FixtureRepoInstallationID    int64
 	SlackEnabled                 bool
 	ApprovalMediumTimeoutSeconds int
+
+	// PostDeployHealthWindowMs is how long the recovery workflow's post-
+	// deploy SLO probe watches incidents_raw for a fresh fatal after the
+	// GitOps PR lands before declaring the deploy healthy. Kept short (30s
+	// default) so the probe fits inside its Temporal activity timeout.
+	// Sourced from POST_DEPLOY_HEALTH_WINDOW_MS.
+	PostDeployHealthWindowMs int
+
+	// Deploy-engine sidecar (preview deployments). Same shared-bearer
+	// pattern as ValidatorURL/ValidatorToken and GitOpsURL/GitOpsToken:
+	// control-plane sends "Authorization: Bearer <DeployEngineToken>" on
+	// every POST /v1/deploy[/{id}/stop] call. Sourced from
+	// DEPLOY_ENGINE_URL / DEPLOY_ENGINE_TOKEN.
+	DeployEngineURL   string
+	DeployEngineToken string
 
 	// Slack OAuth v2 install + interactivity (Task 5 of real-integrations).
 	//
@@ -162,6 +183,18 @@ type Config struct {
 	// default fallback — the gate stays silent on Slack in that case.
 	// Sourced from SLACK_DEFAULT_CHANNEL.
 	SlackDefaultChannel string
+
+	// SchemaDriftOrgID is the org the Data Engineer agent's proactive
+	// schema-drift checker attributes control-plane database-schema drift
+	// incidents to. The checker watches a single shared database
+	// (information_schema on the control-plane's own Postgres), not a
+	// per-tenant resource, so — unlike Sentinel, which polls every
+	// connected org — it needs one explicit target rather than a fan-out.
+	// Empty string (the default) disables the checker entirely rather than
+	// guessing an org, since attributing platform-level drift to an
+	// arbitrary tenant would be actively misleading. Sourced from
+	// SCHEMA_DRIFT_ORG_ID.
+	SchemaDriftOrgID string
 
 	// Phase 7 — cloud cutover selectors. Defaults are dev-safe; the
 	// FatalIfLocalInCloud assertion fires at boot when AppEnv in
@@ -199,7 +232,7 @@ type Config struct {
 	SESFromAddress string
 
 	// Temporal Cloud — mTLS dial.
-	TemporalCloudNamespace string
+	TemporalCloudNamespace   string
 	TemporalCloudTLSCertPath string
 	TemporalCloudTLSKeyPath  string
 
@@ -313,6 +346,7 @@ func Load() Config {
 		BillingProvider:        env("BILLING_PROVIDER", "local"),
 		UsageTickSeconds:       envInt("USAGE_TICK_SECONDS", 60),
 		WorkspaceProvisionFail: envFloat("WORKSPACE_PROVISION_FAIL", 0.0),
+		QALoopIntervalMinutes:  envInt("QA_LOOP_INTERVAL_MINUTES", 30),
 
 		TemporalHostPort:       env("TEMPORAL_HOST_PORT", "temporal:7233"),
 		TemporalNamespace:      env("TEMPORAL_NAMESPACE", "default"),
@@ -370,6 +404,9 @@ func Load() Config {
 		FixtureRepoInstallationID:    int64(envInt("FIXTURE_REPO_INSTALLATION_ID", 98765)),
 		SlackEnabled:                 parseBool(env("SLACK_ENABLED", "1")),
 		ApprovalMediumTimeoutSeconds: envInt("APPROVAL_MEDIUM_TIMEOUT_SECONDS", 120),
+		PostDeployHealthWindowMs:     envInt("POST_DEPLOY_HEALTH_WINDOW_MS", 30000),
+		DeployEngineURL:              env("DEPLOY_ENGINE_URL", "http://deploy-engine:8091"),
+		DeployEngineToken:            env("DEPLOY_ENGINE_TOKEN", "dev-deploy-engine-token-32byte"),
 
 		// Phase 7 — cloud cutover selectors.
 		AWSRegion:       env("AWS_REGION", "us-east-1"),
@@ -431,6 +468,7 @@ func Load() Config {
 		SlackSigningSecret:  []byte(env("SLACK_SIGNING_SECRET", "")),
 		SlackAppRedirectURI: env("SLACK_APP_REDIRECT_URI", ""),
 		SlackDefaultChannel: env("SLACK_DEFAULT_CHANNEL", ""),
+		SchemaDriftOrgID:    env("SCHEMA_DRIFT_ORG_ID", ""),
 
 		// Per-org rate limit (SQA F-7). Defaults yield 100 req/min steady
 		// state with a 200 burst — a comfortable headroom for a page-load

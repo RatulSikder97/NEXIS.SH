@@ -75,7 +75,7 @@ func TestPatchPreferences_HappyPath(t *testing.T) {
 	get := handler.GetPreferences(auth)
 
 	body, _ := json.Marshal(map[string]any{
-		"theme":            "dark",
+		"theme":             "dark",
 		"sidebar_collapsed": true,
 	})
 	req := httptest.NewRequest(http.MethodPatch, "/v1/me/preferences", bytes.NewReader(body))
@@ -146,8 +146,8 @@ func TestPatchPreferences_OtherKeysPassThrough(t *testing.T) {
 	auth, princ := newAuthForPrefs(t)
 	patch := handler.PatchPreferences(auth, noopAuditWriter{})
 	body, _ := json.Marshal(map[string]any{
-		"custom_field":     "custom_value",
-		"numeric_setting":  42,
+		"custom_field":    "custom_value",
+		"numeric_setting": 42,
 	})
 	req := httptest.NewRequest(http.MethodPatch, "/v1/me/preferences", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

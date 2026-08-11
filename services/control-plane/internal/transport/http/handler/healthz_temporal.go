@@ -21,9 +21,9 @@ import (
 // one of "ok" / "stale" / "unknown". Timestamp is RFC3339; "" when no ping has
 // ever succeeded.
 type healthzTemporalResp struct {
-	Status      string `json:"status"`
-	LastSeen    string `json:"last_seen,omitempty"`
-	WindowSecs  int    `json:"window_secs"`
+	Status     string `json:"status"`
+	LastSeen   string `json:"last_seen,omitempty"`
+	WindowSecs int    `json:"window_secs"`
 }
 
 // HealthzTemporal wires GET /v1/healthz/temporal. Window is the staleness

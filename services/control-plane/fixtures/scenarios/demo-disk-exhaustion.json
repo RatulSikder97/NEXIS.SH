@@ -1,0 +1,18 @@
+{
+  "label": "demo-disk-exhaustion",
+  "title": "timeseries-ingest halted: no space left on device on /var/lib/tsdb",
+  "service": "timeseries-ingest",
+  "environment": "production",
+  "stacktrace": "panic: write /var/lib/tsdb/segments/seg-20260810-1441.tmp: no space left on device\n\tgithub.com/nexis-demo/timeseries-ingest/internal/store.(*SegmentWriter).Flush\n\t\tsegment_writer.go:91\n\tgithub.com/nexis-demo/timeseries-ingest/internal/store.(*Compactor).Run\n\t\tcompactor.go:47\n\tgithub.com/nexis-demo/timeseries-ingest/internal/ingest.(*Pipeline).commit\n\t\tpipeline.go:203",
+  "logs": "ts=2026-08-10T10:12:00Z level=warn service=timeseries-ingest msg=disk_usage volume=/var/lib/tsdb used_pct=91.2 free_gb=17.6\nts=2026-08-10T12:40:18Z level=error service=timeseries-ingest msg=retention_job_failed job=segment-reaper err=\"open /var/lib/tsdb/retention.lock: permission denied\" crash_looping_since=deploy-61a9f0d\nts=2026-08-10T14:41:09Z level=error service=timeseries-ingest msg=disk_usage volume=/var/lib/tsdb used_pct=100.0 free_gb=0.0\nts=2026-08-10T14:41:10Z level=fatal service=timeseries-ingest msg=ingest_halted err=\"no space left on device\" dropped_points_per_s=88000",
+  "metadata": {
+    "service_name": "timeseries-ingest",
+    "volume": "/var/lib/tsdb",
+    "disk_used_pct": 100.0,
+    "root_cause": "segment-reaper retention job crash-looping since deploy 61a9f0d; tombstoned segments never reclaimed",
+    "oldest_unreclaimed_segment_age_h": 62,
+    "dropped_points_per_s": 88000,
+    "incident_kind": "disk-exhaustion",
+    "expected_scenario": "unknown"
+  }
+}

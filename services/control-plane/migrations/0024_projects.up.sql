@@ -64,7 +64,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON projects TO nexis_app;
 -- Add project_id to downstream tables so recovery + incidents are project-scoped.
 ALTER TABLE workflow_runs      ADD COLUMN project_id uuid REFERENCES projects(id) ON DELETE SET NULL;
 ALTER TABLE incidents_raw      ADD COLUMN project_id uuid REFERENCES projects(id) ON DELETE SET NULL;
-ALTER TABLE approvals          ADD COLUMN project_id uuid REFERENCES projects(id) ON DELETE SET NULL;
+ALTER TABLE approval_decisions ADD COLUMN project_id uuid REFERENCES projects(id) ON DELETE SET NULL;
 ALTER TABLE webhook_deliveries ADD COLUMN project_id uuid REFERENCES projects(id) ON DELETE SET NULL;
 CREATE INDEX idx_workflow_runs_project   ON workflow_runs (project_id) WHERE project_id IS NOT NULL;
 CREATE INDEX idx_incidents_raw_project   ON incidents_raw (project_id) WHERE project_id IS NOT NULL;

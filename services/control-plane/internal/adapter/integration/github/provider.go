@@ -233,6 +233,46 @@ func (p *Provider) Status(ctx context.Context, princ domain.Principal) (domain.C
 	return c, nil
 }
 
+// MintInstallationToken returns a short-lived installation access token for
+// the supplied installation id, reading through the Redis-backed cache the
+// same way Status/ListReposForOrg do. It is the handler/activity-facing
+// entry point for callers that already hold a project's installation id
+// (deploy preflight, deploy-engine dispatch) and therefore don't need the
+// org → connection lookup.
+//
+// The raw token is returned to the caller and NEVER logged here — callers
+// needing forensics hash it first, matching Connect's last_token_sha256
+// pattern.
+func (p *Provider) MintInstallationToken(ctx context.Context, installationID int64) (string, error) {
+	if !p.hasAppMode() {
+		return "", errors.New("github: app credentials not configured")
+	}
+	if installationID <= 0 {
+		return "", errors.New("github: installation id must be positive")
+	}
+	if tok, ok := p.cache.Get(ctx, installationID); ok {
+		return tok, nil
+	}
+	tok, expiresAt, err := p.client.ExchangeInstallationToken(ctx, installationID)
+	if err != nil {
+		return "", fmt.Errorf("github: mint installation token: %w", err)
+	}
+	p.cache.Set(ctx, installationID, tok, expiresAt, p.now())
+	return tok, nil
+}
+
+// GetFileContents reads one file from a repo the installation can see —
+// mint (or reuse cached) token, then hit the contents API. ref may be empty
+// for the default branch. A missing file surfaces as *APIError{Status: 404}
+// via the client, letting callers treat "no Dockerfile" as data, not error.
+func (p *Provider) GetFileContents(ctx context.Context, installationID int64, owner, repo, path, ref string) ([]byte, error) {
+	tok, err := p.MintInstallationToken(ctx, installationID)
+	if err != nil {
+		return nil, err
+	}
+	return p.client.GetFileContents(ctx, tok, owner, repo, path, ref)
+}
+
 // ListReposForOrg mints (or reuses cached) an installation token for the
 // caller's org and returns the full repository projection. Powers
 // GET /v1/integrations/github/repos for the project-wizard dropdown.

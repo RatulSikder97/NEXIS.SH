@@ -49,6 +49,21 @@ const (
 // An empty patch + empty scenario falls into MEDIUM (the "we have no idea
 // what's going on" default — better to ask the human than auto-approve).
 func Classify(scenario string, patchDiff string) (domain.Severity, float64) {
+	return ClassifyWithViolation(scenario, patchDiff, false)
+}
+
+// ClassifyWithViolation is Classify plus the Architect contract-violation
+// signal. contractViolation=true means the Backend patch touched files the
+// Architect never declared in affected_files — that forces HIGH exactly like
+// the sensitive-glob / unknown-scenario rules, because an out-of-contract
+// patch must never ride the low-risk auto-approve path. Kept as a separate
+// entry point (rather than widening Classify's signature) so existing
+// callers + tests stay source-compatible, mirroring the
+// awaitApprovalDecisionWithTimeout pattern in workflow/recovery.
+func ClassifyWithViolation(scenario string, patchDiff string, contractViolation bool) (domain.Severity, float64) {
+	if contractViolation {
+		return domain.SeverityHigh, RiskScoreHigh
+	}
 	touched := touchedFiles(patchDiff)
 	if scenario == "schema_drift" || hasSensitive(touched) {
 		return domain.SeverityHigh, RiskScoreHigh

@@ -1,0 +1,17 @@
+{
+  "label": "demo-null-pointer",
+  "title": "AttributeError: 'NoneType' object has no attribute 'quantize' in /predict",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/app.py\", line 31, in predict\n    body = handler(req.args)\n  File \"src/nexis_fixture/api.py\", line 22, in handler\n    return safe_div(hits, total).quantize(Decimal(\"0.01\"))\nAttributeError: 'NoneType' object has no attribute 'quantize'",
+  "logs": "ts=2026-08-09T14:02:11Z level=warn service=nexis-fixture msg=zero_denominator hits=0 total=0 route=/predict request_id=req-88431 note=\"safe_div returned None instead of raising\"\nts=2026-08-09T14:02:11Z level=error service=nexis-fixture msg=unhandled_exception route=/predict request_id=req-88431 exc=AttributeError detail=\"'NoneType' object has no attribute 'quantize'\"\nts=2026-08-09T14:02:14Z level=error service=nexis-fixture msg=error_rate_breach route=/predict window=5m error_pct=41.7",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/predict",
+    "root_cause_node": "nexis_fixture.api.safe_div",
+    "returns_none_on": "zero divisor",
+    "error_rate_pct": 41.7,
+    "incident_kind": "null-pointer",
+    "expected_scenario": "null_deref"
+  }
+}

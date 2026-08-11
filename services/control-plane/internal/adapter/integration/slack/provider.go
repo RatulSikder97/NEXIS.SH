@@ -3,12 +3,15 @@
 // Slack to a full OAuth v2 install + interactivity flow:
 //
 //   - Connect supports three flavours:
+//
 //   - {webhook_url, channel_name} — legacy incoming-webhook flow (kept for
 //     existing tenants who connected before OAuth landed). Stored secret
 //     is the encrypted webhook URL.
+//
 //   - {code, state}               — OAuth v2 callback. We exchange the code
 //     for a bot token via oauth.v2.access and store the encrypted bot
 //     token + team metadata.
+//
 //   - {bot_token}                 — manual entry (typically used by ops
 //     during incident response). We validate with auth.test before
 //     persisting.
@@ -64,9 +67,9 @@ type HTTPDoer interface {
 type Provider struct {
 	repo   Repo
 	kv     domain.KeyVault
-	client *Client       // typed Slack Web API client; nil disables OAuth/bot-token flows
-	oauth  OAuthConfig   // Slack-app OAuth credentials; zero values disable ExchangeCode
-	legacy HTTPDoer      // legacy webhook-URL HTTP client; used only when client == nil
+	client *Client     // typed Slack Web API client; nil disables OAuth/bot-token flows
+	oauth  OAuthConfig // Slack-app OAuth credentials; zero values disable ExchangeCode
+	legacy HTTPDoer    // legacy webhook-URL HTTP client; used only when client == nil
 }
 
 // New constructs a Provider with a legacy 10-second *http.Client. The Slack

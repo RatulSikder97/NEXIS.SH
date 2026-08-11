@@ -1,0 +1,295 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="800" viewBox="0 0 1100 800" font-family="Helvetica, Arial, sans-serif">
+<defs>
+<!--
+NEXIS DIAGRAM ICON LIBRARY
+Style: 24x24 viewBox, 1.6px stroke, round joins/caps, no fill (stroke="currentColor"),
+single-color line-art so every icon inherits whatever ink color the diagram uses.
+Reference via: <use href="icon-library.svg#i-postgres" x=".." y=".." width="28" height="28" color="#2c3e50"/>
+(the library file itself must be inlined into each diagram's <defs>, not linked externally,
+since rsvg-convert does not resolve cross-file <use> references — copy the whole <defs>
+block into every diagram SVG that needs icons.)
+-->
+
+<symbol id="i-browser" viewBox="0 0 24 24">
+  <rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <line x1="2" y1="8" x2="22" y2="8" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="5" cy="6" r="0.6" fill="currentColor" stroke="none"/>
+  <circle cx="7.2" cy="6" r="0.6" fill="currentColor" stroke="none"/>
+</symbol>
+
+<symbol id="i-webapp" viewBox="0 0 24 24">
+  <rect x="2" y="3" width="20" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M2 8 h20" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M8 21 h8 M12 17 v4" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M6 12.5 l2.2 2.2 M6 14.7 l2.2 -2.2" stroke="currentColor" stroke-width="1.3"/>
+</symbol>
+
+<symbol id="i-server" viewBox="0 0 24 24">
+  <rect x="3" y="3" width="18" height="7" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <rect x="3" y="14" width="18" height="7" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="7" cy="6.5" r="0.7" fill="currentColor" stroke="none"/>
+  <circle cx="7" cy="17.5" r="0.7" fill="currentColor" stroke="none"/>
+</symbol>
+
+<symbol id="i-service" viewBox="0 0 24 24">
+  <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M12 3.6v2.6M12 17.8v2.6M20.4 12h-2.6M6.2 12H3.6M17.9 6.1l-1.9 1.9M8 16l-1.9 1.9M17.9 17.9L16 16M8 8L6.1 6.1"
+        stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+
+<symbol id="i-database" viewBox="0 0 24 24">
+  <ellipse cx="12" cy="5.2" rx="8" ry="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M4 5.2v13.6c0 1.4 3.6 2.6 8 2.6s8-1.2 8-2.6V5.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M4 12c0 1.4 3.6 2.6 8 2.6s8-1.2 8-2.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+
+<symbol id="i-graph" viewBox="0 0 24 24">
+  <circle cx="6" cy="6" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="18" cy="6" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="12" cy="18" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M8.1 7.2L10 16M15.9 7.2L14 16M8.4 6h7.2" stroke="currentColor" stroke-width="1.5"/>
+</symbol>
+
+<symbol id="i-cache" viewBox="0 0 24 24">
+  <path d="M13 2 L4 14h6l-1 8 10-13h-6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+</symbol>
+
+<symbol id="i-bucket" viewBox="0 0 24 24">
+  <path d="M4 7h16l-1.6 12.4a2 2 0 0 1-2 1.6H7.6a2 2 0 0 1-2-1.6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M2.5 7h19M8 7l1.4-3.4a1.6 1.6 0 0 1 1.5-1h2.2a1.6 1.6 0 0 1 1.5 1L16 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+</symbol>
+
+<symbol id="i-workflow" viewBox="0 0 24 24">
+  <rect x="2" y="10" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <rect x="17" y="10" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="12" cy="4.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M7 12.5h3M14 12.5h3M12 7v3M12 10l-2.5 2.5M12 10l2.5 2.5" stroke="currentColor" stroke-width="1.5"/>
+</symbol>
+
+<symbol id="i-container" viewBox="0 0 24 24">
+  <path d="M12 2 21 6.5v11L12 22 3 17.5v-11z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M3 6.5 12 11l9-4.5M12 11v11" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+
+<symbol id="i-git" viewBox="0 0 24 24">
+  <circle cx="6" cy="5" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="6" cy="19" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="18" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M6 7.2V16.8M6 8c0 5 3 4.5 10 4.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+
+<symbol id="i-chat" viewBox="0 0 24 24">
+  <path d="M3 5.5h18v11H9l-4 3.5v-3.5H3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <line x1="7" y1="9.5" x2="17" y2="9.5" stroke="currentColor" stroke-width="1.4"/>
+  <line x1="7" y1="12.7" x2="14" y2="12.7" stroke="currentColor" stroke-width="1.4"/>
+</symbol>
+
+<symbol id="i-brain" viewBox="0 0 24 24">
+  <path d="M9 3.5a3.3 3.3 0 0 0-3.3 3.3v.3A3 3 0 0 0 4 9.8a3.1 3.1 0 0 0 1 5.7 3.2 3.2 0 0 0 3.6 3.9A3.2 3.2 0 0 0 12 21V6.8A3.3 3.3 0 0 0 9 3.5Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M15 3.5a3.3 3.3 0 0 1 3.3 3.3v.3A3 3 0 0 1 20 9.8a3.1 3.1 0 0 1-1 5.7 3.2 3.2 0 0 1-3.6 3.9A3.2 3.2 0 0 1 12 21V6.8a3.3 3.3 0 0 1 3-3.3Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+</symbol>
+
+<symbol id="i-shield" viewBox="0 0 24 24">
+  <path d="M12 2.5 20 6v6c0 5-3.4 8.4-8 9.5-4.6-1.1-8-4.5-8-9.5V6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M8.6 12.2l2.3 2.3 4.5-4.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol>
+
+<symbol id="i-terraform" viewBox="0 0 24 24">
+  <path d="M3 3v6.2l5.4 3.1V6.1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M9.3 6.4v6.2l5.4 3.1V9.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M15.6 9.8V16l5.4 3.1v-6.2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M9.3 13.3v6.2l-5.4 3.1v-6.2z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+</symbol>
+
+<symbol id="i-observability" viewBox="0 0 24 24">
+  <path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+
+<symbol id="i-chart" viewBox="0 0 24 24">
+  <path d="M3 21V3M3 21h18" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M6 17l3.5-5 3 3L18 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol>
+
+<symbol id="i-card" viewBox="0 0 24 24">
+  <rect x="2" y="5" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <line x1="2" y1="9.5" x2="22" y2="9.5" stroke="currentColor" stroke-width="1.6"/>
+  <line x1="5" y1="14.5" x2="10" y2="14.5" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+
+<symbol id="i-cloud" viewBox="0 0 24 24">
+  <path d="M6.5 18a4.2 4.2 0 0 1-.7-8.3 5.5 5.5 0 0 1 10.6-1.9A4.5 4.5 0 0 1 17.5 18Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+</symbol>
+
+<symbol id="i-bell" viewBox="0 0 24 24">
+  <path d="M6 10.5a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14.5 6 10.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M10 19a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+
+<symbol id="i-lock" viewBox="0 0 24 24">
+  <rect x="5" y="10.5" width="14" height="10" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+</symbol>
+
+<symbol id="i-code" viewBox="0 0 24 24">
+  <path d="M8.5 6 3 12l5.5 6M15.5 6 21 12l-5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol>
+
+<symbol id="i-terminal" viewBox="0 0 24 24">
+  <rect x="2" y="4" width="20" height="16" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M6 9l3.5 3L6 15M12 15h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol>
+
+<symbol id="i-check" viewBox="0 0 24 24">
+  <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+</symbol>
+
+<symbol id="i-person" viewBox="0 0 24 24">
+  <circle cx="12" cy="7.5" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M4.5 20.5c0-4.2 3.4-6.8 7.5-6.8s7.5 2.6 7.5 6.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="i-robot" viewBox="0 0 24 24">
+  <rect x="4" y="8" width="16" height="12" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="9" cy="14" r="1.3" fill="currentColor" stroke="none"/>
+  <circle cx="15" cy="14" r="1.3" fill="currentColor" stroke="none"/>
+  <path d="M12 8V4.5M9.5 4.5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M8.5 18h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+</symbol>
+
+<marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+  <path d="M0,0 L0,6 L8,3 z" fill="#1f2937"/>
+</marker>
+<marker id="ahr" markerWidth="9" markerHeight="9" refX="1" refY="3" orient="auto" markerUnits="strokeWidth">
+  <path d="M8,0 L8,6 L0,3 z" fill="#1f2937"/>
+</marker>
+</defs>
+
+<rect width="1100" height="800" fill="#ffffff"/>
+<text x="550" y="38" text-anchor="middle" font-size="20" font-weight="bold" fill="#1f2937">Data Flow Diagram, Level 0</text>
+<text x="550" y="60" text-anchor="middle" font-size="12" fill="#6b7280">Context-level data flow</text>
+
+<!-- ============ central process (circle) ============ -->
+<circle cx="550" cy="385" r="118" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+<text x="550" y="304" text-anchor="middle" font-size="13" font-weight="bold" fill="#1f2937">0</text>
+<text x="550" y="368" text-anchor="middle" font-size="17" font-weight="bold" fill="#1f2937">Nexis</text>
+<text x="550" y="392" text-anchor="middle" font-size="11.5" fill="#4b5563">Control-Plane and</text>
+<text x="550" y="408" text-anchor="middle" font-size="11.5" fill="#4b5563">Nine-Agent Self-Healing Loop</text>
+
+<!-- ============ external entities (rectangles) ============ -->
+<!-- User -->
+<rect x="60" y="140" width="235" height="88" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+<g color="#1f2937"><use href="#i-person" x="76" y="162" width="28" height="28"/></g>
+<text x="118" y="174" font-size="12.5" font-weight="bold" fill="#1f2937">User</text>
+<text x="118" y="190" font-size="10" fill="#4b5563">Owner / Administrator,</text>
+<text x="118" y="203" font-size="10" fill="#4b5563">Engineer / Member, Viewer</text>
+
+<!-- fault / alert sources -->
+<rect x="60" y="370" width="235" height="78" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+<g color="#1f2937"><use href="#i-bell" x="76" y="386" width="28" height="28"/></g>
+<text x="118" y="396" font-size="12.5" font-weight="bold" fill="#1f2937">Sentry, Datadog,</text>
+<text x="118" y="411" font-size="12.5" font-weight="bold" fill="#1f2937">PagerDuty</text>
+<text x="118" y="428" font-size="10" fill="#4b5563">fault / alert webhook sources</text>
+
+<!-- GitHub -->
+<rect x="805" y="140" width="235" height="72" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+<g color="#1f2937"><use href="#i-git" x="821" y="156" width="28" height="28"/></g>
+<text x="861" y="172" font-size="12.5" font-weight="bold" fill="#1f2937">GitHub</text>
+<text x="861" y="188" font-size="10" fill="#4b5563">source repository host</text>
+
+<!-- Large Language Model Provider -->
+<rect x="805" y="370" width="235" height="88" fill="#ffffff" stroke="#1f2937" stroke-width="1.4"/>
+<g color="#1f2937"><use href="#i-brain" x="821" y="388" width="28" height="28"/></g>
+<text x="861" y="398" font-size="12.5" font-weight="bold" fill="#1f2937">Large Language Model</text>
+<text x="861" y="413" font-size="12.5" font-weight="bold" fill="#1f2937">Provider</text>
+<text x="861" y="430" font-size="10" fill="#4b5563">OpenAI / Ollama</text>
+
+<!-- ============ data stores (open-ended rectangles, rounded left side) ============ -->
+<!-- D1 PostgreSQL -->
+<path d="M335 645 L110 645 Q100 645 100 655 L100 687 Q100 697 110 697 L335 697" fill="none" stroke="#1f2937" stroke-width="1.4"/>
+<line x1="134" y1="645" x2="134" y2="697" stroke="#1f2937" stroke-width="1.4"/>
+<text x="117" y="675" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937">D1</text>
+<g color="#1f2937"><use href="#i-database" x="144" y="659" width="24" height="24"/></g>
+<text x="176" y="668" font-size="12.5" font-weight="bold" fill="#1f2937">PostgreSQL</text>
+<text x="176" y="683" font-size="10" fill="#4b5563">relational system-of-record</text>
+
+<!-- D2 Neo4j -->
+<path d="M660 645 L440 645 Q430 645 430 655 L430 687 Q430 697 440 697 L660 697" fill="none" stroke="#1f2937" stroke-width="1.4"/>
+<line x1="464" y1="645" x2="464" y2="697" stroke="#1f2937" stroke-width="1.4"/>
+<text x="447" y="675" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937">D2</text>
+<g color="#1f2937"><use href="#i-graph" x="474" y="659" width="24" height="24"/></g>
+<text x="506" y="668" font-size="12.5" font-weight="bold" fill="#1f2937">Neo4j</text>
+<text x="506" y="683" font-size="10" fill="#4b5563">code dependency graph</text>
+
+<!-- D3 MinIO -->
+<path d="M965 645 L745 645 Q735 645 735 655 L735 687 Q735 697 745 697 L965 697" fill="none" stroke="#1f2937" stroke-width="1.4"/>
+<line x1="769" y1="645" x2="769" y2="697" stroke="#1f2937" stroke-width="1.4"/>
+<text x="752" y="675" text-anchor="middle" font-size="11" font-weight="bold" fill="#1f2937">D3</text>
+<g color="#1f2937"><use href="#i-bucket" x="779" y="659" width="24" height="24"/></g>
+<text x="811" y="668" font-size="12.5" font-weight="bold" fill="#1f2937">MinIO</text>
+<text x="811" y="683" font-size="10" fill="#4b5563">encrypted patch store</text>
+
+<!-- ============ data flows ============ -->
+<!-- User <-> Nexis -->
+<path d="M295 162 C 360 172, 430 225, 478 290" stroke="#1f2937" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>
+<path d="M452 318 C 395 288, 340 248, 297 216" stroke="#1f2937" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>
+
+<!-- fault sources -> Nexis (accent: the flow that triggers the loop) -->
+<path d="M295 409 L431 409" stroke="#2563eb" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+
+<!-- Nexis <-> GitHub -->
+<path d="M618 288 C 680 250, 750 200, 803 164" stroke="#1f2937" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>
+<path d="M803 190 C 750 225, 690 275, 640 308" stroke="#1f2937" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>
+
+<!-- Nexis <-> Large Language Model Provider -->
+<path d="M667 372 C 715 375, 760 383, 803 392" stroke="#1f2937" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>
+<path d="M803 430 C 760 428, 715 421, 665 412" stroke="#1f2937" stroke-width="1.3" fill="none" marker-end="url(#ah)"/>
+
+<!-- Nexis <-> data stores (orthogonal, read/write) -->
+<path d="M490 487 L490 575 L220 575 L220 641" stroke="#1f2937" stroke-width="1.3" fill="none" marker-start="url(#ahr)" marker-end="url(#ah)"/>
+<path d="M550 503 L550 641" stroke="#1f2937" stroke-width="1.3" fill="none" marker-start="url(#ahr)" marker-end="url(#ah)"/>
+<path d="M610 487 L610 575 L880 575 L880 641" stroke="#1f2937" stroke-width="1.3" fill="none" marker-start="url(#ahr)" marker-end="url(#ah)"/>
+
+<!-- ============ flow labels (with white halos) ============ -->
+<!-- User -> Nexis -->
+<rect x="306" y="174" width="140" height="13" fill="#ffffff"/>
+<text x="376" y="184" text-anchor="middle" font-size="10" fill="#4b5563">login credentials, commands,</text>
+<rect x="330" y="187" width="92" height="13" fill="#ffffff"/>
+<text x="376" y="197" text-anchor="middle" font-size="10" fill="#4b5563">approval decisions</text>
+<!-- Nexis -> User -->
+<rect x="291" y="282" width="154" height="13" fill="#ffffff"/>
+<text x="368" y="292" text-anchor="middle" font-size="10" fill="#4b5563">dashboards, incident timelines,</text>
+<rect x="324" y="295" width="88" height="13" fill="#ffffff"/>
+<text x="368" y="305" text-anchor="middle" font-size="10" fill="#4b5563">approval requests</text>
+<!-- fault sources -> Nexis -->
+<rect x="304" y="389" width="112" height="13" fill="#ffffff"/>
+<text x="360" y="399" text-anchor="middle" font-size="10" fill="#4b5563">fault or alert webhook</text>
+<!-- Nexis -> GitHub -->
+<rect x="623" y="186" width="134" height="13" fill="#ffffff"/>
+<text x="690" y="196" text-anchor="middle" font-size="10" fill="#4b5563">patch branch / pull request</text>
+<!-- GitHub -> Nexis -->
+<rect x="655" y="315" width="168" height="13" fill="#ffffff"/>
+<text x="739" y="325" text-anchor="middle" font-size="10" fill="#4b5563">repository contents / merge status</text>
+<!-- Nexis -> LLM provider -->
+<rect x="670" y="345" width="148" height="13" fill="#ffffff"/>
+<text x="744" y="355" text-anchor="middle" font-size="10" fill="#4b5563">structured completion request</text>
+<!-- LLM provider -> Nexis -->
+<rect x="656" y="442" width="148" height="13" fill="#ffffff"/>
+<text x="730" y="452" text-anchor="middle" font-size="10" fill="#4b5563">structured completion response</text>
+<!-- Nexis <-> PostgreSQL -->
+<rect x="288" y="542" width="134" height="13" fill="#ffffff"/>
+<text x="355" y="552" text-anchor="middle" font-size="10" fill="#4b5563">incident, approval, policy,</text>
+<rect x="285" y="555" width="140" height="13" fill="#ffffff"/>
+<text x="355" y="565" text-anchor="middle" font-size="10" fill="#4b5563">audit records (read / write)</text>
+<!-- Nexis <-> Neo4j -->
+<rect x="558" y="580" width="110" height="13" fill="#ffffff"/>
+<text x="562" y="590" font-size="10" fill="#4b5563">code-graph nodes and edges</text>
+<rect x="558" y="593" width="78" height="13" fill="#ffffff"/>
+<text x="562" y="603" font-size="10" fill="#4b5563">(write / query)</text>
+<!-- Nexis <-> MinIO -->
+<rect x="650" y="556" width="190" height="13" fill="#ffffff"/>
+<text x="745" y="566" text-anchor="middle" font-size="10" fill="#4b5563">encrypted patch blob (store / retrieve)</text>
+
+<text x="550" y="748" text-anchor="middle" font-size="11" fill="#6b7280">Notation — rectangle: external entity &#183; circle: process &#183; open-ended rectangle: data store. Every data flow crosses the system boundary through process 0.</text>
+</svg>

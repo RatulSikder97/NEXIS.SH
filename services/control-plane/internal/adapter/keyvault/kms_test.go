@@ -42,8 +42,8 @@ func newFakeKMS() *fakeKMS {
 // the CiphertextBlob returned by GenerateDataKey can't be forged without the
 // fake's master key, mirroring real KMS semantics.
 type blobEnvelope struct {
-	DEK     []byte            `json:"dek"`
-	EncCtx  map[string]string `json:"enc_ctx"`
+	DEK    []byte            `json:"dek"`
+	EncCtx map[string]string `json:"enc_ctx"`
 }
 
 func (f *fakeKMS) wrap(env blobEnvelope) ([]byte, error) {

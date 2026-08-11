@@ -390,4 +390,3 @@ func (s *syncBuffer) String() string {
 	defer s.mu.Unlock()
 	return s.buf.String()
 }
-

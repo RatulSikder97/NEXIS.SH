@@ -1,7 +1,7 @@
 [project]
 name = "nexis-causal"
 version = "0.1.0"
-description = "Phase 6 canned-response causal-inference sidecar. Phase 7 swaps the lookup table for a real DoWhy estimand search."
+description = "Causal-inference sidecar: ranks Pathfinder's Neo4j-derived root-cause candidates via a documented graph-evidence scoring function (see src/ranking.py)."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",

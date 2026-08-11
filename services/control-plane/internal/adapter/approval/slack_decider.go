@@ -8,17 +8,17 @@
 //
 // SlackDecider is the adapter that bridges the two. It:
 //
-//   1. Looks up the approval row via the ApprovalRepository to recover the
-//      workspace_id + org_id from the run id (the Slack payload only carries
-//      the run id encoded in the button's `value` field — it has no notion of
-//      workspaces or tenants).
-//   2. Synthesises a Principal stamped with that org/user. The user id stays
-//      empty because the actor is identified by email only; we surface the
-//      email via DecideInput.Notes so the decision row attribution is "slack:
-//      <email>" without a faked user uuid.
-//   3. Delegates to SignalerService.Decide so all the existing invariants
-//      (workspace match, must-be-pending, Temporal signal ordering) are
-//      enforced uniformly with the HTTP endpoint.
+//  1. Looks up the approval row via the ApprovalRepository to recover the
+//     workspace_id + org_id from the run id (the Slack payload only carries
+//     the run id encoded in the button's `value` field — it has no notion of
+//     workspaces or tenants).
+//  2. Synthesises a Principal stamped with that org/user. The user id stays
+//     empty because the actor is identified by email only; we surface the
+//     email via DecideInput.Notes so the decision row attribution is "slack:
+//     <email>" without a faked user uuid.
+//  3. Delegates to SignalerService.Decide so all the existing invariants
+//     (workspace match, must-be-pending, Temporal signal ordering) are
+//     enforced uniformly with the HTTP endpoint.
 package approval
 
 import (

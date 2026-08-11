@@ -171,4 +171,3 @@ func GitHubMockInstall(reg *integration.Registry, aud domain.AuditWriter, appBas
 		http.Redirect(w, r, appBaseURL+"/console/integrations?installed=github", http.StatusFound)
 	}
 }
-

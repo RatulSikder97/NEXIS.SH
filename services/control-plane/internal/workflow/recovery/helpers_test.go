@@ -46,11 +46,11 @@ func TestBuildAgentContext_FromProject(t *testing.T) {
 		Project: &domain.Project{
 			ID: "proj-1", Slug: "orders", Environment: domain.EnvironmentProd,
 			Selectors: domain.ProjectSelectors{
-				GitHubRepo:            "acme/orders-api",
-				GitHubDefaultBranch:   "main",
-				GitHubInstallationID:  12345,
-				ArgoCDAppName:         "orders-prod",
-				ArgoCDProject:         "default",
+				GitHubRepo:           "acme/orders-api",
+				GitHubDefaultBranch:  "main",
+				GitHubInstallationID: 12345,
+				ArgoCDAppName:        "orders-prod",
+				ArgoCDProject:        "default",
 			},
 		},
 	}

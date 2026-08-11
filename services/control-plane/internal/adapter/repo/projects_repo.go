@@ -293,10 +293,12 @@ func (r *ProjectsRepo) CountByWorkspace(ctx context.Context, workspaceID string)
 //
 // Match strategy per source (all filtered to org_id and archived_at IS NULL):
 //
-//   - sentry:    (sentry_organization_slug, sentry_project_slug)
-//   - datadog:   datadog_service_tag
-//   - pagerduty: pagerduty_service_id
-//   - github:    github_repo
+//   - sentry:        (sentry_organization_slug, sentry_project_slug)
+//   - datadog:       datadog_service_tag
+//   - pagerduty:     pagerduty_service_id
+//   - github:        github_repo
+//   - deploy_engine: github_repo — preview-deploy failures carry the repo
+//     fingerprint so a broken build routes back to the owning project.
 //
 // Returns (id, true, nil) on a hit, ("", false, nil) on no match,
 // ("", false, ErrUnknown) when adminPool is unwired.
@@ -337,7 +339,7 @@ func (r *ProjectsRepo) MatchByFingerprint(ctx context.Context, orgID string, fp 
 		         AND pagerduty_service_id = $2
 		       LIMIT 1`
 		args = []any{orgID, fp.PagerDutyServiceID}
-	case "github":
+	case "github", "deploy_engine":
 		if fp.GitHubRepo == "" {
 			return "", false, nil
 		}
@@ -365,13 +367,13 @@ func (r *ProjectsRepo) MatchByFingerprint(ctx context.Context, orgID string, fp 
 // which all share the projectsColumns projection.
 func scanProject(row pgx.Row) (domain.Project, error) {
 	var (
-		p             domain.Project
-		envStr        string
-		policyBytes   []byte
-		availability  *float64
-		latencyMs     *int
-		errorRate     *float64
-		installID     int64
+		p            domain.Project
+		envStr       string
+		policyBytes  []byte
+		availability *float64
+		latencyMs    *int
+		errorRate    *float64
+		installID    int64
 	)
 	err := row.Scan(
 		&p.ID, &p.OrgID, &p.WorkspaceID, &p.Name, &p.Slug,
@@ -409,13 +411,13 @@ func scanProject(row pgx.Row) (domain.Project, error) {
 // scanProject minus the ErrNoRows handling (Rows.Next() controls iteration).
 func scanProjectRow(rows pgx.Rows) (domain.Project, error) {
 	var (
-		p             domain.Project
-		envStr        string
-		policyBytes   []byte
-		availability  *float64
-		latencyMs     *int
-		errorRate     *float64
-		installID     int64
+		p            domain.Project
+		envStr       string
+		policyBytes  []byte
+		availability *float64
+		latencyMs    *int
+		errorRate    *float64
+		installID    int64
 	)
 	err := rows.Scan(
 		&p.ID, &p.OrgID, &p.WorkspaceID, &p.Name, &p.Slug,

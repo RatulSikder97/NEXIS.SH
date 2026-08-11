@@ -57,8 +57,8 @@ func (c *recordingClient) Do(req *http.Request) (*http.Response, error) {
 
 // fakeRepo is a minimal in-memory IntegrationsRepo for the test.
 type fakeRepo struct {
-	mu      sync.Mutex
-	rows    map[string]storedRow
+	mu   sync.Mutex
+	rows map[string]storedRow
 }
 
 type storedRow struct {

@@ -156,6 +156,26 @@ type Deps struct {
 	// when nil the route is not mounted so a deploy without object storage
 	// boots cleanly (the FE just doesn't render the diff panel).
 	PatchStore domain.PatchStore
+
+	// Phase 9 — intelligent role recommendation (GET /v1/orgs/{id}/members,
+	// GET/POST .../role-recommendations*). Optional — when nil the routes
+	// are not mounted.
+	RoleRecs handler.RoleRecommendationService
+
+	// Phase 9 — OpenLineage-shaped RunEvents (GET /v1/lineage/events),
+	// emitted by the Data Engineer agent's migration proposals/applies.
+	// Optional — when nil the route is not mounted.
+	Lineage *repo.LineageRepo
+
+	// Phase 9 — Docker preview deploys (POST /v1/projects/{id}/deploy,
+	// GET .../deployments, POST .../deployments/{id}/stop). All three are
+	// nil-guarded as a group — the routes mount only when every dependency
+	// (store, engine client, GitHub token minter, incident sink) is present,
+	// same posture as the other optional Phase 9 surfaces above.
+	Deployments  handler.DeploymentsStore
+	DeployEngine handler.DeployEngineService
+	DeployGitHub handler.GitHubTokenMinter
+	Incidents    domain.IncidentSink
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
@@ -199,6 +219,19 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			aud = noopAudit{}
 		}
 
+		// Phase 9 — preview deploys. Deployments/DeployEngine/DeployGitHub are
+		// required; Incidents may be nil (dev boot without Postgres) — the
+		// handler itself degrades a nil sink to a WARN-and-skip on failed
+		// deploys rather than refusing to mount.
+		deployDeps := handler.DeploymentsDeps{
+			Projects:    deps.Projects,
+			Deployments: deps.Deployments,
+			Engine:      deps.DeployEngine,
+			GitHub:      deps.DeployGitHub,
+			Incidents:   deps.Incidents,
+		}
+		deployReady := deps.Projects != nil && deps.Deployments != nil && deps.DeployEngine != nil && deps.DeployGitHub != nil
+
 		// Public auth routes. WorkspacesRepo is wrapped as a WorkspaceChecker
 		// so the response can include HasWorkspace for the onboarding gate.
 		// nil is fine — the helper treats a missing checker as "no workspace
@@ -211,6 +244,13 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 		r.Post("/v1/auth/login", handler.Login(deps.Auth, aud, cfg, wsChecker))
 		r.Post("/v1/auth/magic", handler.Magic(deps.Auth))
 		r.Get("/v1/auth/verify", handler.Verify(deps.Auth, aud, cfg))
+
+		// Phase 9 — password reset. Public/unauthenticated: the caller has,
+		// by definition, lost their credential. Request is non-leaky (always
+		// 202) so it's safe to expose without a session; confirm's token IS
+		// the credential.
+		r.Post("/v1/auth/password-reset/request", handler.PasswordResetRequest(deps.Auth))
+		r.Post("/v1/auth/password-reset/confirm", handler.PasswordResetConfirm(deps.Auth, cfg))
 
 		// Phase 7 — WorkOS OAuth callback. Public (no session yet); the
 		// handler validates the one-shot nexis_oauth_state cookie against the
@@ -327,6 +367,12 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			g.Get("/v1/me/preferences", handler.GetPreferences(deps.Auth))
 			g.Patch("/v1/me/preferences", handler.PatchPreferences(deps.Auth, aud))
 
+			// Phase 9 — session management. Self-service only: the provider
+			// scopes ListSessions to principal.UserID and 404s any session
+			// id not owned by the caller, so plain RequireAuth is enough.
+			g.Get("/v1/me/sessions", handler.SessionsList(deps.Auth))
+			g.Delete("/v1/me/sessions/{id}", handler.SessionRevoke(deps.Auth, aud))
+
 			// Phase 8 — org stats. successful_recoveries_count for the
 			// current principal's org. Open to any authenticated principal
 			// so the dashboard topline tile renders for members.
@@ -381,6 +427,9 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				g.Get("/v1/projects/{id}", handler.ProjectsGet(deps.Projects))
 				g.Get("/v1/projects/{id}/recovery-policy", handler.ProjectsGetPolicy(deps.Projects))
 			}
+			if deployReady {
+				g.Get("/v1/projects/{id}/deployments", handler.DeploymentsList(deployDeps))
+			}
 
 			// Phase 4 — pipeline read paths. Any authenticated principal can
 			// list / read runs + tail the SSE stream for their org's
@@ -431,6 +480,11 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			}
 			g.Get("/v1/system-health", handler.SystemHealth(deps.SystemHealth))
 			g.Get("/v1/integrations/webhooks", handler.IntegrationsWebhooks(deps.WebhookDeliveries))
+			// Phase 9 — OpenLineage-shaped RunEvents for Data Engineer
+			// migrations. Read-only, org-scoped like the activity feed above.
+			if deps.Lineage != nil {
+				g.Get("/v1/lineage/events", handler.LineageEvents(deps.Lineage))
+			}
 			if deps.Pool != nil {
 				g.Get("/v1/validator/runs", handler.ValidatorRuns(deps.Pool))
 				g.Get("/v1/orgs/{org_id}/cost", handler.OrgCost(deps.Pool))
@@ -451,6 +505,10 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 						handler.PipelineApprove(deps.ApprovalSignaler))
 					g2.Post("/v1/workspaces/{ws_id}/pipelines/{run_id}/reject",
 						handler.PipelineReject(deps.ApprovalSignaler))
+					// Phase 9 — RLHF: engineer-edited patch, same signaler
+					// write path and RBAC stakes as approve/reject.
+					g2.Post("/v1/workspaces/{ws_id}/pipelines/{run_id}/modify",
+						handler.PipelineModify(deps.ApprovalSignaler))
 				}
 				// Approvals — pending decisions list. Powers the
 				// /console/approvals page + the sidebar pending badge.
@@ -497,6 +555,16 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				}
 				g2.Get("/v1/orgs/{id}/invites", handler.InviteList(deps.Auth))
 
+				// Phase 9 — intelligent role recommendation. Owner|Admin only:
+				// member emails, login recency, and per-member behaviour
+				// analysis are a management surface, same posture as invites.
+				if deps.RoleRecs != nil {
+					g2.Get("/v1/orgs/{id}/members", handler.OrgMembersList(deps.RoleRecs))
+					g2.Get("/v1/orgs/{id}/role-recommendations", handler.RoleRecommendationsList(deps.RoleRecs))
+					g2.Post("/v1/orgs/{id}/role-recommendations/refresh", handler.RoleRecommendationsRefresh(deps.RoleRecs, aud))
+					g2.Post("/v1/orgs/{id}/role-recommendations/{rec_id}/decide", handler.RoleRecommendationsDecide(deps.RoleRecs, aud))
+				}
+
 				// Workspaces — create is owner|admin per Phase 3.5 RBAC.
 				if deps.Workspaces != nil {
 					g2.Post("/v1/workspaces", handler.WorkspaceCreate(deps.Workspaces, aud))
@@ -511,6 +579,10 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 					g2.Patch("/v1/projects/{id}", handler.ProjectsPatch(deps.Projects))
 					g2.Delete("/v1/projects/{id}", handler.ProjectsArchive(deps.Projects))
 					g2.Put("/v1/projects/{id}/recovery-policy", handler.ProjectsPutPolicy(deps.Projects))
+				}
+				if deployReady {
+					g2.Post("/v1/projects/{id}/deploy", handler.DeploymentsCreate(deployDeps))
+					g2.Post("/v1/projects/{id}/deployments/{deployment_id}/stop", handler.DeploymentsStop(deployDeps))
 				}
 
 				// Phase 4 — pipeline mutations are owner|admin. The /demo
@@ -591,6 +663,12 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				}
 				if deps.EvalRepo != nil {
 					g2.Get("/v1/admin/eval-export", handler.AdminEvalExport(deps.EvalRepo))
+				}
+				// Phase 9 — RLHF training-data export. Same owner-only class
+				// as eval-export: raw patch diffs + decision provenance, not
+				// exposed to members.
+				if deps.AppPool != nil && deps.Pool != nil {
+					g2.Get("/v1/admin/rlhf-export", handler.RLHFExport(repo.NewFeedbackRepo(deps.AppPool, deps.Pool)))
 				}
 				if deps.Sentinel != nil {
 					g2.Post("/v1/admin/sentinel/trigger", handler.SentinelTrigger(deps.Sentinel, aud))

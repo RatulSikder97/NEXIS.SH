@@ -1,0 +1,360 @@
+\chapter{System Analysis and Requirements}
+
+\section{Requirement Analysis}
+
+Nexis is a role-based, multi-tenant platform. Every piece of data in the
+system belongs to exactly one organisation (tenant), and every request is
+evaluated against both the caller's organisation and the caller's role within
+it. The requirement analysis therefore begins by identifying the actors who
+interact with the system boundary.
+
+Three \emph{human} actor types were identified:
+
+\begin{itemize}[nosep]
+  \item \textbf{Owner/Admin} --- the organisation's administrator, responsible
+        for membership, roles, billing, policy, integrations, and the final
+        human decision on high-stakes automated repairs.
+  \item \textbf{Engineer/Member} --- the working engineer who investigates
+        incidents, exercises the evaluation tooling, and interacts with the
+        recovery pipeline day to day.
+  \item \textbf{Viewer} --- a read-only observer (for example a stakeholder or
+        an auditor) who may inspect the system's state but may not change it.
+\end{itemize}
+
+The role model is \emph{additive}: an Admin holds every permission an Engineer
+holds, and an Engineer holds every permission a Viewer holds. Consequently,
+the functional requirements in Section~3.2 list only the permissions each role
+\emph{adds} to the tier below it, without repetition. (Internally the database
+role enumeration is owner/admin/member; the console additionally presents the
+read-only Viewer experience through RBAC gating on the frontend and API.)
+
+Unusually for a requirement analysis, a fourth actor category must be modelled
+that is not human at all: the \textbf{nine-agent self-healing fleet}. Most
+requirement-analysis chapters enumerate only human actors, because in a
+conventional system every state change ultimately traces back to a person
+clicking something. That assumption does not hold for Nexis. The agent fleet
+acts autonomously inside the system boundary: it detects faults without being
+asked, reads and writes the same PostgreSQL, Neo4j, and object-storage data
+stores the human-facing console uses, and triggers real external side effects
+--- opening GitHub pull requests, applying rollbacks through Argo
+CD~\cite{argocd}, and redeploying preview containers. An actor model that
+omitted the fleet would misrepresent the system: roughly half of all writes to
+the incident, patch, and audit tables originate from agents rather than
+people. Treating the fleet as a first-class actor also makes the safety
+analysis explicit --- every autonomous capability listed in Section~3.2.4 is
+bounded by a corresponding control (sandboxing, severity classification, or
+the human approval gate) listed in Section~3.3.
+
+The Level~0 and Level~1 use case diagrams for these four actors are presented
+together with the rest of the system's UML design in
+Section~\ref{sec:usecase-diagrams} (Figures~\ref{fig:usecase-l0} and
+\ref{fig:usecase-l1}), alongside the data flow diagrams that show how the same
+actors move data through the platform.
+
+\section{Functional Requirements}
+
+The functional requirements are grouped by actor. Because the role model is
+additive, each human tier is listed as a delta over the tier below it.
+
+\subsection{Owner/Admin can:}
+
+\begin{itemize}[nosep]
+  \item Do everything an Engineer/Member and a Viewer can do (role
+        additivity).
+  \item Manage organisation membership: generate invite codes, send email
+        invites, and remove members.
+  \item Assign and change member roles, and act on the intelligent
+        role-recommendation banner on the Members settings page --- accepting
+        a recommendation (which applies the role change under an
+        optimistic-concurrency guard) or dismissing it (which starts a 30-day
+        per-rule cool-down).
+  \item Edit organisation settings (name, profile, and workspace-level
+        configuration).
+  \item Manage billing through Stripe~\cite{stripe}: view usage, manage
+        payment methods, and review invoices produced by the usage-ticker and
+        invoice-roller cron jobs; set the organisation's daily token budget on
+        the cost tracker.
+  \item View and export the append-only, hash-chained audit log (CSV export)
+        and invoke its cryptographic verification endpoint to prove the chain
+        has not been tampered with.
+  \item Decide pending approvals from the recovery pipeline: \textbf{Approve}
+        a validated patch, \textbf{Reject} it, or \textbf{Modify} it --- edit
+        the unified diff in place before it ships, with the edited diff
+        persisted as an RLHF feedback example.
+  \item Configure each project's recovery policy, including
+        rollback-on-SLO-breach behaviour.
+  \item Operate the Docker preview-deploy engine from a project's
+        \emph{Ops} tab: trigger Deploy and Stop, watch live status, open the
+        returned preview URL, inspect build and container logs, and review
+        deployment history.
+  \item Install and manage integrations: the GitHub App (installation, repo
+        listing, webhook-driven incident creation on merged pull requests),
+        Sentry~\cite{sentry}, Datadog~\cite{datadog}, and
+        PagerDuty~\cite{pagerduty} webhook sources, Slack~\cite{slackapi}
+        (OAuth install plus interactive one-click approve/reject directly
+        from a Slack message), and Argo CD~\cite{argocd}.
+  \item Export evaluation-harness results as CSV (an admin-only action).
+  \item Receive the daily admin digest e-mail summarising the last 24 hours
+        of incidents, repairs, approvals, and MTTR for the organisation.
+  \item Monitor platform operations pages: System Health (parallel dependency
+        probes of PostgreSQL, Redis, Neo4j, MinIO, and Temporal), webhook
+        activity, and integration connection health.
+\end{itemize}
+
+\subsection{Engineer/Member can:}
+
+\begin{itemize}[nosep]
+  \item Do everything a Viewer can do (role additivity).
+  \item Sign up and sign in with e-mail and password (JWT session in an
+        HttpOnly cookie), sign in passwordlessly via magic link, or sign in
+        through WorkOS SSO~\cite{workos}; recover access through the
+        password-reset flow (hashed, time-limited reset tokens).
+  \item Enrol multi-factor authentication (TOTP with QR provisioning).
+  \item Manage their own active sessions: list signed-in devices with IP
+        address, user agent, and last-seen time (the caller's own session
+        carries a ``This device'' badge), and revoke any session remotely.
+  \item Create, list, and revoke scoped API keys (\code{nx\_live\_\ldots}
+        bearer tokens) for programmatic access.
+  \item Create projects through the new-project wizard and connect them to
+        GitHub repositories.
+  \item Browse the incidents list and open an incident's detail page, where
+        the nine-agent pipeline timeline streams live over Server-Sent
+        Events, including per-agent status, token counts, and cost.
+  \item Inspect each agent's structured payloads (for example the Backend
+        agent's raw generated diff) from the timeline.
+  \item Trigger fault-injection runs from the Live-Demo console page, which
+        presents 27 curated scenario cards drawn from a broader
+        fixture-scenario taxonomy (one scenario is fully wired end-to-end
+        today; the remainder are labelled ``Coming soon'').
+  \item Run the evaluation harness: side-by-side OpenAI-versus-Ollama
+        provider comparisons over fixture incidents, with persisted
+        transcripts and cost figures.
+  \item Query the knowledge base (pgvector-backed retrieval~\cite{pgvector})
+        and view its retrieval status.
+  \item Complete the post-incident NASA-TLX workload survey~\cite{nasatlx},
+        the platform's instrument for measuring operator cognitive load.
+  \item Use the operational consoles: the agents fleet page and per-agent
+        detail views, the workflows list, the activity stream, the validator
+        sandbox page, and the recovery-pipeline view.
+\end{itemize}
+
+\subsection{Viewer can:}
+
+\begin{itemize}[nosep]
+  \item Sign in and view the dashboard: KPI tiles (MTTR, recovery success
+        rate, open incidents, mean tokens per run), the incidents-over-time
+        chart, the system status panel, the projects health grid, and the
+        recent activity feed.
+  \item Read the incidents list and incident detail timelines, including the
+        live SSE stream, without any decision or mutation controls.
+  \item Read project pages (overview, activity, and status) and the
+        performance page.
+  \item View the agents, workflows, and activity-stream pages in read-only
+        form.
+  \item Take no mutating action of any kind: no approvals, no deployments, no
+        settings changes, no key or session management beyond their own
+        account.
+\end{itemize}
+
+\subsection{The 9-Agent Fleet autonomously:}
+
+\begin{itemize}[nosep]
+  \item \textbf{Detects} faults (Sentinel): an always-on detector applies two
+        rules --- a per-row fatal-level trigger, and a statistical-process-%
+        control spike rule that maintains a per-organisation EWMA mean and
+        variance baseline and fires on a breach of mean~$+3\sigma$, with a
+        Poisson floor for low-count noise and an absolute-floor warm-up
+        fallback.
+  \item \textbf{Diagnoses} root causes (Pathfinder): walks the Neo4j code
+        dependency graph~\cite{neo4j} outward from the fault symptom and
+        forwards candidate root-cause nodes, annotated with hop distance and
+        degree, to the causal-inference sidecar, which ranks candidates by
+        evidence-chain specificity, structural proximity, textual overlap,
+        and a scenario prior, returning a per-component confidence
+        breakdown~\cite{dowhy}.
+  \item \textbf{Classifies and routes} (Synthesiser): assigns the incident a
+        scenario (regex fast path with LLM fallback) and computes an ordered
+        \code{selected\_agents} list; the workflow enforces this routing,
+        skipping non-selected execution agents with a visible ``skipped''
+        timeline state.
+  \item \textbf{Plans} the repair (Architect): decomposes the incident into
+        \code{plan\_steps}, \code{affected\_files}, and a
+        \code{risk\_level}, and serves as a contract other agents may not
+        silently violate --- if the generated diff touches a file outside
+        \code{affected\_files}, the workflow flags a contract violation and
+        forces HIGH severity so the patch can never auto-deploy unreviewed.
+  \item \textbf{Codes} the fix (Backend): generates an LLM-guided minimal
+        unified diff --- the smallest valid change rather than a full-file
+        rewrite.
+  \item \textbf{Tests} the fix (QA): auto-generates property-based test
+        suites (pytest/Hypothesis~\cite{hypothesis}) from the incident and
+        the diff; a background continuous-QA loop replays previously
+        generated suites against the sandbox and raises a fresh incident on
+        any pass-to-fail regression, closing a second, independent loop.
+  \item \textbf{Packages} the deployment (DevOps): emits CI/CD and Argo CD
+        manifests~\cite{argocd} and drives post-deployment health
+        monitoring.
+  \item \textbf{Handles data changes} (Data Engineer): proposes paired
+        forward and reverse SQL migrations, runs a proactive schema-drift
+        detector that introspects \code{information\_schema} against a
+        captured baseline and raises a real incident on drift, and emits
+        OpenLineage-compatible run events~\cite{openlineage} for every
+        migration proposal and application.
+  \item \textbf{Validates} every candidate patch (Validator): executes it in
+        a locked-down Docker sandbox~\cite{docker} (no network, read-only
+        filesystem, all capabilities dropped, PID-limited,
+        no-new-privileges), runs the QA-generated property tests, and reports
+        pass/fail and coverage; no unvalidated patch ever reaches the
+        approval gate.
+  \item \textbf{Classifies severity} at the approval gate: HIGH for
+        schema-drift scenarios, sensitive-path matches (SQL, migrations,
+        auth, security, crypto), unknown scenarios, or contract violations;
+        MEDIUM otherwise, with a 120-second auto-approve countdown unless a
+        human intervenes; LOW (tiny UI-only diffs) auto-approves immediately.
+  \item \textbf{Deploys} approved patches (GitOps): opens a real GitHub pull
+        request through a GitHub App installation
+        (blob$\rightarrow$tree$\rightarrow$commit$\rightarrow$ref$\rightarrow$PR);
+        when the triggering incident originated from the preview-deploy
+        engine, a successful merge additionally triggers an automatic
+        redeploy.
+  \item \textbf{Rolls back} on regression: a post-deploy probe watches for a
+        fresh fatal incident on the same organisation and service within a
+        bounded window and, when the project policy permits, invokes Argo
+        CD's rollback client to restore the prior known-good revision.
+  \item \textbf{Records} every step as a Temporal-durable activity
+        event~\cite{temporal} and streams it live to the incident detail
+        page over Server-Sent Events.
+  \item \textbf{Feeds the deploy engine's failures back into itself}: when a
+        preview deployment fails to build or pass its health check, the
+        deploy engine files a real incident (\code{source:
+        "deploy\_engine"}) into the same Sentinel-to-pipeline path as every
+        other incident source, making a broken build a self-healing target
+        like any production fault.
+\end{itemize}
+
+\section{Non-Functional Requirements}
+
+\begin{table}[htbp]
+\caption{Summary of non-functional requirements and their realisation.}
+\label{tab:nfr}
+\centering
+\begin{tabular}{p{3.4cm}p{9.6cm}}
+\toprule
+\textbf{Requirement} & \textbf{Realisation in Nexis} \\
+\midrule
+Multi-tenancy & PostgreSQL Row-Level Security on essentially every table~\cite{pgrls} \\
+Durability & Temporal-orchestrated workflows survive crashes and restarts~\cite{temporal} \\
+Security & Sandboxed patch execution, encrypted patch storage, hashed tokens, hash-chained audit log \\
+Scalability & Stateless Go services, queue-decoupled workers, parallel dependency probes \\
+Responsiveness & Server-Sent Events stream the live incident timeline \\
+Usability & Role-scoped console, one-click approvals, plain-language rationales \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Multi-tenancy and isolation.} Tenant isolation must not depend on
+application code remembering to add a \code{WHERE org\_id = \ldots} clause.
+Nexis enforces isolation in the database itself using PostgreSQL Row-Level
+Security policies~\cite{pgrls}: a request-scoped transaction binds
+\code{app.current\_org\_id} for every request, and the database refuses to
+return or mutate rows belonging to any other organisation, regardless of what
+the application layer asks for. This applies uniformly to human requests and
+to agent writes.
+
+\textbf{Durability of long-running work.} A recovery run spans many minutes,
+crosses several services, waits on a human decision, and must survive process
+crashes and restarts without losing its place. All pipeline state therefore
+lives in Temporal~\cite{temporal}, a durable workflow engine: every agent
+step is a journaled activity, and a resumed worker replays deterministically
+to exactly where it stopped. An in-memory orchestrator was rejected because a
+single crash mid-repair would strand an incident in an unknown state.
+
+\textbf{Security.} Autonomously generated code is treated as untrusted by
+construction. Candidate patches execute only inside a Docker
+sandbox~\cite{docker} with networking disabled, a read-only filesystem, all
+Linux capabilities dropped, a process-count limit, and
+\code{no-new-privileges}. Patch blobs are stored encrypted in object storage.
+Password-reset and API tokens are stored only as hashes (reset tokens are
+32-byte random values, SHA-256 hashed, with a 30-minute TTL and a non-leaky
+202 response). The audit log is append-only and hash-chained, so any
+tampering with a past entry breaks the chain and is detectable through the
+verification endpoint.
+
+\textbf{Scalability.} The control plane, validator, GitOps, and deploy-engine
+services are independent, stateless Go modules that scale horizontally;
+Temporal decouples workflow load from any single process; Redis provides
+rate limiting and caching; and the System Health page's dependency probes
+fan out in parallel under a bounded timeout so a slow dependency cannot
+stall the page.
+
+\textbf{Real-time responsiveness.} An engineer watching a live repair must
+see agent transitions as they happen, not on a polling delay. The incident
+detail page subscribes to a Server-Sent Events stream, and every
+Temporal-recorded activity event is pushed to the browser within moments of
+occurring --- the live-demo runs in Chapter~6 were observed this way.
+
+\textbf{Usability.} The console must make a genuinely complex system
+operable: role-scoped navigation shows each user only what they can act on,
+approvals are a one-click decision with the full diff in view, severity and
+countdown state are always visible, and role recommendations carry a
+plain-language rationale naming the concrete evidence behind them.
+
+\section{System Feasibility}
+
+\subsection{Technical Feasibility}
+
+Nexis is deliberately polyglot, with each language chosen for the workload it
+carries rather than for uniformity. The four backend services
+(control-plane, validator, gitops, deploy-engine) are independent Go modules:
+Go's static binaries, low-overhead concurrency, and first-class Docker API
+client suit long-lived services that juggle webhooks, container lifecycles,
+and parallel health probes. The console is Next.js/React with TypeScript,
+which is the practical choice for a large role-gated UI with live SSE
+streams, embedded Monaco diff editing, and chart-heavy dashboards. The
+causal-inference sidecar is Python/FastAPI because the scientific-Python
+ecosystem (and the Hypothesis property-testing stack~\cite{hypothesis} the QA
+agent depends on) lives there.
+
+The data layer pairs PostgreSQL 17 with pgvector~\cite{pgvector} --- one
+engine provides transactional tenant data, row-level
+security~\cite{pgrls}, and vector retrieval for the knowledge base, avoiding
+a separate vector database --- while Neo4j~\cite{neo4j} holds the code
+dependency graph, because root-cause diagnosis is a graph-traversal problem
+(hop distances, degrees, paths from symptom to cause) that a relational
+schema expresses poorly. Temporal~\cite{temporal} was proven in practice:
+both live recovery runs reported in Chapter~6 executed durably end-to-end.
+Every component is technology the team could run locally; the entire
+platform was built and verified on a single development machine, with
+Podman~\cite{podman} standing in for Docker~\cite{docker} as an
+API-compatible runtime where Docker itself was unavailable.
+
+\subsection{Economic Feasibility}
+
+The platform's dependency set is open source end to end --- PostgreSQL,
+Neo4j Community, Redis, MinIO, Temporal, OpenTelemetry~\cite{otel}, and the
+Grafana observability stack --- so no licence cost attaches to development or
+evaluation. The one economically significant input, LLM inference, is
+dual-path by design: production targets OpenAI's hosted models, while
+Ollama~\cite{ollama} serves fully supported local models
+(\code{gpt-oss:20b}, \code{qwen2.5-coder:14b}) as a zero-marginal-cost
+development and evaluation path. This is not a theoretical fallback: every
+live end-to-end run in this report was driven by the local Ollama provider,
+meaning the complete system --- including its most expensive component ---
+was exercised without incurring any per-token cost. The cost tracker,
+per-organisation token ledger, and daily budget controls exist precisely so
+that the paid path remains bounded and observable when it is used.
+
+\subsection{Operational Feasibility}
+
+Operationally, the system is designed to be run by the people it serves. The
+console presents role-based dashboards: an admin lands on organisation-wide
+KPIs, approvals, and health; an engineer lands on incidents and the live
+pipeline; a viewer sees a read-only picture of the same truth. High-stakes
+autonomy is reduced to a one-click human decision (Approve/Reject/Modify),
+optionally taken directly from Slack~\cite{slackapi} without opening the
+console at all. Severity classification means routine low-risk fixes demand
+no attention while sensitive changes always do. The NASA-TLX
+instrument~\cite{nasatlx} is built in so that the operator-workload claim can
+eventually be measured rather than asserted. Together these mean adopting
+Nexis does not require a dedicated operations team; the intended day-to-day
+operator is an ordinary engineer with a browser.

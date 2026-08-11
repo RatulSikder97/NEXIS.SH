@@ -47,4 +47,3 @@ func TestOpenAI_Name(t *testing.T) {
 		t.Fatalf("name: %q", got)
 	}
 }
-

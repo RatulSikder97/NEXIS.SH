@@ -2,15 +2,37 @@ package domain
 
 import "context"
 
-// CausalQuery is the input the Pathfinder agent hands to the DoWhy sidecar.
+// CausalCandidate is one root-cause hypothesis assembled from the Neo4j
+// traversal, forwarded to the sidecar's graph-evidence ranking. It maps 1:1
+// onto the sidecar's RootCauseCandidate wire model (root_cause_candidates):
+// Node -> node, Evidence -> evidence, and the three graph-position fields
+// onto in_degree / out_degree / distance_from_symptom.
+//
+// The degree fields count edges within the retrieved <=MaxHops evidence
+// subgraph, not the global codegraph — the traversal is bounded by
+// Provider.Limit, so these are local-neighbourhood centrality signals.
+// DistanceFromSymptom is the hop count from the crashing frame's symbol
+// (0 = the symbol containing the last stack frame itself).
+type CausalCandidate struct {
+	Node                string
+	Evidence            []string
+	InDegree            int
+	OutDegree           int
+	DistanceFromSymptom int
+}
+
+// CausalQuery is the input the Pathfinder agent hands to the causal sidecar.
 // RootCauseNode is the Symbol name returned by Graph.FindSymbolContaining
 // (may be empty when the graph adapter is unavailable); Features is a list
-// of free-form evidence strings the sidecar may fold into its estimand.
+// of free-form evidence strings; Candidates is the graph-derived hypothesis
+// set the sidecar ranks (empty when the graph adapter is unavailable, in
+// which case the sidecar degrades to its scenario-prior fallback).
 type CausalQuery struct {
 	IncidentID    string
 	Stacktrace    string
 	RootCauseNode string
 	Features      []string
+	Candidates    []CausalCandidate
 }
 
 // CausalResult is what the DoWhy sidecar returns. EstimandName is the name

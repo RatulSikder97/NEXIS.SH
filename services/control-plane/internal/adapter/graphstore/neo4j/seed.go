@@ -26,9 +26,9 @@ var callRE = regexp.MustCompile(`\b([A-Za-z_][A-Za-z0-9_]*)\(`)
 // surfaces for the demo fixtures. Each entry becomes a synthetic RAISED edge
 // after the symbol pass.
 var raisedTable = map[string][]string{
-	"safe_div":      {"ValueError"},
-	"load_orders":   {"OperationalError"},
-	"image_resize":  {"MemoryError"},
+	"safe_div":     {"ValueError"},
+	"load_orders":  {"OperationalError"},
+	"image_resize": {"MemoryError"},
 }
 
 // SeedFromFixtures walks `root` (typically services/validator/fixtures), parses

@@ -31,17 +31,14 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/empty-state/EmptyState";
 import { DecisionDialog } from "@/components/approvals/DecisionDialog";
 import { PendingApprovalsTable } from "@/components/approvals/PendingApprovalsTable";
-import {
-  approvals,
-  type PendingApproval,
-} from "@/lib/approvals";
+import { approvals, type PendingApproval } from "@/lib/approvals";
 
 const POLL_MS = 5_000;
 const TICK_MS = 1_000;
 
 type DialogState =
   | { open: false }
-  | { open: true; kind: "approve" | "reject"; row: PendingApproval };
+  | { open: true; kind: "approve" | "reject" | "modify"; row: PendingApproval };
 
 export function ApprovalsClient({
   workspaceId,
@@ -106,26 +103,36 @@ export function ApprovalsClient({
     setDialog({ open: true, kind: "reject", row });
   }
 
+  function openModify(row: PendingApproval) {
+    setDialogError(null);
+    setDialog({ open: true, kind: "modify", row });
+  }
+
   function closeDialog() {
     if (submitting) return;
     setDialog({ open: false });
   }
 
-  async function confirmDecision(notes: string) {
+  async function confirmDecision(notes: string, modifiedDiff?: string) {
     if (!dialog.open || !workspaceId) return;
     setSubmitting(true);
     setDialogError(null);
     try {
       if (dialog.kind === "approve") {
         await approvals.approve(workspaceId, dialog.row.run_id, notes);
+      } else if (dialog.kind === "modify") {
+        await approvals.modify(
+          workspaceId,
+          dialog.row.run_id,
+          modifiedDiff ?? "",
+          notes,
+        );
       } else {
         await approvals.reject(workspaceId, dialog.row.run_id, notes);
       }
       // Optimistic remove. The next poll will reconcile if the backend
       // reports the row still pending (race against the workflow signal).
-      setRows((prev) =>
-        prev.filter((r) => r.run_id !== dialog.row.run_id),
-      );
+      setRows((prev) => prev.filter((r) => r.run_id !== dialog.row.run_id));
       setDialog({ open: false });
       // Refresh the layout so the sidebar's pending-count badge picks the
       // change up without waiting for its own poll tick.
@@ -206,6 +213,7 @@ export function ApprovalsClient({
           now={now}
           onApprove={openApprove}
           onReject={openReject}
+          onModify={openModify}
         />
       )}
 

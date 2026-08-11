@@ -1,0 +1,36 @@
+Modern software engineering teams spend an estimated 40--60\% of their time on
+maintenance, debugging, and manual incident response rather than building new
+capability. Existing AI-assisted developer tools -- code completion, automated
+test generation, deployment dashboards -- address individual tasks in
+isolation; none model the collaborative structure of a real engineering team,
+and none close the loop between detecting a production failure and
+autonomously repairing it. \textbf{Nexis} addresses both gaps at once. It
+models a software engineering organisation as nine role-specialised
+autonomous agents across two cooperating layers -- a five-agent Execution
+Team (Architect, Backend, QA, DevOps, Data Engineer) and a four-agent
+Self-Healing Loop (Sentinel, Pathfinder, Synthesiser, Validator) -- durably
+orchestrated by Temporal and gated by a severity-routed human-in-the-loop
+Approval Gate that supports Approve, Reject, and Modify (RLHF) decisions.
+This report documents the complete, working system: a multi-tenant control
+plane (Go, PostgreSQL with row-level security, Neo4j, Redis), a Docker
+shadow-validation sandbox, a real GitHub-App-mediated GitOps deployment path,
+a from-scratch Docker preview-deploy engine that clones, builds, and serves an
+arbitrary connected repository and feeds its own build/runtime failures back
+into the same self-healing pipeline, and a Next.js console spanning
+authentication, RBAC, intelligent role recommendation, incident observability,
+billing, and multi-provider integrations. Two live end-to-end recovery runs
+against a local large language model are reported verbatim -- one correctly
+timing out at the human approval gate, one succeeding fully from fault
+detection through an approved, deployed patch in under two minutes -- alongside
+a live, verified proof of the preview-deploy engine building and serving a
+real public repository. The report is written as a candid engineering account:
+what works is demonstrated with reproducible evidence, and what is
+deliberately out of scope -- a fully credentialed production deployment to the
+registered \texttt{nexis.sh} domain, and the human-subject NASA-TLX study --
+is stated plainly rather than implied.
+
+\vspace{10pt}
+\textbf{Keywords:} Multi-agent systems, autonomous software engineering,
+self-healing systems, closed-loop fault recovery, root-cause analysis,
+LLM-guided program repair, DevOps automation, Temporal workflow orchestration,
+human-in-the-loop AI, retrieval-augmented generation.

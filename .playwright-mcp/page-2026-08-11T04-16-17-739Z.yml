@@ -1,0 +1,594 @@
+- generic [active] [ref=f49e1]:
+  - generic [ref=f49e2]:
+    - link "Skip to content" [ref=f49e3] [cursor=pointer]:
+      - /url: "#main"
+    - complementary [ref=f49e4]:
+      - generic [ref=f49e5]:
+        - generic [ref=f49e6]: NEXIS
+        - button "Collapse sidebar" [ref=f49e9]
+      - navigation "Console navigation" [ref=f49e15]:
+        - generic [ref=f49e16]:
+          - paragraph [ref=f49e17]: Workspace
+          - list [ref=f49e18]:
+            - listitem [ref=f49e19]:
+              - link "Dashboard" [ref=f49e20] [cursor=pointer]:
+                - /url: /console
+            - listitem [ref=f49e28]:
+              - link "Projects" [ref=f49e29] [cursor=pointer]:
+                - /url: /console/projects
+            - listitem [ref=f49e42]:
+              - link "Incidents" [ref=f49e43] [cursor=pointer]:
+                - /url: /console/incidents
+            - listitem [ref=f49e48]:
+              - link "Approvals" [ref=f49e49] [cursor=pointer]:
+                - /url: /console/approvals
+            - listitem [ref=f49e55]:
+              - link "Audit Log" [ref=f49e56] [cursor=pointer]:
+                - /url: /console/audit
+        - generic [ref=f49e62]:
+          - paragraph [ref=f49e63]: Fleet
+          - list [ref=f49e64]:
+            - listitem [ref=f49e65]:
+              - link "Agents 9 items" [ref=f49e66] [cursor=pointer]:
+                - /url: /console/agents
+                - generic [ref=f49e72]: Agents
+                - generic "9 items" [ref=f49e74]: "9"
+            - listitem [ref=f49e75]:
+              - link "Workflows" [ref=f49e76] [cursor=pointer]:
+                - /url: /console/workflows
+            - listitem [ref=f49e83]:
+              - link "Activity Stream" [ref=f49e84] [cursor=pointer]:
+                - /url: /console/activity
+            - listitem [ref=f49e89]:
+              - link "Validator Sandbox" [ref=f49e90] [cursor=pointer]:
+                - /url: /console/validator
+        - generic [ref=f49e97]:
+          - paragraph [ref=f49e98]: Observability
+          - list [ref=f49e99]:
+            - listitem [ref=f49e100]:
+              - link "Performance" [ref=f49e101] [cursor=pointer]:
+                - /url: /console/performance
+            - listitem [ref=f49e107]:
+              - link "Cost Tracker" [ref=f49e108] [cursor=pointer]:
+                - /url: /console/cost
+            - listitem [ref=f49e113]:
+              - link "System Health" [ref=f49e114] [cursor=pointer]:
+                - /url: /console/health
+        - generic [ref=f49e120]:
+          - paragraph [ref=f49e121]: Integrations
+          - list [ref=f49e122]:
+            - listitem [ref=f49e123]:
+              - link "All Integrations 0/6 connected" [ref=f49e124] [cursor=pointer]:
+                - /url: /console/integrations
+                - generic [ref=f49e127]: All Integrations
+                - generic "0/6 connected" [ref=f49e129]: 0/6
+            - listitem [ref=f49e130]:
+              - link "Webhook Activity" [ref=f49e131] [cursor=pointer]:
+                - /url: /console/webhooks
+            - listitem [ref=f49e138]:
+              - link "Connection Health" [ref=f49e139] [cursor=pointer]:
+                - /url: /console/connections
+        - generic [ref=f49e147]:
+          - paragraph [ref=f49e148]: Operations
+          - list [ref=f49e149]:
+            - listitem [ref=f49e150]:
+              - link "Recovery Pipeline" [ref=f49e151] [cursor=pointer]:
+                - /url: /console/recovery
+            - listitem [ref=f49e156]:
+              - link "Eval Harness" [ref=f49e157] [cursor=pointer]:
+                - /url: /console/eval
+            - listitem [ref=f49e162]:
+              - link "Live Demo 1 items" [ref=f49e163] [cursor=pointer]:
+                - /url: /console/live-demo
+                - generic [ref=f49e168]: Live Demo
+                - generic "1 items" [ref=f49e170]: "1"
+            - listitem [ref=f49e171]:
+              - link "Knowledge Base" [ref=f49e172] [cursor=pointer]:
+                - /url: /console/knowledge
+      - link "Settings" [ref=f49e178] [cursor=pointer]:
+        - /url: /console/settings/profile
+      - generic [ref=f49e184]:
+        - paragraph [ref=f49e185]: Live
+        - 'link "System status: Status unknown" [ref=f49e192] [cursor=pointer]':
+          - /url: /console/health
+          - generic [ref=f49e194]: Status unknown
+    - generic [ref=f49e195]:
+      - banner [ref=f49e196]:
+        - generic [ref=f49e197]:
+          - generic "Workspace Production in us-east-1" [ref=f49e198]:
+            - generic [ref=f49e199]: 🇺🇸
+            - generic [ref=f49e200]: Production
+            - generic [ref=f49e201]: us-east-1
+          - navigation "Breadcrumb" [ref=f49e204]:
+            - generic [ref=f49e205]: Live Demo
+        - generic [ref=f49e206]:
+          - button "Open command palette" [ref=f49e207]:
+            - generic [ref=f49e208]: Jump to…
+            - generic [ref=f49e209]: ⌘K
+          - button "Open notifications" [ref=f49e211]
+          - button "Switch to dark mode" [ref=f49e215]
+          - button "Account menu" [ref=f49e218]:
+            - generic [ref=f49e219]: D
+            - generic [ref=f49e220]: demo
+      - main [ref=f49e223]:
+        - generic [ref=f49e224]:
+          - generic [ref=f49e225]:
+            - heading "Live Demo" [level=1] [ref=f49e226]
+            - paragraph [ref=f49e227]: Pick any scenario to fire it against the synthetic fixture. The full L1+L2 fleet runs end-to-end — Sentinel detects, Pathfinder diagnoses, the L1 agents code + test, and the approval gate routes by severity.
+            - paragraph [ref=f49e228]: 1 of 27 scenarios wired today. The rest ship as fixtures land in the control plane.
+          - generic [ref=f49e229]:
+            - tablist "Filter scenarios by sector" [ref=f49e230]:
+              - tab "All" [selected] [ref=f49e231]
+              - tab "Application" [ref=f49e232]
+              - tab "Database & data" [ref=f49e233]
+              - tab "Deploy" [ref=f49e234]
+              - tab "Observability" [ref=f49e235]
+              - tab "Security" [ref=f49e236]
+            - searchbox "Search scenarios" [ref=f49e238]
+          - generic [ref=f49e239]:
+            - region "Application bugs" [ref=f49e240]:
+              - generic [ref=f49e241]:
+                - heading "Application bugs" [level=2] [ref=f49e242]
+                - paragraph [ref=f49e243]: Runtime exceptions and logic faults captured by APM tooling.
+              - generic [ref=f49e244]:
+                - generic [ref=f49e245]:
+                  - generic [ref=f49e257]:
+                    - heading "Null-pointer in Orders API" [level=3] [ref=f49e258]
+                    - paragraph [ref=f49e259]: An Orders endpoint dereferences an optional field that wasn't guarded.
+                  - generic [ref=f49e260]:
+                    - generic "Severity High" [ref=f49e261]: High
+                    - generic [ref=f49e263]: sentry
+                  - generic [ref=f49e267]:
+                    - generic [ref=f49e268]: Sentinel
+                    - generic [ref=f49e269]: Pathfinder
+                    - generic [ref=f49e270]: Architect
+                    - generic [ref=f49e271]: Backend
+                    - generic [ref=f49e272]: QA
+                  - generic [ref=f49e273]:
+                    - generic [ref=f49e274]: ~35s · 5 agents
+                    - button "Run Null-pointer in Orders API" [ref=f49e275]: Run scenario
+                - generic [ref=f49e279]:
+                  - generic [ref=f49e284]:
+                    - heading "Unhandled promise rejection" [level=3] [ref=f49e285]
+                    - paragraph [ref=f49e286]: An async error escapes the request scope and tears down the worker.
+                  - generic [ref=f49e287]:
+                    - generic "Severity High" [ref=f49e288]: High
+                    - generic [ref=f49e290]: sentry
+                    - generic [ref=f49e294]: Coming soon
+                  - generic [ref=f49e295]:
+                    - generic [ref=f49e296]: Sentinel
+                    - generic [ref=f49e297]: Pathfinder
+                    - generic [ref=f49e298]: Backend
+                    - generic [ref=f49e299]: QA
+                  - generic [ref=f49e300]:
+                    - generic [ref=f49e301]: ~40s · 4 agents
+                    - button "Preview Unhandled promise rejection" [ref=f49e302]: Preview
+                - generic [ref=f49e303]:
+                  - generic [ref=f49e308]:
+                    - heading "ReDoS in input validator" [level=3] [ref=f49e309]
+                    - paragraph [ref=f49e310]: A user-supplied string triggers catastrophic backtracking.
+                  - generic [ref=f49e311]:
+                    - generic "Severity Critical" [ref=f49e312]: Critical
+                    - generic [ref=f49e314]: datadog
+                    - generic [ref=f49e318]: Coming soon
+                  - generic [ref=f49e319]:
+                    - generic [ref=f49e320]: Sentinel
+                    - generic [ref=f49e321]: Pathfinder
+                    - generic [ref=f49e322]: Architect
+                    - generic [ref=f49e323]: Backend
+                    - generic [ref=f49e324]: DevOps
+                  - generic [ref=f49e325]:
+                    - generic [ref=f49e326]: ~55s · 5 agents
+                    - button "Preview ReDoS in input validator" [ref=f49e327]: Preview
+                - generic [ref=f49e328]:
+                  - generic [ref=f49e334]:
+                    - heading "Division by zero in pricing" [level=3] [ref=f49e335]
+                    - paragraph [ref=f49e336]: A pricing calculator divides by a quantity that can be zero.
+                  - generic [ref=f49e337]:
+                    - generic "Severity Medium" [ref=f49e338]: Medium
+                    - generic [ref=f49e340]: sentry
+                    - generic [ref=f49e344]: Coming soon
+                  - generic [ref=f49e345]:
+                    - generic [ref=f49e346]: Sentinel
+                    - generic [ref=f49e347]: Pathfinder
+                    - generic [ref=f49e348]: Backend
+                    - generic [ref=f49e349]: QA
+                  - generic [ref=f49e350]:
+                    - generic [ref=f49e351]: ~30s · 4 agents
+                    - button "Preview Division by zero in pricing" [ref=f49e352]: Preview
+                - generic [ref=f49e353]:
+                  - generic [ref=f49e359]:
+                    - heading "Off-by-one in string parser" [level=3] [ref=f49e360]
+                    - paragraph [ref=f49e361]: An index expression overruns the buffer for empty inputs.
+                  - generic [ref=f49e362]:
+                    - generic "Severity Medium" [ref=f49e363]: Medium
+                    - generic [ref=f49e365]: sentry
+                    - generic [ref=f49e369]: Coming soon
+                  - generic [ref=f49e370]:
+                    - generic [ref=f49e371]: Sentinel
+                    - generic [ref=f49e372]: Pathfinder
+                    - generic [ref=f49e373]: Backend
+                    - generic [ref=f49e374]: QA
+                  - generic [ref=f49e375]:
+                    - generic [ref=f49e376]: ~30s · 4 agents
+                    - button "Preview Off-by-one in string parser" [ref=f49e377]: Preview
+            - region "Database & data pipelines" [ref=f49e378]:
+              - generic [ref=f49e379]:
+                - heading "Database & data pipelines" [level=2] [ref=f49e380]
+                - paragraph [ref=f49e381]: Storage, schema, query, batch, and streaming faults across the data plane.
+              - generic [ref=f49e382]:
+                - generic [ref=f49e383]:
+                  - generic [ref=f49e388]:
+                    - heading "Connection pool exhausted" [level=3] [ref=f49e389]
+                    - paragraph [ref=f49e390]: All Postgres pool slots in use; new requests time out at the boundary.
+                  - generic [ref=f49e391]:
+                    - generic "Severity High" [ref=f49e392]: High
+                    - generic [ref=f49e394]: datadog
+                    - generic [ref=f49e398]: Coming soon
+                  - generic [ref=f49e399]:
+                    - generic [ref=f49e400]: Sentinel
+                    - generic [ref=f49e401]: Pathfinder
+                    - generic [ref=f49e402]: Architect
+                    - generic [ref=f49e403]: Backend
+                    - generic [ref=f49e404]: DevOps
+                  - generic [ref=f49e405]:
+                    - generic [ref=f49e406]: ~50s · 5 agents
+                    - button "Preview Connection pool exhausted" [ref=f49e407]: Preview
+                - generic [ref=f49e408]:
+                  - generic [ref=f49e414]:
+                    - heading "Slow query p99 spike" [level=3] [ref=f49e415]
+                    - paragraph [ref=f49e416]: A new query plan degrades all reads on the orders table.
+                  - generic [ref=f49e417]:
+                    - generic "Severity High" [ref=f49e418]: High
+                    - generic [ref=f49e420]: datadog
+                    - generic [ref=f49e424]: Coming soon
+                  - generic [ref=f49e425]:
+                    - generic [ref=f49e426]: Sentinel
+                    - generic [ref=f49e427]: Pathfinder
+                    - generic [ref=f49e428]: Architect
+                    - generic [ref=f49e429]: Data Engineer
+                    - generic [ref=f49e430]: Approval Gate
+                  - generic [ref=f49e431]:
+                    - generic [ref=f49e432]: ~1m · 5 agents
+                    - button "Preview Slow query p99 spike" [ref=f49e433]: Preview
+                - generic [ref=f49e434]:
+                  - generic [ref=f49e441]:
+                    - heading "Migration failed mid-deploy" [level=3] [ref=f49e442]
+                    - paragraph [ref=f49e443]: A schema migration crashed halfway with a partially-applied change.
+                  - generic [ref=f49e444]:
+                    - generic "Severity Critical" [ref=f49e445]: Critical
+                    - generic [ref=f49e447]: pagerduty
+                    - generic [ref=f49e451]: Coming soon
+                  - generic [ref=f49e452]:
+                    - generic [ref=f49e453]: Sentinel
+                    - generic [ref=f49e454]: Pathfinder
+                    - generic [ref=f49e455]: Architect
+                    - generic [ref=f49e456]: Data Engineer
+                    - generic [ref=f49e457]: Approval Gate
+                  - generic [ref=f49e458]:
+                    - generic [ref=f49e459]: ~1m 10s · 5 agents
+                    - button "Preview Migration failed mid-deploy" [ref=f49e460]: Preview
+                - generic [ref=f49e461]:
+                  - generic [ref=f49e468]:
+                    - heading "pgvector index corrupted" [level=3] [ref=f49e469]
+                    - paragraph [ref=f49e470]: Embedding lookups return wrong rows after a bad reindex run.
+                  - generic [ref=f49e471]:
+                    - generic "Severity Medium" [ref=f49e472]: Medium
+                    - generic [ref=f49e474]: sentry
+                    - generic [ref=f49e478]: Coming soon
+                  - generic [ref=f49e479]:
+                    - generic [ref=f49e480]: Sentinel
+                    - generic [ref=f49e481]: Pathfinder
+                    - generic [ref=f49e482]: Architect
+                    - generic [ref=f49e483]: Data Engineer
+                  - generic [ref=f49e484]:
+                    - generic [ref=f49e485]: ~45s · 4 agents
+                    - button "Preview pgvector index corrupted" [ref=f49e486]: Preview
+                - generic [ref=f49e487]:
+                  - generic [ref=f49e493]:
+                    - heading "Cross-tx deadlock in checkout" [level=3] [ref=f49e494]
+                    - paragraph [ref=f49e495]: Postgres aborts a checkout transaction with a deadlock victim.
+                  - generic [ref=f49e496]:
+                    - generic "Severity High" [ref=f49e497]: High
+                    - generic [ref=f49e499]: datadog
+                    - generic [ref=f49e503]: Coming soon
+                  - generic [ref=f49e504]:
+                    - generic [ref=f49e505]: Sentinel
+                    - generic [ref=f49e506]: Pathfinder
+                    - generic [ref=f49e507]: Architect
+                    - generic [ref=f49e508]: Backend
+                  - generic [ref=f49e509]:
+                    - generic [ref=f49e510]: ~40s · 4 agents
+                    - button "Preview Cross-tx deadlock in checkout" [ref=f49e511]: Preview
+                - generic [ref=f49e512]:
+                  - generic [ref=f49e518]:
+                    - heading "Airflow DAG stuck queued" [level=3] [ref=f49e519]
+                    - paragraph [ref=f49e520]: An upstream task is stuck in queued; downstream consumers are blocked.
+                  - generic [ref=f49e521]:
+                    - generic "Severity Medium" [ref=f49e522]: Medium
+                    - generic [ref=f49e524]: pagerduty
+                    - generic [ref=f49e528]: Coming soon
+                  - generic [ref=f49e529]:
+                    - generic [ref=f49e530]: Sentinel
+                    - generic [ref=f49e531]: Pathfinder
+                    - generic [ref=f49e532]: Data Engineer
+                  - generic [ref=f49e533]:
+                    - generic [ref=f49e534]: ~45s · 3 agents
+                    - button "Preview Airflow DAG stuck queued" [ref=f49e535]: Preview
+                - generic [ref=f49e536]:
+                  - generic [ref=f49e541]:
+                    - heading "Spark executor OOM" [level=3] [ref=f49e542]
+                    - paragraph [ref=f49e543]: A join exploded an executor's heap; the job died after three retries.
+                  - generic [ref=f49e544]:
+                    - generic "Severity High" [ref=f49e545]: High
+                    - generic [ref=f49e547]: pagerduty
+                    - generic [ref=f49e551]: Coming soon
+                  - generic [ref=f49e552]:
+                    - generic [ref=f49e553]: Sentinel
+                    - generic [ref=f49e554]: Pathfinder
+                    - generic [ref=f49e555]: Architect
+                    - generic [ref=f49e556]: Data Engineer
+                  - generic [ref=f49e557]:
+                    - generic [ref=f49e558]: ~1m · 4 agents
+                    - button "Preview Spark executor OOM" [ref=f49e559]: Preview
+                - generic [ref=f49e560]:
+                  - generic [ref=f49e567]:
+                    - heading "dbt model compile failure" [level=3] [ref=f49e568]
+                    - paragraph [ref=f49e569]: A macro change broke lineage; downstream models can't compile.
+                  - generic [ref=f49e570]:
+                    - generic "Severity Medium" [ref=f49e571]: Medium
+                    - generic [ref=f49e573]: github
+                    - generic [ref=f49e577]: Coming soon
+                  - generic [ref=f49e578]:
+                    - generic [ref=f49e579]: Sentinel
+                    - generic [ref=f49e580]: Pathfinder
+                    - generic [ref=f49e581]: Architect
+                    - generic [ref=f49e582]: Data Engineer
+                  - generic [ref=f49e583]:
+                    - generic [ref=f49e584]: ~45s · 4 agents
+                    - button "Preview dbt model compile failure" [ref=f49e585]: Preview
+                - generic [ref=f49e586]:
+                  - generic [ref=f49e595]:
+                    - heading "Kafka consumer lag" [level=3] [ref=f49e596]
+                    - paragraph [ref=f49e597]: Consumer offset is falling behind the producer rate.
+                  - generic [ref=f49e598]:
+                    - generic "Severity High" [ref=f49e599]: High
+                    - generic [ref=f49e601]: datadog
+                    - generic [ref=f49e605]: Coming soon
+                  - generic [ref=f49e606]:
+                    - generic [ref=f49e607]: Sentinel
+                    - generic [ref=f49e608]: Pathfinder
+                    - generic [ref=f49e609]: Architect
+                    - generic [ref=f49e610]: Backend
+                  - generic [ref=f49e611]:
+                    - generic [ref=f49e612]: ~50s · 4 agents
+                    - button "Preview Kafka consumer lag" [ref=f49e613]: Preview
+                - generic [ref=f49e614]:
+                  - generic [ref=f49e619]:
+                    - heading "Snowflake query cost spike" [level=3] [ref=f49e620]
+                    - paragraph [ref=f49e621]: One query is consuming a large share of warehouse credits.
+                  - generic [ref=f49e622]:
+                    - generic "Severity Medium" [ref=f49e623]: Medium
+                    - generic [ref=f49e625]: datadog
+                    - generic [ref=f49e629]: Coming soon
+                  - generic [ref=f49e630]:
+                    - generic [ref=f49e631]: Sentinel
+                    - generic [ref=f49e632]: Pathfinder
+                    - generic [ref=f49e633]: Architect
+                    - generic [ref=f49e634]: Data Engineer
+                  - generic [ref=f49e635]:
+                    - generic [ref=f49e636]: ~50s · 4 agents
+                    - button "Preview Snowflake query cost spike" [ref=f49e637]: Preview
+            - region "Deploy & rollout" [ref=f49e638]:
+              - generic [ref=f49e639]:
+                - heading "Deploy & rollout" [level=2] [ref=f49e640]
+                - paragraph [ref=f49e641]: Bad canaries, manifest mistakes, and other GitOps + CI/CD failures.
+              - generic [ref=f49e642]:
+                - generic [ref=f49e643]:
+                  - generic [ref=f49e651]:
+                    - heading "Bad canary deploy" [level=3] [ref=f49e652]
+                    - paragraph [ref=f49e653]: The latest canary is 503-ing — Argo refused to promote.
+                  - generic [ref=f49e654]:
+                    - generic "Severity Critical" [ref=f49e655]: Critical
+                    - generic [ref=f49e657]: argocd
+                    - generic [ref=f49e662]: Coming soon
+                  - generic [ref=f49e663]:
+                    - generic [ref=f49e664]: Sentinel
+                    - generic [ref=f49e665]: Pathfinder
+                    - generic [ref=f49e666]: Architect
+                    - generic [ref=f49e667]: DevOps
+                    - generic [ref=f49e668]: Approval Gate
+                  - generic [ref=f49e669]:
+                    - generic [ref=f49e670]: ~50s · 5 agents
+                    - button "Preview Bad canary deploy" [ref=f49e671]: Preview
+                - generic [ref=f49e672]:
+                  - generic [ref=f49e677]:
+                    - heading "Pod OOMKilled in a loop" [level=3] [ref=f49e678]
+                    - paragraph [ref=f49e679]: A pod keeps OOMKilling on the new image and never reaches Ready.
+                  - generic [ref=f49e680]:
+                    - generic "Severity High" [ref=f49e681]: High
+                    - generic [ref=f49e683]: datadog
+                    - generic [ref=f49e687]: Coming soon
+                  - generic [ref=f49e688]:
+                    - generic [ref=f49e689]: Sentinel
+                    - generic [ref=f49e690]: Pathfinder
+                    - generic [ref=f49e691]: Architect
+                    - generic [ref=f49e692]: DevOps
+                  - generic [ref=f49e693]:
+                    - generic [ref=f49e694]: ~45s · 4 agents
+                    - button "Preview Pod OOMKilled in a loop" [ref=f49e695]: Preview
+                - generic [ref=f49e696]:
+                  - generic [ref=f49e703]:
+                    - heading "ImagePullBackOff" [level=3] [ref=f49e704]
+                    - paragraph [ref=f49e705]: Wrong image tag in the manifest after a careless edit.
+                  - generic [ref=f49e706]:
+                    - generic "Severity Medium" [ref=f49e707]: Medium
+                    - generic [ref=f49e709]: argocd
+                    - generic [ref=f49e714]: Coming soon
+                  - generic [ref=f49e715]:
+                    - generic [ref=f49e716]: Sentinel
+                    - generic [ref=f49e717]: Pathfinder
+                    - generic [ref=f49e718]: Architect
+                    - generic [ref=f49e719]: DevOps
+                  - generic [ref=f49e720]:
+                    - generic [ref=f49e721]: ~35s · 4 agents
+                    - button "Preview ImagePullBackOff" [ref=f49e722]: Preview
+                - generic [ref=f49e723]:
+                  - generic [ref=f49e728]:
+                    - heading "PDB blocks node drain" [level=3] [ref=f49e729]
+                    - paragraph [ref=f49e730]: PodDisruptionBudget refuses to evict for a routine node maintenance.
+                  - generic [ref=f49e731]:
+                    - generic "Severity Medium" [ref=f49e732]: Medium
+                    - generic [ref=f49e734]: datadog
+                    - generic [ref=f49e738]: Coming soon
+                  - generic [ref=f49e739]:
+                    - generic [ref=f49e740]: Sentinel
+                    - generic [ref=f49e741]: Pathfinder
+                    - generic [ref=f49e742]: Architect
+                    - generic [ref=f49e743]: DevOps
+                    - generic [ref=f49e744]: Approval Gate
+                  - generic [ref=f49e745]:
+                    - generic [ref=f49e746]: ~40s · 5 agents
+                    - button "Preview PDB blocks node drain" [ref=f49e747]: Preview
+                - generic [ref=f49e748]:
+                  - generic [ref=f49e754]:
+                    - heading "TLS cert expiring soon" [level=3] [ref=f49e755]
+                    - paragraph [ref=f49e756]: Cert-manager missed the renewal window for an inbound host.
+                  - generic [ref=f49e757]:
+                    - generic "Severity Medium" [ref=f49e758]: Medium
+                    - generic [ref=f49e760]: pagerduty
+                    - generic [ref=f49e764]: Coming soon
+                  - generic [ref=f49e765]:
+                    - generic [ref=f49e766]: Sentinel
+                    - generic [ref=f49e767]: Pathfinder
+                    - generic [ref=f49e768]: Architect
+                    - generic [ref=f49e769]: DevOps
+                  - generic [ref=f49e770]:
+                    - generic [ref=f49e771]: ~40s · 4 agents
+                    - button "Preview TLS cert expiring soon" [ref=f49e772]: Preview
+            - region "Observability & runtime" [ref=f49e773]:
+              - generic [ref=f49e774]:
+                - heading "Observability & runtime" [level=2] [ref=f49e775]
+                - paragraph [ref=f49e776]: Slow leaks, throttling, and SLO breaches surfaced by metrics.
+              - generic [ref=f49e777]:
+                - generic [ref=f49e778]:
+                  - generic [ref=f49e784]:
+                    - heading "Heap climbs over 24h" [level=3] [ref=f49e785]
+                    - paragraph [ref=f49e786]: Heap usage shows a slow but steady leak across a release.
+                  - generic [ref=f49e787]:
+                    - generic "Severity Medium" [ref=f49e788]: Medium
+                    - generic [ref=f49e790]: datadog
+                    - generic [ref=f49e794]: Coming soon
+                  - generic [ref=f49e795]:
+                    - generic [ref=f49e796]: Sentinel
+                    - generic [ref=f49e797]: Pathfinder
+                    - generic [ref=f49e798]: Architect
+                    - generic [ref=f49e799]: Backend
+                  - generic [ref=f49e800]:
+                    - generic [ref=f49e801]: ~50s · 4 agents
+                    - button "Preview Heap climbs over 24h" [ref=f49e802]: Preview
+                - generic [ref=f49e803]:
+                  - generic [ref=f49e810]:
+                    - heading "Goroutine leak in Go service" [level=3] [ref=f49e811]
+                    - paragraph [ref=f49e812]: Goroutine count climbs steadily; pprof traces fan out to leaked channels.
+                  - generic [ref=f49e813]:
+                    - generic "Severity Medium" [ref=f49e814]: Medium
+                    - generic [ref=f49e816]: datadog
+                    - generic [ref=f49e820]: Coming soon
+                  - generic [ref=f49e821]:
+                    - generic [ref=f49e822]: Sentinel
+                    - generic [ref=f49e823]: Pathfinder
+                    - generic [ref=f49e824]: Architect
+                    - generic [ref=f49e825]: Backend
+                  - generic [ref=f49e826]:
+                    - generic [ref=f49e827]: ~45s · 4 agents
+                    - button "Preview Goroutine leak in Go service" [ref=f49e828]: Preview
+                - generic [ref=f49e829]:
+                  - generic [ref=f49e835]:
+                    - heading "CPU throttling spike" [level=3] [ref=f49e836]
+                    - paragraph [ref=f49e837]: Container hitting the CPU limit; latency rises with throttled time.
+                  - generic [ref=f49e838]:
+                    - generic "Severity High" [ref=f49e839]: High
+                    - generic [ref=f49e841]: datadog
+                    - generic [ref=f49e845]: Coming soon
+                  - generic [ref=f49e846]:
+                    - generic [ref=f49e847]: Sentinel
+                    - generic [ref=f49e848]: Pathfinder
+                    - generic [ref=f49e849]: Architect
+                    - generic [ref=f49e850]: Backend
+                    - generic [ref=f49e851]: QA
+                  - generic [ref=f49e852]:
+                    - generic [ref=f49e853]: ~50s · 5 agents
+                    - button "Preview CPU throttling spike" [ref=f49e854]: Preview
+                - generic [ref=f49e855]:
+                  - generic [ref=f49e861]:
+                    - heading "P99 latency above SLO" [level=3] [ref=f49e862]
+                    - paragraph [ref=f49e863]: The /v1/orders endpoint is breaching its 250ms SLO.
+                  - generic [ref=f49e864]:
+                    - generic "Severity High" [ref=f49e865]: High
+                    - generic [ref=f49e867]: datadog
+                    - generic [ref=f49e871]: Coming soon
+                  - generic [ref=f49e872]:
+                    - generic [ref=f49e873]: Sentinel
+                    - generic [ref=f49e874]: Pathfinder
+                    - generic [ref=f49e875]: Architect
+                    - generic [ref=f49e876]: Backend
+                    - generic [ref=f49e877]: QA
+                  - generic [ref=f49e878]:
+                    - generic [ref=f49e879]: ~55s · 5 agents
+                    - button "Preview P99 latency above SLO" [ref=f49e880]: Preview
+            - region "Security" [ref=f49e881]:
+              - generic [ref=f49e882]:
+                - heading "Security" [level=2] [ref=f49e883]
+                - paragraph [ref=f49e884]: Credentials, auth, and policy violations flagged by guardrails.
+              - generic [ref=f49e885]:
+                - generic [ref=f49e886]:
+                  - generic [ref=f49e892]:
+                    - heading "Secret committed to repo" [level=3] [ref=f49e893]
+                    - paragraph [ref=f49e894]: An API key landed in a public branch and tripped the guard.
+                  - generic [ref=f49e895]:
+                    - generic "Severity Critical" [ref=f49e896]: Critical
+                    - generic [ref=f49e898]: github
+                    - generic [ref=f49e902]: Coming soon
+                  - generic [ref=f49e903]:
+                    - generic [ref=f49e904]: Sentinel
+                    - generic [ref=f49e905]: Pathfinder
+                    - generic [ref=f49e906]: Architect
+                    - generic [ref=f49e907]: DevOps
+                  - generic [ref=f49e908]:
+                    - generic [ref=f49e909]: ~55s · 4 agents
+                    - button "Preview Secret committed to repo" [ref=f49e910]: Preview
+                - generic [ref=f49e911]:
+                  - generic [ref=f49e916]:
+                    - heading "Auth brute-force burst" [level=3] [ref=f49e917]
+                    - paragraph [ref=f49e918]: 50+ failed logins for a single account within 30s.
+                  - generic [ref=f49e919]:
+                    - generic "Severity High" [ref=f49e920]: High
+                    - generic [ref=f49e922]: sentry
+                    - generic [ref=f49e926]: Coming soon
+                  - generic [ref=f49e927]:
+                    - generic [ref=f49e928]: Sentinel
+                    - generic [ref=f49e929]: Pathfinder
+                    - generic [ref=f49e930]: Architect
+                    - generic [ref=f49e931]: Backend
+                  - generic [ref=f49e932]:
+                    - generic [ref=f49e933]: ~45s · 4 agents
+                    - button "Preview Auth brute-force burst" [ref=f49e934]: Preview
+                - generic [ref=f49e935]:
+                  - generic [ref=f49e941]:
+                    - heading "Expired secret rotation" [level=3] [ref=f49e942]
+                    - paragraph [ref=f49e943]: A Vault-managed secret expired before its rotation succeeded.
+                  - generic [ref=f49e944]:
+                    - generic "Severity High" [ref=f49e945]: High
+                    - generic [ref=f49e947]: pagerduty
+                    - generic [ref=f49e951]: Coming soon
+                  - generic [ref=f49e952]:
+                    - generic [ref=f49e953]: Sentinel
+                    - generic [ref=f49e954]: Pathfinder
+                    - generic [ref=f49e955]: Architect
+                    - generic [ref=f49e956]: DevOps
+                  - generic [ref=f49e957]:
+                    - generic [ref=f49e958]: ~50s · 4 agents
+                    - button "Preview Expired secret rotation" [ref=f49e959]: Preview
+  - button "Open Next.js Dev Tools" [ref=f49e965] [cursor=pointer]
+  - alert [ref=f49e969]

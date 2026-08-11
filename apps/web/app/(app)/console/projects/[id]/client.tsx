@@ -2,19 +2,20 @@
 
 // Phase 3.5 — Project detail client.
 //
-// Four tabs driven by local state (no nested routes):
+// Five tabs driven by local state (no nested routes):
 //
 //   * Overview      — KPI strip + recent incidents + recovery pipeline mini
 //   * Integrations  — per-provider mapping rows (icon + connected/missing)
 //   * Recovery Policy — read-only summary of the 7-field policy + edit CTA
 //   * Activity      — project-scoped operational segments
+//   * Ops           — preview deploys via the deploy-engine (see OpsTab.tsx)
 //
 // When the BE projects endpoint is offline (`backendMissing` prop), we still
 // render the surface but each tab shows an EmptyState "Endpoint coming soon"
 // rather than crashing. This keeps the FE→BE rollout decoupled.
 //
 // The tab pattern is a simple `useState<TabId>` + pill bar at the top; we
-// don't use the URL hash because the four-tab surface fits comfortably in
+// don't use the URL hash because the five-tab surface fits comfortably in
 // a single React tree and SSR doesn't need to deep-link tabs.
 
 import * as React from "react";
@@ -41,6 +42,7 @@ import {
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/empty-state/EmptyState";
+import { OpsTab } from "./OpsTab";
 import { EnvironmentChip } from "@/components/projects/EnvironmentChip";
 import { ProviderLogo } from "@/components/integrations/ProviderLogo";
 import {
@@ -60,13 +62,14 @@ import {
 } from "@/lib/projects";
 import type { WorkflowRun } from "@/lib/pipelines";
 
-type TabId = "overview" | "integrations" | "policy" | "activity";
+type TabId = "overview" | "integrations" | "policy" | "activity" | "ops";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "integrations", label: "Integrations" },
   { id: "policy", label: "Recovery Policy" },
   { id: "activity", label: "Activity" },
+  { id: "ops", label: "Ops" },
 ];
 
 function formatRelative(iso: string, now: number): string {
@@ -287,59 +290,55 @@ function OverviewTab({
         ) : (
           <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
             <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
-                <tr>
-                  <th className="px-4 py-2 font-medium">When</th>
-                  <th className="px-4 py-2 font-medium">Type</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Step</th>
-                  <th className="px-4 py-2 font-medium" aria-hidden />
-                </tr>
-              </thead>
-              <tbody>
-                {incidents.slice(0, 10).map((r) => {
-                  const pill = statusPill(r.status);
-                  return (
-                    <tr
-                      key={r.id}
-                      className="border-t border-[var(--color-border)]"
-                    >
-                      <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                        {formatRelative(r.started_at, now)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs">
-                        {r.workflow_type}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={cn(
-                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest ring-1",
-                            pill.className,
-                          )}
-                        >
-                          {pill.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                        {r.current_step ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Button asChild variant="outline" size="sm">
-                          <Link
-                            href={
-                              `/console/incidents/${r.id}` as Route
-                            }
+              <table className="w-full min-w-[640px] text-sm">
+                <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">When</th>
+                    <th className="px-4 py-2 font-medium">Type</th>
+                    <th className="px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2 font-medium">Step</th>
+                    <th className="px-4 py-2 font-medium" aria-hidden />
+                  </tr>
+                </thead>
+                <tbody>
+                  {incidents.slice(0, 10).map((r) => {
+                    const pill = statusPill(r.status);
+                    return (
+                      <tr
+                        key={r.id}
+                        className="border-t border-[var(--color-border)]"
+                      >
+                        <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
+                          {formatRelative(r.started_at, now)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {r.workflow_type}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest ring-1",
+                              pill.className,
+                            )}
                           >
-                            Open
-                          </Link>
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            {pill.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
+                          {r.current_step ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/console/incidents/${r.id}` as Route}>
+                              Open
+                            </Link>
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -438,9 +437,7 @@ function IntegrationsTab({
                 {isConnected ? (
                   <Button asChild variant="outline" size="sm">
                     <Link
-                      href={
-                        `/console/projects/${project.id}/settings` as Route
-                      }
+                      href={`/console/projects/${project.id}/settings` as Route}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                       Edit
@@ -449,9 +446,7 @@ function IntegrationsTab({
                 ) : (
                   <Button asChild variant="outline" size="sm">
                     <Link
-                      href={
-                        `/console/projects/${project.id}/settings` as Route
-                      }
+                      href={`/console/projects/${project.id}/settings` as Route}
                     >
                       <Plug className="h-3.5 w-3.5" />
                       Connect
@@ -461,9 +456,7 @@ function IntegrationsTab({
                 {isConnected && (
                   <Button asChild variant="ghost" size="sm">
                     <Link
-                      href={
-                        `/console/projects/${project.id}/settings` as Route
-                      }
+                      href={`/console/projects/${project.id}/settings` as Route}
                     >
                       <Unplug className="h-3.5 w-3.5" />
                       Disconnect
@@ -597,9 +590,7 @@ function PolicyTab({
           }
           description={
             p.approver_user_ids.length > 0
-              ? p.approver_user_ids
-                  .map((id) => id.slice(0, 8))
-                  .join(", ")
+              ? p.approver_user_ids.map((id) => id.slice(0, 8)).join(", ")
               : "Falls back to the org-level approval routing."
           }
         />
@@ -639,9 +630,7 @@ function ActivityTab({
         started_at: r.started_at,
         finished_at: finished,
         status,
-        detail: r.current_step
-          ? `Current step: ${r.current_step}`
-          : r.error,
+        detail: r.current_step ? `Current step: ${r.current_step}` : r.error,
         duration_ms: r.duration_ms,
       };
     });
@@ -769,6 +758,9 @@ export function ProjectDetailClient({
           incidents={initialIncidents}
           backendMissing={backendMissing}
         />
+      )}
+      {tab === "ops" && (
+        <OpsTab project={project} backendMissing={backendMissing} />
       )}
     </div>
   );

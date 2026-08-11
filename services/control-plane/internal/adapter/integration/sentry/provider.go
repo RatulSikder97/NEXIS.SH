@@ -293,11 +293,13 @@ func (p *Provider) handleIssueEvent(ctx context.Context, orgID string, blob secr
 		Action string `json:"action"`
 		Data   struct {
 			Issue struct {
-				ID          string         `json:"id"`
-				Title       string         `json:"title"`
-				Culprit     string         `json:"culprit"`
-				Level       string         `json:"level"`
-				Project     struct{ Slug string `json:"slug"` } `json:"project"`
+				ID      string `json:"id"`
+				Title   string `json:"title"`
+				Culprit string `json:"culprit"`
+				Level   string `json:"level"`
+				Project struct {
+					Slug string `json:"slug"`
+				} `json:"project"`
 				Environment string         `json:"environment"`
 				Metadata    map[string]any `json:"metadata"`
 			} `json:"issue"`

@@ -56,9 +56,9 @@ func (s *ClientSignaler) SignalApproval(ctx context.Context, workflowID string, 
 // has already advanced and the next GetRun read will reconcile (the workflow
 // returns the decision in its output payload).
 type SignalerService struct {
-	repo     domain.ApprovalRepository
-	tem      TemporalSignaler
-	service  *Service
+	repo    domain.ApprovalRepository
+	tem     TemporalSignaler
+	service *Service
 }
 
 // NewSignalerService wires the components together.
@@ -71,8 +71,11 @@ type DecideInput struct {
 	Principal     domain.Principal
 	WorkspaceID   string
 	WorkflowRunID string
-	Decision      domain.ApprovalDecisionState // approved | rejected
+	Decision      domain.ApprovalDecisionState // approved | rejected | modified
 	Notes         string
+	// ModifiedDiff is the engineer-edited unified diff. Required when
+	// Decision == modified; ignored otherwise.
+	ModifiedDiff string
 }
 
 // Decide is the entry point for POST /v1/approvals/{run_id}/decide. It
@@ -83,8 +86,12 @@ type DecideInput struct {
 // domain.ErrConflict when the row is already terminal, and
 // domain.ErrForbidden when the caller's workspace doesn't match.
 func (s *SignalerService) Decide(ctx context.Context, in DecideInput) error {
-	if in.Decision != domain.ApprovalApproved && in.Decision != domain.ApprovalRejected {
-		return errors.New("approval: decision must be approved|rejected")
+	if in.Decision != domain.ApprovalApproved && in.Decision != domain.ApprovalRejected &&
+		in.Decision != domain.ApprovalModified {
+		return errors.New("approval: decision must be approved|rejected|modified")
+	}
+	if in.Decision == domain.ApprovalModified && in.ModifiedDiff == "" {
+		return errors.New("approval: modified decision requires a modified_diff")
 	}
 	d, err := s.repo.GetByRun(ctx, in.WorkflowRunID)
 	if err != nil {
@@ -97,9 +104,10 @@ func (s *SignalerService) Decide(ctx context.Context, in DecideInput) error {
 		return domain.ErrForbidden
 	}
 	sig := domain.ApprovalSignal{
-		Decision:  in.Decision,
-		DecidedBy: in.Principal.UserID,
-		Notes:     in.Notes,
+		Decision:     in.Decision,
+		DecidedBy:    in.Principal.UserID,
+		Notes:        in.Notes,
+		ModifiedDiff: in.ModifiedDiff,
 	}
 	if s.tem != nil {
 		if err := s.tem.SignalApproval(ctx, in.WorkflowRunID, sig); err != nil {

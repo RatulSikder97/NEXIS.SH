@@ -21,10 +21,10 @@ import (
 // fakeSMAPI is the in-memory secretsmanagerAPI stand-in. Tests configure
 // per-call response shapes and inspect what was sent in.
 type fakeSMAPI struct {
-	getValue *secretsmanager.GetSecretValueOutput
-	getErr   error
-	putErr   error
-	createOK bool
+	getValue  *secretsmanager.GetSecretValueOutput
+	getErr    error
+	putErr    error
+	createOK  bool
 	createErr error
 
 	gets    []string // SecretId received by GetSecretValue

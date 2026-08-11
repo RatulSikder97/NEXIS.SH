@@ -224,11 +224,11 @@ func TestLoadFixtureIncidentForRunner_UnknownScenario(t *testing.T) {
 // model names.
 func TestPerProviderModels_OpenAIPath(t *testing.T) {
 	cfg := config.Config{
-		AgentModelArchitectOpenAI:    "gpt-4-architect",
-		AgentModelBackendOpenAI:      "gpt-4-backend",
-		AgentModelQAOpenAI:           "gpt-4-qa",
-		AgentModelDevOpsOpenAI:       "gpt-4-devops",
-		AgentModelDataEngOpenAI:      "gpt-4-dataeng",
+		AgentModelArchitectOpenAI: "gpt-4-architect",
+		AgentModelBackendOpenAI:   "gpt-4-backend",
+		AgentModelQAOpenAI:        "gpt-4-qa",
+		AgentModelDevOpsOpenAI:    "gpt-4-devops",
+		AgentModelDataEngOpenAI:   "gpt-4-dataeng",
 	}
 	got := perProviderModels(cfg, "openai")
 	if got.architect != "gpt-4-architect" {

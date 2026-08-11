@@ -4,10 +4,10 @@
 // Slack-OAuth-v2 installs that the Wave 2 adapter packages already support
 // programmatically:
 //
-//   GET /v1/integrations/github/install           (session-gated)
-//   GET /v1/integrations/github/install/callback  (public)
-//   GET /v1/integrations/slack/install            (session-gated)
-//   GET /v1/integrations/slack/callback           (public)
+//	GET /v1/integrations/github/install           (session-gated)
+//	GET /v1/integrations/github/install/callback  (public)
+//	GET /v1/integrations/slack/install            (session-gated)
+//	GET /v1/integrations/slack/callback           (public)
 //
 // CSRF model: every install endpoint mints a random 32-byte state and stashes
 // it in a one-shot `nexis_oauth_state` cookie (Path=/, Max-Age=300, HttpOnly,

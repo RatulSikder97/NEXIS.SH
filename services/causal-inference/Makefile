@@ -13,9 +13,10 @@ build:
 install:
 	pip install -r requirements.txt
 
-# Pytest entrypoint. Pytest picks up pyproject.toml's pythonpath + testpaths.
+# Pytest entrypoint. Pytest picks up pyproject.toml's pythonpath + testpaths
+# (src/ for the API contract tests, tests/ for ranking unit + healthcheck).
 test:
-	pytest src/
+	pytest
 
 # Local dev server — equivalent to the container CMD.
 run-dev:

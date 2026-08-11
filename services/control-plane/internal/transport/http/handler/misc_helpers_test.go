@@ -97,9 +97,9 @@ func TestSafeErrorMessage(t *testing.T) {
 // reduction.
 func TestDeriveValidatorRunStatus(t *testing.T) {
 	cases := []struct {
-		name    string
+		name                       string
 		failed, started, succeeded bool
-		want    string
+		want                       string
 	}{
 		{"failed_wins", true, true, true, "failed"},
 		{"running_when_started_no_succeeded", false, true, false, "running"},

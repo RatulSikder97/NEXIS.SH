@@ -7,14 +7,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/data_engineer"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/approval"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration/argocd"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/sse"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/sentinel"
 )
 
 // Activities holds the dependencies needed by every activity function. One
@@ -57,6 +61,78 @@ type Activities struct {
 	// cfg.SlackDefaultChannel via main.go. Empty string disables Slack
 	// notifications when the project has no channel either.
 	SlackDefaultChannel string
+
+	// Phase 8 — close the loop. GitOps is the services/gitops sidecar client
+	// the GitOpsDeploy activity uses to open the recovery PR once the
+	// Approval Gate lands on approve/auto-approve. Nil tolerated — the
+	// activity records a skipped result so dev environments without the
+	// sidecar keep working.
+	GitOps GitOpsClient
+
+	// ArgoCD is the rollback port the post-deploy SLO probe drives when a
+	// breach fires and the project policy allows it. Wired from the
+	// integrations registry's typed ArgoCD handle in main.go; nil tolerated
+	// (rollback degrades to a skipped result), matching every other optional
+	// integration in this file.
+	ArgoCD RollbackProvider
+
+	// Lineage is the OpenLineage sink (Phase 9). DataEngineerMigrate emits a
+	// migration.propose RunEvent when the agent's structured output carries
+	// migrations; GitOpsDeploy emits migration.apply once the approved patch
+	// ships in the recovery PR. Nil tolerated — emission is skipped, matching
+	// the GitOps/ArgoCD optional-dependency pattern above. Wired from
+	// repo.NewLineageRepo in main.go.
+	Lineage LineageWriter
+
+	// FixtureRepoOwner/Name/DefaultBranch are the Phase 4 stub-path fallback
+	// repo coords for GitOpsDeploy when no project is bound to the run.
+	// Sourced from cfg.FixtureRepo* via main.go; all empty falls back to the
+	// same acme/orders-api-fixture mapping buildAgentContext uses.
+	FixtureRepoOwner         string
+	FixtureRepoName          string
+	FixtureRepoDefaultBranch string
+
+	// HealthWindow bounds how long PostDeployHealthCheck watches for a fresh
+	// fatal after the deploy; HealthPollInterval is the gap between polls.
+	// Zero values fall back to 30s / 5s. Both exist as fields (rather than
+	// constants) so tests can shrink the real-time wait to milliseconds.
+	HealthWindow       time.Duration
+	HealthPollInterval time.Duration
+
+	// QASuites is the continuous-test-loop sink (FYP: "QA Agent ... runs
+	// continuously"). When wired, QATestGen persists the generated pytest
+	// map into qa_test_suites so the usecase.QALoop cron can re-run it
+	// against the validator sandbox on every tick. Nil tolerated —
+	// persistence is skipped, matching every other optional dependency in
+	// this struct. Wired from repo.NewQATestSuitesRepo in main.go.
+	QASuites QATestSuiteWriter
+
+	// DeployEngine is the services/deploy-engine sidecar client the
+	// DeployEngineRedeploy activity drives after a recovery PR ships for an
+	// incident whose source was "deploy_engine" — re-running the preview
+	// deploy verifies the fix end-to-end. Nil tolerated — the activity
+	// records a skipped result, matching GitOps/ArgoCD above.
+	DeployEngine DeployEngineClient
+
+	// GitHubTokens mints short-lived installation tokens the redeploy hands
+	// to the deploy-engine for clone auth. *github.Provider satisfies it via
+	// MintInstallationToken. Nil tolerated — the redeploy degrades to a
+	// skipped result.
+	GitHubTokens InstallationTokenMinter
+
+	// Deployments persists the redeploy round-trip into the deployments
+	// table so the ops UI shows workflow-triggered deploys alongside
+	// user-triggered ones. Uses the RLS-bypassing CreateAdmin because the
+	// worker goroutine carries no principal. Nil tolerated — persistence is
+	// skipped, best-effort like Lineage/QASuites.
+	Deployments DeploymentWriter
+}
+
+// QATestSuiteWriter is the narrow port QATestGen uses to persist generated
+// suites. *repo.QATestSuitesRepo satisfies it directly; tests substitute a
+// fake so the persistence hook is unit-testable without Postgres.
+type QATestSuiteWriter interface {
+	SaveSuite(ctx context.Context, s domain.QATestSuite) error
 }
 
 // ProjectsReader is the narrow port the LoadProject activity uses to fetch
@@ -88,6 +164,114 @@ type ValidateResponse struct {
 	Coverage    float64
 	DurationMs  int64
 	Logs        string
+}
+
+// DeployEngineClient is the port the deploy activities depend on to run a
+// preview deploy through the services/deploy-engine sidecar. The concrete
+// client lives in internal/adapter/deployengine; using an interface here
+// keeps the recovery package free of the http client dependency, exactly
+// like ValidatorClient above.
+type DeployEngineClient interface {
+	Deploy(ctx context.Context, in DeployRequest) (DeployResponse, error)
+	Stop(ctx context.Context, deploymentID string) error
+}
+
+// DeployRequest mirrors the services/deploy-engine POST /v1/deploy wire
+// shape. deploy-engine is a separate Go module, so we carry our own copy of
+// the field set — snake_case tags match the contract exactly. GitHubToken is
+// a short-lived installation token (x-access-token clone auth) and must
+// never be logged.
+type DeployRequest struct {
+	DeploymentID string `json:"deployment_id"`
+	ProjectID    string `json:"project_id"`
+	OrgID        string `json:"org_id"`
+	Repo         string `json:"repo"`   // "owner/name"
+	Branch       string `json:"branch"` // e.g. "main"
+	CommitSHA    string `json:"commit_sha,omitempty"`
+	GitHubToken  string `json:"github_token"`
+	TimeoutMs    int    `json:"timeout_ms"`
+}
+
+// DeployResponse mirrors the deploy-engine's 200/422 body — both statuses
+// carry this same structured shape ("running" vs "failed"), the same
+// convention services/validator uses for /v1/validate. URL/Port are null on
+// failure; JSON null leaves the zero value in place.
+type DeployResponse struct {
+	DeploymentID     string    `json:"deployment_id"`
+	Status           string    `json:"status"` // "running" | "failed"
+	URL              string    `json:"url"`
+	Port             int       `json:"port"`
+	ImageTag         string    `json:"image_tag"`
+	DockerfileSource string    `json:"dockerfile_source"` // "repo" | "generated"
+	DetectedStack    string    `json:"detected_stack"`    // node | python | go | static | unknown
+	BuildLog         string    `json:"build_log"`
+	ContainerLog     string    `json:"container_log"`
+	Error            string    `json:"error,omitempty"`
+	StartedAt        time.Time `json:"started_at"`
+	FinishedAt       time.Time `json:"finished_at"`
+}
+
+// InstallationTokenMinter is the narrow slice of the GitHub provider the
+// redeploy activity needs — a short-lived installation token for the bound
+// project's installation id. *github.Provider satisfies it directly; tests
+// substitute a fake so no App credentials are needed.
+type InstallationTokenMinter interface {
+	MintInstallationToken(ctx context.Context, installationID int64) (string, error)
+}
+
+// DeploymentWriter is the narrow port the redeploy activity uses to persist
+// the deployments row. *repo.DeploymentsRepo satisfies it via CreateAdmin
+// (the worker goroutine has no principal, so the write must bypass RLS).
+type DeploymentWriter interface {
+	CreateAdmin(ctx context.Context, d repo.Deployment) (repo.Deployment, error)
+}
+
+// GitOpsClient is the port GitOpsDeploy depends on to open the recovery PR.
+// The concrete client lives in internal/adapter/gitops; using an interface
+// here keeps the recovery package free of the http client dependency,
+// exactly like ValidatorClient above.
+type GitOpsClient interface {
+	OpenPR(ctx context.Context, in OpenPRRequest) (OpenPRResponse, error)
+}
+
+// OpenPRRequest mirrors the services/gitops POST /v1/gitops/open-pr wire
+// shape (services/gitops/internal/domain/pr.go PROpenRequest). gitops is a
+// separate Go module, so we carry our own copy of the field set — the
+// adapter client owns the snake_case JSON mapping.
+type OpenPRRequest struct {
+	OrgID         string
+	WorkspaceID   string
+	WorkflowRunID string
+	Repo          string // "owner/name"
+	BranchBase    string // base branch — default "main"
+	BranchName    string // new branch
+	CommitMsg     string
+	PatchDiff     string
+	PRTitle       string
+	PRBody        string
+}
+
+// OpenPRResponse mirrors the gitops service's 201 body (PROpenResponse).
+type OpenPRResponse struct {
+	PRNumber int
+	PRURL    string
+	Branch   string
+	HeadSHA  string
+	OpenedAt time.Time
+}
+
+// RollbackProvider is the narrow slice of *argocd.Provider the post-deploy
+// SLO probe needs. Defined here so tests can substitute a fake without a
+// live ArgoCD credential; *argocd.Provider satisfies it directly.
+type RollbackProvider interface {
+	Rollback(ctx context.Context, princ domain.Principal) (argocd.Operation, error)
+}
+
+// LineageWriter is the narrow port the OpenLineage emission hooks depend on.
+// *repo.LineageRepo satisfies it directly; tests substitute a fake so the
+// emission path is unit-testable without Postgres.
+type LineageWriter interface {
+	Insert(ctx context.Context, ev repo.LineageEvent) error
 }
 
 // NewActivities is the test-friendly constructor (Phase 4 compatibility).
@@ -275,19 +459,19 @@ func (a *Activities) runAgent(ctx context.Context, name domain.AgentName, in Pip
 		duration = time.Since(start).Milliseconds()
 	}
 	payload := map[string]any{
-		"agent_role":      string(role),
-		"tokens_in":       out.TokensIn,
-		"tokens_out":      out.TokensOut,
-		"cached_tokens":   out.CachedTokens,
-		"cost_cents":      out.CostCents,
-		"duration_ms":     duration,
-		"model":           out.Model,
-		"provider":        out.Provider,
-		"structured":      out.Structured,
-		"schema_retries":  out.SchemaRetries,
-		"input_summary":   inputSummary,
-		"output_summary":  summariseAgentOutput(role, out),
-		"degraded":        false,
+		"agent_role":     string(role),
+		"tokens_in":      out.TokensIn,
+		"tokens_out":     out.TokensOut,
+		"cached_tokens":  out.CachedTokens,
+		"cost_cents":     out.CostCents,
+		"duration_ms":    duration,
+		"model":          out.Model,
+		"provider":       out.Provider,
+		"structured":     out.Structured,
+		"schema_retries": out.SchemaRetries,
+		"input_summary":  inputSummary,
+		"output_summary": summariseAgentOutput(role, out),
+		"degraded":       false,
 	}
 	return domain.ActivityResult{
 		AgentRole: role,
@@ -645,6 +829,9 @@ func (a *Activities) SentinelDetect(ctx context.Context, in PipelineInput) (doma
 	}
 	activity.GetLogger(ctx).Info("sentinel.detect.ack",
 		"incident_id", in.IncidentID, "level", row.Level, "service", row.Service)
+	// "source" rides along so the workflow can branch on the triggering
+	// incident's origin (the deploy-engine redeploy tail fires only for
+	// source == "deploy_engine") without a second DB read.
 	return domain.ActivityResult{
 		AgentRole: domain.AgentSentinel,
 		Status:    domain.ActSucceeded,
@@ -655,6 +842,7 @@ func (a *Activities) SentinelDetect(ctx context.Context, in PipelineInput) (doma
 			"service":     row.Service,
 			"environment": row.Environment,
 			"level":       row.Level,
+			"source":      row.Source,
 			"received_at": row.ReceivedAt,
 		},
 	}, nil
@@ -723,15 +911,80 @@ func (a *Activities) BackendCodegen(ctx context.Context, in PipelineInput) (doma
 	return res, nil
 }
 
+// QATestGen runs the L1 QA agent and, when it produced a structured tests
+// map, persists the suite into qa_test_suites so the continuous QA loop
+// (usecase.QALoop) can replay it against the validator sandbox on every
+// tick — the FYP's "runs continuously, not just on demand". Persistence is
+// best-effort: a suite-store hiccup is logged and never fails the activity,
+// mirroring how BackendCodegen treats its patch-store wiring.
 func (a *Activities) QATestGen(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
-	return a.runAgent(ctx, domain.AgentNameQA, in)
+	res, err := a.runAgent(ctx, domain.AgentNameQA, in)
+	if err != nil {
+		return res, err
+	}
+	a.persistQASuite(ctx, in, structuredFromResult(res))
+	return res, nil
+}
+
+// persistQASuite folds the QA agent's structured output ({"tests": {file →
+// source}, "covers_files": [...]}) into a qa_test_suites row. Degraded/stub
+// runs carry no tests map and are skipped silently.
+func (a *Activities) persistQASuite(ctx context.Context, in PipelineInput, structured map[string]any) {
+	if a.QASuites == nil || structured == nil {
+		return
+	}
+	rawTests, ok := structured["tests"].(map[string]any)
+	if !ok || len(rawTests) == 0 {
+		return
+	}
+	tests := make(map[string]string, len(rawTests))
+	for name, src := range rawTests {
+		if s, ok := src.(string); ok && name != "" && s != "" {
+			tests[name] = s
+		}
+	}
+	if len(tests) == 0 {
+		return
+	}
+	covers := stringsFromAny(structured["covers_files"])
+	projectID := ""
+	if in.Project != nil {
+		projectID = in.Project.ID
+	}
+	if err := a.QASuites.SaveSuite(ctx, domain.QATestSuite{
+		OrgID:         in.OrgID,
+		WorkspaceID:   in.WorkspaceID,
+		ProjectID:     projectID,
+		WorkflowRunID: in.RunID,
+		RepoSHA:       in.RepoSHA,
+		Tests:         tests,
+		CoversFiles:   covers,
+	}); err != nil {
+		activity.GetLogger(ctx).Warn("qa.suite.persist_failed",
+			"run_id", in.RunID, "err", err)
+		return
+	}
+	activity.GetLogger(ctx).Info("qa.suite.persisted",
+		"run_id", in.RunID, "tests", len(tests))
 }
 func (a *Activities) DevOpsPipeline(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
 	return a.runAgent(ctx, domain.AgentNameDevOps, in)
 }
+
+// DataEngineerMigrate runs the L1 Data Engineer agent and, when its
+// structured output proposes migrations, emits the OpenLineage
+// migration.propose RunEvent (Phase 9). Emission is best-effort — a lineage
+// hiccup is logged and never fails the activity, mirroring how
+// BackendCodegen treats its patch-store wiring.
 func (a *Activities) DataEngineerMigrate(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
-	return a.runAgent(ctx, domain.AgentNameDataEngineer, in)
+	res, err := a.runAgent(ctx, domain.AgentNameDataEngineer, in)
+	if err != nil {
+		return res, err
+	}
+	a.emitMigrationLineage(ctx, in, structuredFromResult(res), data_engineer.LineageJobPropose)
+	return res, nil
 }
+
 // ApprovalGateRoute is the activity body for the ApprovalGate.Route step.
 // Phase 6 wires the real approval gate: classify severity from the
 // synthesiser scenario + backend patch, INSERT the pending decision row,
@@ -757,23 +1010,22 @@ func (a *Activities) ApprovalGateRoute(ctx context.Context, in PipelineInput) (d
 			scenario = v
 		}
 	}
-	patchDiff := ""
-	if be, ok := in.PriorOutputs["backend"].(map[string]any); ok {
-		// Backend's payload may already be flattened to its structured shape
-		// by foldPrior — try the direct lookup first, then fall back.
-		if d, ok := be["patch_diff"].(string); ok {
-			patchDiff = d
+	patchDiff := backendPatchFromPrior(in.PriorOutputs)
+
+	// Phase 8 — Architect contract enforcement. The workflow folds the
+	// detection verdict into PriorOutputs under "contract_violation"; a
+	// violated contract forces HIGH severity so an out-of-contract patch can
+	// never ride the auto-approve path.
+	violation := false
+	var unauthorized []string
+	if cv, ok := in.PriorOutputs["contract_violation"].(map[string]any); ok {
+		if b, ok := cv["violation"].(bool); ok {
+			violation = b
 		}
-		if patchDiff == "" {
-			if s, ok := be["structured"].(map[string]any); ok {
-				if d, ok := s["patch_diff"].(string); ok {
-					patchDiff = d
-				}
-			}
-		}
+		unauthorized = stringsFromAny(cv["unauthorized_files"])
 	}
 
-	sev, risk := approval.Classify(scenario, patchDiff)
+	sev, risk := approval.ClassifyWithViolation(scenario, patchDiff, violation)
 
 	// Phase 7 — Projects (self-healing). When a project is bound, the
 	// policy can:
@@ -845,6 +1097,12 @@ func (a *Activities) ApprovalGateRoute(ctx context.Context, in PipelineInput) (d
 		"scenario":    scenario,
 		"risk_score":  risk,
 	}
+	if violation {
+		payload["contract_violation"] = true
+		if len(unauthorized) > 0 {
+			payload["unauthorized_files"] = unauthorized
+		}
+	}
 	if autoApprove {
 		payload["auto_approved"] = true
 	}
@@ -900,7 +1158,7 @@ func (a *Activities) ApprovalGateFinalize(ctx context.Context, in ApprovalFinali
 		err = a.Approval.AutoApprove(ctx, in.WorkflowRunID, in.OrgID)
 	case domain.ApprovalTimeoutRejected:
 		err = a.Approval.TimeoutReject(ctx, in.WorkflowRunID, in.OrgID)
-	case domain.ApprovalApproved, domain.ApprovalRejected:
+	case domain.ApprovalApproved, domain.ApprovalRejected, domain.ApprovalModified:
 		err = a.Approval.RecordDecision(ctx, in.WorkflowRunID, in.OrgID, in.Signal)
 	default:
 		err = fmt.Errorf("approval: unknown terminal decision %q", in.Signal.Decision)
@@ -908,18 +1166,533 @@ func (a *Activities) ApprovalGateFinalize(ctx context.Context, in ApprovalFinali
 	if err != nil {
 		return domain.ActivityResult{}, err
 	}
+
+	// RLHF pipeline — every terminal decision becomes a feedback_examples
+	// row (scenario + original patch + decision + edited diff). Best-effort:
+	// a feedback-sink hiccup must never re-fail an already-recorded decision,
+	// so the error is logged and absorbed exactly like the audit writes
+	// inside the approval service.
+	if fbErr := a.Approval.RecordFeedback(ctx, approval.FeedbackInput{
+		OrgID:         in.OrgID,
+		WorkflowRunID: in.WorkflowRunID,
+		IncidentID:    in.IncidentID,
+		Scenario:      in.Scenario,
+		PatchDiff:     in.PatchDiff,
+		Signal:        in.Signal,
+	}); fbErr != nil {
+		activity.GetLogger(ctx).Warn("approval.feedback.persist_failed",
+			"run_id", in.WorkflowRunID, "err", fbErr)
+	}
+
 	status := domain.ActSucceeded
 	if in.Signal.Decision == domain.ApprovalRejected || in.Signal.Decision == domain.ApprovalTimeoutRejected {
 		status = domain.ActFailed
+	}
+	payload := map[string]any{
+		"decision":   string(in.Signal.Decision),
+		"decided_by": in.Signal.DecidedBy,
+		"notes":      in.Signal.Notes,
+	}
+	if in.Signal.Decision == domain.ApprovalModified {
+		payload["modified"] = true
 	}
 	return domain.ActivityResult{
 		AgentRole: domain.AgentApprovalGate,
 		Status:    status,
 		Message:   fmt.Sprintf("approval decided — %s", in.Signal.Decision),
+		Payload:   payload,
+	}, nil
+}
+
+// GitOpsDeploy opens the recovery PR through the services/gitops sidecar.
+// The workflow schedules it only after ApprovalGateFinalize lands on
+// approve / auto-approve AND the Backend agent produced a patch, so the
+// activity body never has to re-check the decision. When the client is
+// unwired (dev without the sidecar) the activity records a skipped result
+// instead of failing — same degrade philosophy as ApprovalGateFinalize's
+// stub path above.
+//
+// Repo coords come from the bound project's selectors; the FIXTURE_REPO_*
+// config is the Phase 4 stub-path fallback for runs without a project.
+func (a *Activities) GitOpsDeploy(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
+	patchDiff := backendPatchFromPrior(in.PriorOutputs)
+	if a.GitOps == nil || patchDiff == "" {
+		reason := "gitops client not wired"
+		if a.GitOps != nil {
+			reason = "no backend patch to deploy"
+		}
+		activity.GetLogger(ctx).Info("gitops.deploy.skipped", "reason", reason)
+		return domain.ActivityResult{
+			AgentRole: domain.AgentPipeline,
+			Status:    domain.ActSucceeded,
+			Message:   fmt.Sprintf("gitops deploy skipped — %s", reason),
+			Payload:   map[string]any{"skipped": true, "reason": reason},
+		}, nil
+	}
+
+	repoFull, branchBase := a.deployRepoCoords(in.Project)
+	scenario := ""
+	if syn, ok := in.PriorOutputs["synthesiser"].(map[string]any); ok {
+		scenario, _ = syn["scenario"].(string)
+	}
+	subject := "automated recovery"
+	if in.Incident != nil && in.Incident.Title != "" {
+		subject = in.Incident.Title
+	} else if scenario != "" {
+		subject = "scenario " + scenario
+	}
+
+	resp, err := a.GitOps.OpenPR(ctx, OpenPRRequest{
+		OrgID:         in.OrgID,
+		WorkspaceID:   in.WorkspaceID,
+		WorkflowRunID: in.RunID,
+		Repo:          repoFull,
+		BranchBase:    branchBase,
+		BranchName:    "nexis/recovery-" + in.RunID,
+		CommitMsg:     fmt.Sprintf("fix: %s (nexis run %s)", subject, in.RunID),
+		PatchDiff:     patchDiff,
+		PRTitle:       fmt.Sprintf("Nexis recovery: %s", subject),
+		PRBody: fmt.Sprintf(
+			"Automated recovery patch generated by the Nexis pipeline.\n\nRun: %s\nScenario: %s\nApproved via the Approval Gate.",
+			in.RunID, scenario),
+	})
+	if err != nil {
+		return domain.ActivityResult{}, fmt.Errorf("gitops: open pr: %w", err)
+	}
+	activity.GetLogger(ctx).Info("gitops.deploy.opened",
+		"repo", repoFull, "pr_url", resp.PRURL, "branch", resp.Branch)
+	// Phase 9 — OpenLineage: the opened PR is the moment the Data Engineer's
+	// proposed migrations are applied to the target repo, so emit the
+	// migration.apply RunEvent when the prior data_engineer output carried
+	// any. Best-effort, same as the propose-side hook.
+	a.emitMigrationLineage(ctx, in, dataEngineerStructuredFromPrior(in.PriorOutputs), data_engineer.LineageJobApply)
+	return domain.ActivityResult{
+		AgentRole: domain.AgentPipeline,
+		Status:    domain.ActSucceeded,
+		Message:   fmt.Sprintf("PR opened — %s", resp.PRURL),
 		Payload: map[string]any{
-			"decision":   string(in.Signal.Decision),
-			"decided_by": in.Signal.DecidedBy,
-			"notes":      in.Signal.Notes,
+			"repo":      repoFull,
+			"pr_number": resp.PRNumber,
+			"pr_url":    resp.PRURL,
+			"branch":    resp.Branch,
+			"head_sha":  resp.HeadSHA,
 		},
 	}, nil
+}
+
+// deployRepoCoords resolves the "owner/name" + base branch the recovery PR
+// targets. Project selectors win; the fixture config (or, when even that is
+// empty, the same acme/orders-api-fixture mapping buildAgentContext uses)
+// keeps the stub demo loop alive.
+func (a *Activities) deployRepoCoords(p *domain.Project) (repoFull, branchBase string) {
+	if p != nil && p.Selectors.GitHubRepo != "" {
+		branchBase = p.Selectors.GitHubDefaultBranch
+		if branchBase == "" {
+			branchBase = "main"
+		}
+		return p.Selectors.GitHubRepo, branchBase
+	}
+	repoFull = "acme/orders-api-fixture"
+	if a.FixtureRepoOwner != "" && a.FixtureRepoName != "" {
+		repoFull = a.FixtureRepoOwner + "/" + a.FixtureRepoName
+	}
+	branchBase = a.FixtureRepoDefaultBranch
+	if branchBase == "" {
+		branchBase = "main"
+	}
+	return repoFull, branchBase
+}
+
+// PostDeployHealthCheck is the bounded SLO probe the workflow runs after a
+// successful GitOps deploy. It watches the same incidents_raw feed the
+// Sentinel detector polls, but pinned to rows received AFTER the deploy
+// timestamp — a fresh fatal for the run's org (and service, when known)
+// inside the window is an SLO breach.
+//
+// The error-rate-spike rule is deliberately NOT re-applied here: CountRecent's
+// lookback window cannot be pinned to the deploy timestamp, so it would
+// re-count the very incident burst that triggered this recovery and rollback-
+// loop every deploy. The recent count still ships in the payload for the
+// timeline UI.
+//
+// Result semantics mirror ApprovalGateFinalize: the activity succeeds either
+// way (probing worked); a breach surfaces as Status=ActFailed + healthy=false
+// so the workflow can branch without treating it as an activity error.
+func (a *Activities) PostDeployHealthCheck(ctx context.Context, in HealthCheckInput) (domain.ActivityResult, error) {
+	window := a.HealthWindow
+	if window <= 0 {
+		window = 30 * time.Second
+	}
+	poll := a.HealthPollInterval
+	if poll <= 0 {
+		poll = 5 * time.Second
+	}
+	if poll > window {
+		poll = window
+	}
+
+	if a.IncidentsAdmin == nil {
+		activity.GetLogger(ctx).Info("gitops.healthcheck.skipped", "reason", "incidents reader not wired")
+		return domain.ActivityResult{
+			AgentRole: domain.AgentPipeline,
+			Status:    domain.ActSucceeded,
+			Message:   "post-deploy health check skipped — incidents reader not wired",
+			Payload:   map[string]any{"healthy": true, "skipped": true, "reason": "incidents reader not wired"},
+		}, nil
+	}
+
+	deadline := time.Now().Add(window)
+	fatalCount := 0
+	recentCount := 0
+	for {
+		rows, err := a.IncidentsAdmin.PollFatalSince(ctx, in.OrgID, in.DeployedAt)
+		if err != nil {
+			activity.GetLogger(ctx).Warn("gitops.healthcheck.poll_failed", "err", err)
+		} else {
+			fatalCount = countPostDeployFatals(rows, in.Service, in.DeployedAt)
+		}
+		if n, err := a.IncidentsAdmin.CountRecent(ctx, in.OrgID, sentinel.SpikeWindow); err == nil {
+			recentCount = n
+		}
+		if fatalCount > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		select {
+		case <-time.After(poll):
+		case <-ctx.Done():
+			return domain.ActivityResult{}, ctx.Err()
+		}
+	}
+
+	healthy := fatalCount == 0
+	status := domain.ActSucceeded
+	msg := fmt.Sprintf("post-deploy window clean (%s observed)", window)
+	if !healthy {
+		status = domain.ActFailed
+		msg = fmt.Sprintf("SLO breach — %d fatal incident(s) after deploy", fatalCount)
+	}
+	return domain.ActivityResult{
+		AgentRole: domain.AgentPipeline,
+		Status:    status,
+		Message:   msg,
+		Payload: map[string]any{
+			"healthy":      healthy,
+			"fatal_count":  fatalCount,
+			"recent_count": recentCount,
+			"window_ms":    window.Milliseconds(),
+		},
+	}, nil
+}
+
+// countPostDeployFatals counts rows that landed strictly after the deploy
+// timestamp and match the incident's service when one is known. The repo
+// already filters received_at > since; the After re-check is defence-in-
+// depth against a reader that treats `since` inclusively.
+func countPostDeployFatals(rows []domain.IncidentRow, service string, deployedAt time.Time) int {
+	n := 0
+	for _, r := range rows {
+		if !r.ReceivedAt.After(deployedAt) {
+			continue
+		}
+		if service != "" && r.Service != "" && r.Service != service {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// RollbackDeploy reverts the org's ArgoCD application to the prior-known-
+// healthy revision. The workflow invokes it only when the post-deploy probe
+// reported a breach AND the project policy has RollbackOnSLOBreach enabled.
+// No provider / no stored credential fails soft (skip result) — mirroring
+// how every other optional integration degrades — while transport errors
+// surface so the activity retry policy gets a shot at transient failures.
+func (a *Activities) RollbackDeploy(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
+	if a.ArgoCD == nil {
+		activity.GetLogger(ctx).Warn("gitops.rollback.skipped", "reason", "argocd provider not wired")
+		return domain.ActivityResult{
+			AgentRole: domain.AgentPipeline,
+			Status:    domain.ActSucceeded,
+			Message:   "rollback skipped — argocd provider not wired",
+			Payload:   map[string]any{"skipped": true, "reason": "argocd provider not wired"},
+		}, nil
+	}
+	op, err := a.ArgoCD.Rollback(ctx, domain.Principal{OrgID: in.OrgID})
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			activity.GetLogger(ctx).Warn("gitops.rollback.skipped",
+				"reason", "no argocd credentials for org", "org_id", in.OrgID)
+			return domain.ActivityResult{
+				AgentRole: domain.AgentPipeline,
+				Status:    domain.ActSucceeded,
+				Message:   "rollback skipped — no argocd credentials for org",
+				Payload:   map[string]any{"skipped": true, "reason": "no argocd credentials for org"},
+			}, nil
+		}
+		return domain.ActivityResult{}, fmt.Errorf("argocd: rollback: %w", err)
+	}
+	activity.GetLogger(ctx).Info("gitops.rollback.done", "phase", op.Phase, "message", op.Message)
+	return domain.ActivityResult{
+		AgentRole: domain.AgentPipeline,
+		Status:    domain.ActSucceeded,
+		Message:   fmt.Sprintf("rollback issued — phase=%s", op.Phase),
+		Payload: map[string]any{
+			"phase":   op.Phase,
+			"message": op.Message,
+		},
+	}, nil
+}
+
+// DeployEngineRedeploy re-runs the preview deploy for the bound project.
+// The workflow schedules it only after a successful GitOps deploy on a
+// pipeline whose triggering incident came from the deploy-engine (source ==
+// "deploy_engine") — the recovery PR presumably fixed the branch, so
+// re-invoking POST /v1/deploy with a fresh deployment id verifies the fix
+// end-to-end.
+//
+// Degrade philosophy matches GitOpsDeploy: missing wiring (client, token
+// minter, project repo coords) records a skipped result instead of failing;
+// transport errors surface so the activity retry policy gets a shot. A
+// "failed" engine response is NOT re-inserted as a RawIncident here — that
+// would let a persistently-broken build loop the pipeline forever; the
+// failure surfaces on the timeline instead and the next real deploy attempt
+// re-enters the incident path through the HTTP handler.
+func (a *Activities) DeployEngineRedeploy(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
+	skip := func(reason string) (domain.ActivityResult, error) {
+		activity.GetLogger(ctx).Info("deployengine.redeploy.skipped", "reason", reason)
+		return domain.ActivityResult{
+			AgentRole: domain.AgentPipeline,
+			Status:    domain.ActSucceeded,
+			Message:   fmt.Sprintf("redeploy skipped — %s", reason),
+			Payload:   map[string]any{"skipped": true, "reason": reason},
+		}, nil
+	}
+	if a.DeployEngine == nil {
+		return skip("deploy engine client not wired")
+	}
+	if in.Project == nil || in.Project.Selectors.GitHubRepo == "" {
+		return skip("no project repo bound to this run")
+	}
+	if a.GitHubTokens == nil {
+		return skip("github token minter not wired")
+	}
+	if in.Project.Selectors.GitHubInstallationID <= 0 {
+		return skip("project has no github installation bound")
+	}
+
+	tok, err := a.GitHubTokens.MintInstallationToken(ctx, in.Project.Selectors.GitHubInstallationID)
+	if err != nil {
+		return domain.ActivityResult{}, fmt.Errorf("deployengine: mint installation token: %w", err)
+	}
+	branch := in.Project.Selectors.GitHubDefaultBranch
+	if branch == "" {
+		branch = "main"
+	}
+	// Fresh deployment id per redeploy — the engine names the container +
+	// image off it. Minting inside the activity body is fine: activities may
+	// be non-deterministic, and the id reaches history via the result payload.
+	deploymentID := uuid.NewString()
+	resp, err := a.DeployEngine.Deploy(ctx, DeployRequest{
+		DeploymentID: deploymentID,
+		ProjectID:    in.Project.ID,
+		OrgID:        in.OrgID,
+		Repo:         in.Project.Selectors.GitHubRepo,
+		Branch:       branch,
+		CommitSHA:    "", // branch HEAD — the just-merged fix
+		GitHubToken:  tok,
+		TimeoutMs:    120000,
+	})
+	if err != nil {
+		return domain.ActivityResult{}, fmt.Errorf("deployengine: deploy: %w", err)
+	}
+
+	// Persist the round-trip so the ops UI shows workflow-triggered deploys
+	// alongside user-triggered ones. Best-effort — a repo hiccup must not
+	// fail an otherwise-successful redeploy.
+	if a.Deployments != nil {
+		if _, dErr := a.Deployments.CreateAdmin(ctx, deploymentRowFromResponse(in, deploymentID, resp)); dErr != nil {
+			activity.GetLogger(ctx).Warn("deployengine.redeploy.persist_failed",
+				"deployment_id", deploymentID, "err", dErr)
+		}
+	}
+
+	// Result semantics mirror PostDeployHealthCheck: the activity succeeds
+	// either way (the round-trip worked); a failed build surfaces as
+	// Status=ActFailed so the timeline shows red without an activity error.
+	status := domain.ActSucceeded
+	msg := fmt.Sprintf("redeploy running — %s", resp.URL)
+	if resp.Status != "running" {
+		status = domain.ActFailed
+		msg = fmt.Sprintf("redeploy failed — %s", resp.Error)
+	}
+	activity.GetLogger(ctx).Info("deployengine.redeploy.done",
+		"deployment_id", deploymentID, "status", resp.Status)
+	return domain.ActivityResult{
+		AgentRole: domain.AgentPipeline,
+		Status:    status,
+		Message:   msg,
+		Payload: map[string]any{
+			"deployment_id":     deploymentID,
+			"status":            resp.Status,
+			"url":               resp.URL,
+			"port":              resp.Port,
+			"image_tag":         resp.ImageTag,
+			"detected_stack":    resp.DetectedStack,
+			"dockerfile_source": resp.DockerfileSource,
+			"error":             resp.Error,
+		},
+	}, nil
+}
+
+// deploymentRowFromResponse folds an engine DeployResponse into the
+// repo.Deployment row the redeploy activity persists. Pure — unit-testable
+// without a Temporal context. Unknown engine statuses collapse to "failed"
+// so the CHECK constraint on deployments.status never trips.
+func deploymentRowFromResponse(in PipelineInput, deploymentID string, resp DeployResponse) repo.Deployment {
+	status := repo.DeploymentStatusFailed
+	if resp.Status == repo.DeploymentStatusRunning {
+		status = repo.DeploymentStatusRunning
+	}
+	d := repo.Deployment{
+		ID:               deploymentID,
+		ProjectID:        in.Project.ID,
+		OrgID:            in.OrgID,
+		Status:           status,
+		URL:              resp.URL,
+		Port:             resp.Port,
+		ImageTag:         resp.ImageTag,
+		DockerfileSource: resp.DockerfileSource,
+		DetectedStack:    resp.DetectedStack,
+		BuildLog:         resp.BuildLog,
+		ContainerLog:     resp.ContainerLog,
+		Error:            resp.Error,
+	}
+	if !resp.StartedAt.IsZero() {
+		t := resp.StartedAt
+		d.StartedAt = &t
+	}
+	if !resp.FinishedAt.IsZero() {
+		t := resp.FinishedAt
+		d.FinishedAt = &t
+	}
+	return d
+}
+
+// backendPatchFromPrior pulls the Backend agent's unified diff out of the
+// prior map. foldPrior flattens the agent payload to its structured shape,
+// so the direct lookup wins; the nested "structured" fallback covers callers
+// that hand the whole payload through untouched.
+func backendPatchFromPrior(prior map[string]any) string {
+	be, ok := prior["backend"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	if d, ok := be["patch_diff"].(string); ok && d != "" {
+		return d
+	}
+	if s, ok := be["structured"].(map[string]any); ok {
+		if d, ok := s["patch_diff"].(string); ok {
+			return d
+		}
+	}
+	return ""
+}
+
+// structuredFromResult pulls the agent's schema-validated structured map out
+// of a runAgent success payload. Returns nil on the stub-fallback path (no
+// "structured" key), which the lineage hook treats as nothing-to-emit.
+func structuredFromResult(res domain.ActivityResult) map[string]any {
+	if s, ok := res.Payload["structured"].(map[string]any); ok {
+		return s
+	}
+	return nil
+}
+
+// dataEngineerStructuredFromPrior mirrors backendPatchFromPrior for the Data
+// Engineer's folded output: PriorOutputs["data_engineer"] is the runAgent
+// payload (with a "structured" submap) pre-Temporal-roundtrip, or may
+// already be flattened to the structured shape itself.
+func dataEngineerStructuredFromPrior(prior map[string]any) map[string]any {
+	de, ok := prior["data_engineer"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	if s, ok := de["structured"].(map[string]any); ok {
+		return s
+	}
+	return de
+}
+
+// migrationLineageEvent builds the repo.LineageEvent for a set of proposed
+// migrations, or ok=false when the structured output proposes none. Pure —
+// the activity-side emitMigrationLineage owns the clock + the insert so this
+// stays unit-testable without a Temporal context.
+func migrationLineageEvent(in PipelineInput, structured map[string]any, jobName string, at time.Time) (repo.LineageEvent, bool) {
+	migs := data_engineer.MigrationsFromStructured(structured)
+	if len(migs) == 0 {
+		return repo.LineageEvent{}, false
+	}
+	ev := data_engineer.BuildMigrationRunEvent(in.RunID, jobName, "COMPLETE", migs, at)
+	raw, err := json.Marshal(ev)
+	if err != nil {
+		return repo.LineageEvent{}, false
+	}
+	var eventMap map[string]any
+	if err := json.Unmarshal(raw, &eventMap); err != nil {
+		return repo.LineageEvent{}, false
+	}
+	return repo.LineageEvent{
+		OrgID:         in.OrgID,
+		WorkflowRunID: in.RunID,
+		EventType:     ev.EventType,
+		EventTime:     at,
+		JobNamespace:  ev.Job.Namespace,
+		JobName:       ev.Job.Name,
+		RunID:         ev.Run.RunID,
+		Event:         eventMap,
+	}, true
+}
+
+// emitMigrationLineage is the shared best-effort OpenLineage hook behind
+// DataEngineerMigrate (propose) and GitOpsDeploy (apply). A nil sink or an
+// output with no migrations is a silent no-op; an insert failure logs at
+// WARN and never fails the calling activity.
+func (a *Activities) emitMigrationLineage(ctx context.Context, in PipelineInput, structured map[string]any, jobName string) {
+	if a.Lineage == nil {
+		return
+	}
+	ev, ok := migrationLineageEvent(in, structured, jobName, time.Now().UTC())
+	if !ok {
+		return
+	}
+	if err := a.Lineage.Insert(ctx, ev); err != nil {
+		activity.GetLogger(ctx).Warn("lineage.emit_failed", "job", jobName, "err", err)
+		return
+	}
+	activity.GetLogger(ctx).Info("lineage.emitted",
+		"job", jobName, "run_id", ev.RunID, "workflow_run_id", ev.WorkflowRunID)
+}
+
+// stringsFromAny normalises a JSON-decoded []any (or an in-process []string)
+// into a []string, dropping non-string members. Activity payloads round-trip
+// through Temporal's JSON codec, so both shapes show up depending on whether
+// the value crossed a history boundary yet.
+func stringsFromAny(v any) []string {
+	switch t := v.(type) {
+	case []string:
+		return t
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }

@@ -92,7 +92,7 @@ func (r *NASATLXRepo) ListByOrg(ctx context.Context, orgID string, limit int) ([
 }
 
 // nullableString returns nil for empty so notes stays NULL in the DB rather
-// than ''. Keeps queries that filter on notes IS NULL working.
+// than ”. Keeps queries that filter on notes IS NULL working.
 func nullableString(s string) any {
 	if s == "" {
 		return nil

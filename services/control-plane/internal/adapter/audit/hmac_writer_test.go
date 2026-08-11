@@ -221,4 +221,3 @@ func TestVerify_DetectsTamper(t *testing.T) {
 		t.Errorf("verify (tampered): FirstBadRowID=%q, want %q", res.FirstBadRowID, row1ID)
 	}
 }
-

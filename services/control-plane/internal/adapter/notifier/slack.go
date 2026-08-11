@@ -85,7 +85,7 @@ func buildApprovalBlocks(n domain.Notification, baseURL string) []map[string]any
 			"type": "actions",
 			"elements": []map[string]any{
 				{
-					"type": "button",
+					"type":  "button",
 					"style": "primary",
 					"text": map[string]any{
 						"type": "plain_text",

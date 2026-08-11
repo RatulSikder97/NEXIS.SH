@@ -36,11 +36,11 @@ type LinkRenderer interface {
 // mailer. The Phase 2 mailer's SendMagicLink method is reused — the body
 // shape is the same plaintext "Click: <link>" we already ship.
 type Email struct {
-	mailer    local.Mailer
-	resolver  RecipientResolver
-	link      LinkRenderer
-	from      string
-	baseURL   string
+	mailer   local.Mailer
+	resolver RecipientResolver
+	link     LinkRenderer
+	from     string
+	baseURL  string
 }
 
 // NewEmail builds an Email notifier. mailer is typically *local.SMTPMailer

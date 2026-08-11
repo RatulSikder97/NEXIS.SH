@@ -8,7 +8,11 @@
 // touching the workflow function or its DAG.
 package recovery
 
-import "github.com/nexis-eco/nexis/services/control-plane/internal/domain"
+import (
+	"time"
+
+	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
+)
 
 // PipelineInput is the StartWorkflow input. Carries the org + workspace +
 // optional incident id (Phase 4 uses 'manual' or 'demo'; Phase 6 fills in
@@ -50,11 +54,17 @@ type PipelineInput struct {
 
 // PipelineOutput is the workflow return value. Used by GetRun for the
 // trailing summary in the timeline header.
+//
+// PRURL / GitOpsError (Phase 8 — close the loop) carry the GitOps deploy
+// outcome: the opened PR's web link on success, or the failure reason when
+// the deploy failed soft (the pipeline still succeeds — the patch was
+// already approved + validated, so a PR hiccup must not sink the run).
 type PipelineOutput struct {
 	DurationMS         int64                   `json:"duration_ms"`
 	Results            []domain.ActivityResult `json:"results"`
 	ApprovalDecisionID string                  `json:"approval_decision_id,omitempty"`
 	PRURL              string                  `json:"pr_url,omitempty"`
+	GitOpsError        string                  `json:"gitops_error,omitempty"`
 }
 
 // RecordEventInput is the input shape for RecordActivityEvent. We keep it as
@@ -75,10 +85,31 @@ type RecordEventInput struct {
 // activity that runs after the workflow's signal/timer race resolves. It
 // carries the terminal ApprovalSignal so the activity can persist the
 // decision + write the audit row.
+//
+// IncidentID / Scenario / PatchDiff (RLHF pipeline) carry the training-
+// example context the activity folds into feedback_examples: the scenario
+// the Synthesiser classified, the Backend agent's original diff, and the
+// incident that triggered the run. All best-effort — empty values simply
+// produce a thinner example (or skip it entirely when both scenario and
+// patch are empty).
 type ApprovalFinalizeInput struct {
-	OrgID         string                  `json:"org_id"`
-	WorkflowRunID string                  `json:"workflow_run_id"`
-	Signal        domain.ApprovalSignal   `json:"signal"`
+	OrgID         string                `json:"org_id"`
+	WorkflowRunID string                `json:"workflow_run_id"`
+	Signal        domain.ApprovalSignal `json:"signal"`
+	IncidentID    string                `json:"incident_id,omitempty"`
+	Scenario      string                `json:"scenario,omitempty"`
+	PatchDiff     string                `json:"patch_diff,omitempty"`
+}
+
+// HealthCheckInput is the input for the PostDeployHealthCheck activity —
+// the bounded post-deploy SLO probe. DeployedAt is workflow.Now at the
+// moment the GitOps deploy succeeded (replay-deterministic); the probe only
+// counts incidents received strictly after it. Service narrows the match to
+// the incident's service when known; empty matches any service in the org.
+type HealthCheckInput struct {
+	OrgID      string    `json:"org_id"`
+	Service    string    `json:"service,omitempty"`
+	DeployedAt time.Time `json:"deployed_at"`
 }
 
 // LoadProjectInput is the input for the LoadProject activity. The activity

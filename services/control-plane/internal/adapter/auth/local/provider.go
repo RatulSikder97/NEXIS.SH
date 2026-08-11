@@ -51,6 +51,19 @@ const defaultSessionTTL = 7 * 24 * time.Hour
 // magicTokenTTL is how long a magic link remains redeemable after issuance.
 const magicTokenTTL = 15 * time.Minute
 
+// resetTokenTTL is how long a password-reset link remains redeemable. Longer
+// than a magic link (the user has to context-switch to their inbox and pick a
+// new password) but still short enough to bound the exposure of a leaked link.
+const resetTokenTTL = 30 * time.Minute
+
+// minPasswordLen mirrors the signup form's minLength=8. Enforced on reset so
+// account recovery can't downgrade a credential below the signup bar.
+const minPasswordLen = 8
+
+// lastSeenTouchInterval throttles the last_seen_at write on VerifyToken so a
+// busy dashboard doesn't turn every API call into a session UPDATE.
+const lastSeenTouchInterval = 5 * time.Minute
+
 // Config wires the Provider's dependencies. Fields with sensible defaults can
 // be left zero.
 type Config struct {
@@ -175,6 +188,8 @@ func (p *Provider) Signup(ctx context.Context, in domain.SignupInput) (domain.Si
 		OrgID:     orgID,
 		CreatedAt: now,
 		ExpiresAt: now.Add(p.sessionTTL),
+		UserAgent: in.UserAgent,
+		IP:        in.IP,
 	}
 	if err := p.store.CreateSession(ctx, &session); err != nil {
 		return domain.SignupResult{}, fmt.Errorf("signup: create session: %w", err)
@@ -214,7 +229,7 @@ func (p *Provider) Login(ctx context.Context, in domain.LoginInput) (domain.Sess
 		}
 	}
 
-	return p.issueSessionForUser(ctx, user.ID)
+	return p.issueSessionForUserWithDevice(ctx, user.ID, in.UserAgent, in.IP)
 }
 
 // VerifyToken parses + validates a JWT and confirms the backing session is
@@ -226,7 +241,7 @@ func (p *Provider) VerifyToken(ctx context.Context, token string) (domain.Princi
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return p.sessionSecret, nil
-	})
+	}, jwt.WithTimeFunc(p.clock))
 	if err != nil || !parsed.Valid {
 		return domain.Principal{}, fmt.Errorf("verify token: %w", domain.ErrInvalidCredentials)
 	}
@@ -248,6 +263,14 @@ func (p *Provider) VerifyToken(ctx context.Context, token string) (domain.Princi
 	}
 	if p.clock().After(session.ExpiresAt) {
 		return domain.Principal{}, domain.ErrSessionExpired
+	}
+
+	// Best-effort last-seen touch, throttled so a busy dashboard doesn't
+	// turn every request into an UPDATE. Errors are swallowed: the touch is
+	// telemetry for the sessions UI, never a reason to fail auth.
+	now := p.clock()
+	if session.LastSeenAt == nil || now.Sub(*session.LastSeenAt) >= lastSeenTouchInterval {
+		_ = p.store.TouchSession(ctx, session.ID, now)
 	}
 
 	role, _ := claims["role"].(string)
@@ -324,6 +347,118 @@ func (p *Provider) ConsumeMagicLink(ctx context.Context, token string) (domain.S
 		return domain.SessionToken{}, fmt.Errorf("consume magic link: mark used: %w", err)
 	}
 	return p.issueSessionForUser(ctx, userID)
+}
+
+// --- Password reset (Phase 9) ----------------------------------------------
+
+// RequestPasswordReset mints a single-use reset token, persists its SHA-256
+// hash, and emails the plaintext link. Unknown emails are silently accepted
+// so the endpoint can't be used to probe for accounts — same contract as
+// IssueMagicLink.
+func (p *Provider) RequestPasswordReset(ctx context.Context, email string) error {
+	user, err := p.store.GetUserByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil // silent; don't leak existence
+		}
+		return fmt.Errorf("password reset: lookup user: %w", err)
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return fmt.Errorf("password reset: rand: %w", err)
+	}
+	plaintext := base64.RawURLEncoding.EncodeToString(raw)
+	h := sha256.Sum256([]byte(plaintext))
+	expires := p.clock().Add(resetTokenTTL)
+
+	if err := p.store.CreatePasswordResetToken(ctx, h[:], user.ID, expires); err != nil {
+		return fmt.Errorf("password reset: persist: %w", err)
+	}
+
+	link := p.baseURL + "/reset-password?token=" + plaintext
+	if err := p.mailer.SendPasswordReset(ctx, email, link); err != nil {
+		return fmt.Errorf("password reset: send: %w", err)
+	}
+	return nil
+}
+
+// ResetPassword redeems a reset token: validate → consume-once → replace the
+// bcrypt hash → revoke every outstanding session for the user. All token
+// failures (unknown, expired, already consumed) wrap ErrInvalidCredentials so
+// the handler can collapse them into one non-leaky "invalid or expired" reply.
+func (p *Provider) ResetPassword(ctx context.Context, token, newPassword string) error {
+	if token == "" {
+		return fmt.Errorf("reset password: token required: %w", domain.ErrInvalidCredentials)
+	}
+	if len(newPassword) < minPasswordLen {
+		return fmt.Errorf("reset password: password too short: %w", domain.ErrInvalidCredentials)
+	}
+
+	h := sha256.Sum256([]byte(token))
+	userID, expires, consumedAt, err := p.store.GetPasswordResetToken(ctx, h[:])
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return fmt.Errorf("reset password: unknown token: %w", domain.ErrInvalidCredentials)
+		}
+		return fmt.Errorf("reset password: lookup token: %w", err)
+	}
+	if consumedAt != nil {
+		return fmt.Errorf("reset password: token already used: %w", domain.ErrInvalidCredentials)
+	}
+	if p.clock().After(expires) {
+		return fmt.Errorf("reset password: token expired: %w", domain.ErrInvalidCredentials)
+	}
+
+	// Consume BEFORE updating the credential: if the update fails the token
+	// is burned, which fails safe (user requests a fresh link) rather than
+	// leaving a replayable token behind.
+	if err := p.store.MarkPasswordResetConsumed(ctx, h[:]); err != nil {
+		return fmt.Errorf("reset password: consume: %w", domain.ErrInvalidCredentials)
+	}
+
+	hash, err := hashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("reset password: hash: %w", err)
+	}
+	if err := p.store.UpdateUserPassword(ctx, userID, hash); err != nil {
+		return fmt.Errorf("reset password: update credential: %w", err)
+	}
+
+	// A reset usually means the old credential is suspect — kill every open
+	// session so a hijacker can't ride an existing cookie past the reset.
+	if err := p.store.RevokeSessionsForUser(ctx, userID); err != nil {
+		return fmt.Errorf("reset password: revoke sessions: %w", err)
+	}
+	return nil
+}
+
+// --- Sessions (Phase 9) -----------------------------------------------------
+
+// ListSessions returns the user's live sessions, newest first. "Current" is a
+// transport concern — the handler compares each id to the principal's.
+func (p *Provider) ListSessions(ctx context.Context, userID string) ([]domain.Session, error) {
+	return p.store.ListSessionsByUser(ctx, userID, p.clock())
+}
+
+// RevokeSession revokes one of the user's own sessions. Foreign or unknown
+// session ids both come back as ErrNotFound so the endpoint never confirms
+// that a guessed id exists.
+func (p *Provider) RevokeSession(ctx context.Context, userID, sessionID string) error {
+	if sessionID == "" {
+		return domain.ErrNotFound
+	}
+	session, err := p.store.GetSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if session.UserID != userID {
+		return domain.ErrNotFound
+	}
+	if session.RevokedAt != nil {
+		return nil // idempotent — already revoked
+	}
+	return p.store.RevokeSession(ctx, sessionID)
 }
 
 // --- OAuth (Phase 7) -------------------------------------------------------
@@ -765,6 +900,13 @@ func (p *Provider) RevokeInvite(ctx context.Context, _ domain.Principal, tokenHa
 // --- internal helpers ------------------------------------------------------
 
 func (p *Provider) issueSessionForUser(ctx context.Context, userID string) (domain.SessionToken, error) {
+	return p.issueSessionForUserWithDevice(ctx, userID, "", "")
+}
+
+// issueSessionForUserWithDevice is issueSessionForUser plus optional device
+// metadata (user agent + client IP) stamped onto the session row for the
+// Phase 9 sessions UI. Non-browser paths pass empty strings.
+func (p *Provider) issueSessionForUserWithDevice(ctx context.Context, userID, userAgent, ip string) (domain.SessionToken, error) {
 	orgID, role, err := p.store.GetMembership(ctx, userID)
 	if err != nil {
 		return domain.SessionToken{}, fmt.Errorf("issue session: lookup membership: %w", err)
@@ -776,6 +918,8 @@ func (p *Provider) issueSessionForUser(ctx context.Context, userID string) (doma
 		OrgID:     orgID,
 		CreatedAt: now,
 		ExpiresAt: now.Add(p.sessionTTL),
+		UserAgent: userAgent,
+		IP:        ip,
 	}
 	if err := p.store.CreateSession(ctx, &session); err != nil {
 		return domain.SessionToken{}, fmt.Errorf("issue session: persist: %w", err)
@@ -829,4 +973,5 @@ func slugify(s string) string {
 // don't care about the link emission.
 type noopMailer struct{}
 
-func (noopMailer) SendMagicLink(_ context.Context, _, _ string) error { return nil }
+func (noopMailer) SendMagicLink(_ context.Context, _, _ string) error     { return nil }
+func (noopMailer) SendPasswordReset(_ context.Context, _, _ string) error { return nil }

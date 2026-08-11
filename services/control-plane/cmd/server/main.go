@@ -28,12 +28,16 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/qa"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/approval"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
-	neo4jstore "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/graphstore/neo4j"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth"
+	authlocal "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth/local"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/billing"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/deployengine"
+	gitopsclient "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/gitops"
+	neo4jstore "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/graphstore/neo4j"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/keyvault"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/llm"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/notifier"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/patchstore"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/retrieval"
@@ -44,6 +48,7 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/config"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/cron"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
+	dbmigrate "github.com/nexis-eco/nexis/services/control-plane/internal/platform/migrate"
 	platformneo4j "github.com/nexis-eco/nexis/services/control-plane/internal/platform/neo4j"
 	otelplatform "github.com/nexis-eco/nexis/services/control-plane/internal/platform/otel"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/sse"
@@ -52,6 +57,7 @@ import (
 	httpserver "github.com/nexis-eco/nexis/services/control-plane/internal/transport/http"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/transport/http/handler"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/usecase/rolerecommend"
 	recoverywf "github.com/nexis-eco/nexis/services/control-plane/internal/workflow/recovery"
 )
 
@@ -155,6 +161,14 @@ func main() {
 	adminPool := mustPool(ctx, "DATABASE_URL", cfg.DatabaseURL, cfg, logger)
 	if adminPool != nil {
 		defer adminPool.Close()
+		if err := dbmigrate.Run(ctx, adminPool, logger); err != nil {
+			if cfg.AppEnv == "dev" {
+				logger.Warn("schema migration failed in dev — continuing without it", "err", err)
+			} else {
+				logger.Error("schema migration failed", "err", err)
+				os.Exit(1)
+			}
+		}
 	}
 	appPool := mustPool(ctx, "DATABASE_URL_APP", cfg.DatabaseURLApp, cfg, logger)
 	if appPool != nil {
@@ -213,6 +227,20 @@ func main() {
 	// Phase 6 widens the repos to dual-pool — the Sentinel detector goroutine
 	// (below) reads incidents_raw + integrations across every org via the
 	// admin pool, bypassing RLS.
+	// Phase 9 — lineage (OpenLineage-shaped RunEvents) + intelligent role
+	// recommendation. Both are read/write against the app pool with an
+	// admin-pool fallback for the RLS-free cron/background paths (RunAll,
+	// the recovery workflow's activity-side lineage emission). nil when
+	// adminPool is unavailable so a dev boot without Postgres still starts.
+	var lineageRepo *repo.LineageRepo
+	var roleRecStore *rolerecommend.Store
+	var deploymentsRepo *repo.DeploymentsRepo
+	if adminPool != nil {
+		lineageRepo = repo.NewLineageRepo(appPool, adminPool)
+		roleRecStore = rolerecommend.NewStore(adminPool)
+		deploymentsRepo = repo.NewDeploymentsRepoWithAdmin(appPool, adminPool)
+	}
+
 	var registry *integration.Registry
 	var intRepo *repo.IntegrationsRepo
 	var incRepo *repo.IncidentsRepo
@@ -231,18 +259,18 @@ func main() {
 		// Wire real-API clients onto the adapters when credentials are
 		// present. Each adapter degrades to stub mode if its config is empty.
 		stopSentryCron := registry.EnableRealAPIs(ctx, integration.RealConfig{
-			AppBaseURL:               cfg.AppBaseURL,
-			GitHubAppID:              cfg.GitHubAppID,
-			GitHubAppPrivateKeyPEM:   cfg.GitHubAppPrivateKeyPEM,
-			GitHubAppSlug:            cfg.GitHubAppSlug,
-			GitHubWebhookSecret:      cfg.GitHubWebhookSecret,
-			SentryBaseURL:            cfg.SentryBaseURL,
-			SentryListConnectedOrgs:  intRepo.ConnectedSentryOrgs,
-			SlackClientID:            cfg.SlackClientID,
-			SlackClientSecret:        cfg.SlackClientSecret,
-			SlackAppRedirectURI:      cfg.SlackAppRedirectURI,
-			PagerDutyWebhookSecrets:  cfg.PagerDutyWebhookSecrets,
-			IncidentSink:             incRepo,
+			AppBaseURL:              cfg.AppBaseURL,
+			GitHubAppID:             cfg.GitHubAppID,
+			GitHubAppPrivateKeyPEM:  cfg.GitHubAppPrivateKeyPEM,
+			GitHubAppSlug:           cfg.GitHubAppSlug,
+			GitHubWebhookSecret:     cfg.GitHubWebhookSecret,
+			SentryBaseURL:           cfg.SentryBaseURL,
+			SentryListConnectedOrgs: intRepo.ConnectedSentryOrgs,
+			SlackClientID:           cfg.SlackClientID,
+			SlackClientSecret:       cfg.SlackClientSecret,
+			SlackAppRedirectURI:     cfg.SlackAppRedirectURI,
+			PagerDutyWebhookSecrets: cfg.PagerDutyWebhookSecrets,
+			IncidentSink:            incRepo,
 		})
 		if stopSentryCron != nil {
 			defer stopSentryCron()
@@ -344,6 +372,27 @@ func main() {
 		projectsHandlerSvc = usecase.NewProjectsService(projectsRepo, intRepo, auditWriter, nil)
 	}
 
+	// QA continuous test loop + RLHF feedback pipeline repos. Both dual-pool
+	// (activity/cron writes bypass RLS via admin; HTTP reads ride the
+	// per-request tx). Hoisted above the Temporal worker for the same reason
+	// projectsRepo is: the Activities struct wires QASuites (QATestGen
+	// persistence) and the approval service wires the feedback sink, while
+	// the cron block far below reuses the same qaSuitesRepo instance.
+	var qaSuitesRepo *repo.QATestSuitesRepo
+	var feedbackRepo *repo.FeedbackRepo
+	if appPool != nil && adminPool != nil {
+		qaSuitesRepo = repo.NewQATestSuitesRepo(appPool, adminPool)
+		feedbackRepo = repo.NewFeedbackRepo(appPool, adminPool)
+	}
+
+	// qaLoopValidator is the validator-sandbox client the QA loop cron
+	// replays suites through — the same client the BackendCodegen activity
+	// uses. Hoisted (like patchStoreForHTTP) because the client is
+	// constructed inside the Temporal branch below but consumed by the cron
+	// registration at the bottom of main. Stays nil when the validator is
+	// unconfigured — the QALoop no-ops.
+	var qaLoopValidator recoverywf.ValidatorClient
+
 	// Phase 4 — Temporal worker + WorkflowService. The worker registers the
 	// 9-stub RecoveryPipeline + the Activities struct (10 methods). Both
 	// pools must exist (worker uses adminPool; HTTP handlers use appPool via
@@ -367,6 +416,12 @@ func main() {
 	// branch is skipped (no temporal, no admin pool) — the route mount in
 	// server.go guards on non-nil.
 	var patchStoreForHTTP domain.PatchStore
+	// deployEngineSvcForHTTP mirrors patchStoreForHTTP's hoisting: the
+	// deploy-engine client is constructed inside the acts-scoped block below
+	// (acts.DeployEngine goes out of scope with acts itself), but the HTTP
+	// Deps struct needs the same client instance to mount the deployments
+	// routes. Stays nil when the worker branch is skipped.
+	var deployEngineSvcForHTTP handler.DeployEngineService
 	if appPool != nil && adminPool != nil {
 		wfRepo = repo.NewWorkflowRepo(appPool, adminPool)
 		tc, err := temporalplatform.Dial(temporalplatform.Config{
@@ -410,6 +465,7 @@ func main() {
 					BaseURL: cfg.ValidatorURL,
 					Token:   cfg.ValidatorToken,
 				})
+				qaLoopValidator = vc // shared with the QA continuous-loop cron
 				logger.Info("validator client initialised", "url", cfg.ValidatorURL)
 			} else {
 				logger.Warn("validator client disabled — VALIDATOR_URL/TOKEN missing")
@@ -482,6 +538,13 @@ func main() {
 			if adminPool != nil {
 				approvalRepo = repo.NewApprovalRepo(appPool, adminPool)
 				approvalSvc = approval.New(approvalRepo, nil, auditWriter)
+				// WithFeedback wires the RLHF feedback_examples sink so
+				// ApprovalGateFinalize records every terminal decision as a
+				// training example. The nil-check guards the typed-nil
+				// interface gotcha (see the projectsHandlerSvc comment above).
+				if feedbackRepo != nil {
+					approvalSvc = approvalSvc.WithFeedback(feedbackRepo)
+				}
 				acts.Approval = approvalSvc
 
 				// SlackDecider lets the Slack interactivity webhook reuse
@@ -510,6 +573,50 @@ func main() {
 				acts.Projects = projectsRepo
 			}
 			acts.SlackDefaultChannel = cfg.SlackDefaultChannel
+
+			// QA continuous loop — QATestGen persists each generated suite
+			// so the qa_loop cron (registered below) can replay it against
+			// the validator sandbox on every tick.
+			if qaSuitesRepo != nil {
+				acts.QASuites = qaSuitesRepo
+			}
+
+			// Phase 8 — close the loop: GitOps deploy-on-approval + post-
+			// deploy SLO probe + ArgoCD rollback. The GitOpsDeploy activity
+			// no-ops when the client is nil (dev without the sidecar); the
+			// ArgoCD handle comes from the integrations registry so rollback
+			// reuses the per-org encrypted credential path. Fixture repo
+			// coords are the stub-path fallback for runs without a project.
+			if cfg.GitOpsURL != "" && cfg.GitOpsToken != "" {
+				acts.GitOps = gitopsclient.New(gitopsclient.Config{
+					BaseURL: cfg.GitOpsURL,
+					Token:   cfg.GitOpsToken,
+				})
+				logger.Info("gitops client initialised", "url", cfg.GitOpsURL)
+			} else {
+				logger.Warn("gitops client disabled — GITOPS_URL/GITOPS_TOKEN missing")
+			}
+			if registry != nil {
+				acts.ArgoCD = registry.ArgoCD
+			}
+			if lineageRepo != nil {
+				acts.Lineage = lineageRepo
+			}
+			if cfg.DeployEngineURL != "" && cfg.DeployEngineToken != "" {
+				dec := deployengine.New(deployengine.Config{
+					BaseURL: cfg.DeployEngineURL,
+					Token:   cfg.DeployEngineToken,
+				})
+				acts.DeployEngine = dec
+				deployEngineSvcForHTTP = dec
+				logger.Info("deploy-engine client initialised", "url", cfg.DeployEngineURL)
+			} else {
+				logger.Warn("deploy-engine client disabled — DEPLOY_ENGINE_URL/DEPLOY_ENGINE_TOKEN missing")
+			}
+			acts.FixtureRepoOwner = cfg.FixtureRepoOwner
+			acts.FixtureRepoName = cfg.FixtureRepoName
+			acts.FixtureRepoDefaultBranch = cfg.FixtureRepoDefaultBranch
+			acts.HealthWindow = time.Duration(cfg.PostDeployHealthWindowMs) * time.Millisecond
 
 			wfService = adapterworkflow.New(adapterworkflow.Config{
 				Repo:       wfRepo,
@@ -649,6 +756,34 @@ func main() {
 		slackDeciderSvc = slackDecider
 	}
 
+	// RoleRecommendationService port — same nil-interface dance as Sentinel:
+	// a nil *rolerecommend.Store assigned directly to the interface field
+	// would compare non-nil, defeating the `deps.RoleRecs != nil` guard in
+	// server.go.
+	var roleRecsSvc handler.RoleRecommendationService
+	if roleRecStore != nil {
+		roleRecsSvc = roleRecStore
+	}
+
+	// Deploy-engine HTTP surface — same nil-interface dance as RoleRecs/
+	// Sentinel above. deploymentsSvc/deployGitHubSvc/incidentsSvc stay nil
+	// interfaces (not non-nil-wrapping-nil) unless their concrete dependency
+	// is actually present. deployEngineSvcForHTTP is already the correctly
+	// nil-guarded interface value, set alongside acts.DeployEngine above
+	// (hoisted outside that block's scope — see its declaration comment).
+	var deploymentsSvc handler.DeploymentsStore
+	if deploymentsRepo != nil {
+		deploymentsSvc = deploymentsRepo
+	}
+	var deployGitHubSvc handler.GitHubTokenMinter
+	if registry != nil && registry.GitHub != nil {
+		deployGitHubSvc = registry.GitHub
+	}
+	var incidentsSvc domain.IncidentSink
+	if incRepo != nil {
+		incidentsSvc = incRepo
+	}
+
 	srv := httpserver.New(cfg, logger, httpserver.Deps{
 		Pool:              adminPool,
 		AppPool:           appPool,
@@ -675,6 +810,12 @@ func main() {
 		OrgStats:          orgStatsRepo,
 		Sentinel:          sentinelHandlerSvc,
 		SlackDecider:      slackDeciderSvc,
+		RoleRecs:          roleRecsSvc,
+		Lineage:           lineageRepo,
+		Deployments:       deploymentsSvc,
+		DeployEngine:      deployEngineSvcForHTTP,
+		DeployGitHub:      deployGitHubSvc,
+		Incidents:         incidentsSvc,
 		SystemHealth: handler.SystemHealthDeps{
 			AdminPool: adminPool,
 			RedisAddr: redisAddrOrDefault(),
@@ -697,9 +838,22 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	// Cron jobs — Phase 3.5 usage ticker + invoice roller. Bound to appCtx
-	// so SIGTERM cancels them in lockstep with the rest of the long-running
-	// goroutines (Temporal worker, Sentinel detector).
+	// Cron jobs — one cron.Start call for the whole fleet, bound to appCtx
+	// so SIGTERM cancels every job in lockstep with the rest of the
+	// long-running goroutines (Temporal worker, Sentinel detector). Each job
+	// gates on its own dependencies so a partial dev boot (no billing, no
+	// validator, no SMTP) still runs whichever jobs it can:
+	//
+	//   usage_ticker / invoice_roller — Phase 3.5 billing pair.
+	//   qa_loop       — continuous QA test loop: replays persisted QA-agent
+	//                   suites against the validator sandbox and raises a
+	//                   qa.regression audit + a source='qa_loop' fatal
+	//                   incident (Sentinel-triggerable) on passed→failed.
+	//   daily_digest  — per-org 24h summary: aggregates incidents / repairs /
+	//                   approvals / MTTR / agent activity into
+	//                   digest_reports and emails org owners+admins via the
+	//                   notifier path.
+	var cronJobs []cron.Job
 	if wsRepo != nil && billingRepo != nil {
 		usageTicker := &usecase.UsageTicker{
 			Workspaces: wsRepo,
@@ -708,11 +862,85 @@ func main() {
 			PriceCents: 10.0,
 		}
 		invoiceRoller := &usecase.InvoiceRoller{Billing: billingRepo}
-		cron.Start(appCtx, logger, []cron.Job{
-			{Name: "usage_ticker", Interval: usageTicker.Interval, Run: usageTicker.Run},
-			{Name: "invoice_roller", Interval: 24 * time.Hour, Run: invoiceRoller.Run},
+		cronJobs = append(cronJobs,
+			cron.Job{Name: "usage_ticker", Interval: usageTicker.Interval, Run: usageTicker.Run},
+			cron.Job{Name: "invoice_roller", Interval: 24 * time.Hour, Run: invoiceRoller.Run},
+		)
+	}
+	if qaSuitesRepo != nil && qaLoopValidator != nil {
+		qaLoop := &usecase.QALoop{
+			Suites:    qaSuitesRepo,
+			Validator: qaLoopValidator,
+			Incidents: incRepo,
+			Audit:     auditWriter,
+			Logger:    logger,
+		}
+		cronJobs = append(cronJobs, cron.Job{
+			Name:     "qa_loop",
+			Interval: time.Duration(cfg.QALoopIntervalMinutes) * time.Minute,
+			Run:      qaLoop.Run,
 		})
-		logger.Info("cron started", "usage_tick_seconds", cfg.UsageTickSeconds)
+	} else {
+		logger.Warn("qa_loop cron disabled — suite store or validator unwired",
+			"suites", qaSuitesRepo != nil, "validator", qaLoopValidator != nil)
+	}
+	if adminPool != nil {
+		digestRepo := repo.NewDigestRepo(adminPool)
+		// Digest email reuses the exact Mailer + RecipientResolver shape the
+		// approval email notifier prescribes: SMTPMailer (same transport the
+		// auth factory builds) + a repo-backed owner/admin resolver.
+		digestNotifier := notifier.NewEmail(
+			&authlocal.SMTPMailer{Host: cfg.SMTPHost, Port: cfg.SMTPPort, From: cfg.SMTPFrom},
+			notifier.NewRepoResolver(digestRepo),
+			cfg.AppBaseURL,
+		)
+		dailyDigest := &usecase.DailyDigest{
+			Store:          digestRepo,
+			Notifier:       digestNotifier,
+			Logger:         logger,
+			ConsoleLinkURL: strings.TrimRight(cfg.AppBaseURL, "/") + "/console",
+		}
+		cronJobs = append(cronJobs, cron.Job{
+			Name:     "daily_digest",
+			Interval: 24 * time.Hour,
+			Run:      dailyDigest.Run,
+		})
+	} else {
+		logger.Warn("daily_digest cron disabled — DATABASE_URL missing")
+	}
+	// schema_drift_checker — proactive information_schema drift detection
+	// against the control-plane's own database. Watches a single shared
+	// schema, not a per-tenant resource, so it needs one explicit target org
+	// (see config.SchemaDriftOrgID's doc comment) rather than a fan-out like
+	// Sentinel's per-connected-org polling. Off by default: an unset
+	// SCHEMA_DRIFT_ORG_ID disables the checker entirely rather than
+	// attributing platform-level drift to an arbitrary tenant.
+	if adminPool != nil && cfg.SchemaDriftOrgID != "" {
+		driftChecker := &data_engineer.DriftChecker{
+			Source:   data_engineer.NewDriftDetector(adminPool, nil),
+			Sink:     repo.NewIncidentsRepo(adminPool),
+			OrgID:    cfg.SchemaDriftOrgID,
+			Interval: 5 * time.Minute,
+			Logger:   logger,
+		}
+		cronJobs = append(cronJobs, cron.Job{
+			Name:     "schema_drift_checker",
+			Interval: driftChecker.Interval,
+			Run:      driftChecker.Run,
+		})
+	} else {
+		logger.Warn("schema_drift_checker cron disabled",
+			"admin_pool", adminPool != nil, "schema_drift_org_id_set", cfg.SchemaDriftOrgID != "")
+	}
+	if len(cronJobs) > 0 {
+		cron.Start(appCtx, logger, cronJobs)
+		names := make([]string, 0, len(cronJobs))
+		for _, j := range cronJobs {
+			names = append(names, j.Name)
+		}
+		logger.Info("cron started", "jobs", names,
+			"usage_tick_seconds", cfg.UsageTickSeconds,
+			"qa_loop_interval_minutes", cfg.QALoopIntervalMinutes)
 	}
 
 	// Phase 6 — Sentinel detector goroutine. Polls incidents_raw + triggers a

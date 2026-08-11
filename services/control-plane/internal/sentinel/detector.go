@@ -58,6 +58,14 @@ type Detector struct {
 	// Keyed by (org_id, source_event_id) → last-seen time. Same mutex as
 	// lastSeen/lastTriggered; lazily initialised on first use.
 	dedupeLedger map[dedupeKey]time.Time
+
+	// spikeBaselines is the per-org SPC state for the error-rate-spike rule:
+	// an EWMA mean+variance of the CountRecent window aggregate, one entry
+	// per org (rules.go's SpikeBaseline). In-memory by design — it resets on
+	// restart, which drops the rule into its fixed-threshold warm-up mode
+	// for one SpikeWindow (the same trade-off dedupeLedger documents; this
+	// service claims no cross-restart statistical memory). Guarded by mu.
+	spikeBaselines map[string]SpikeBaseline
 }
 
 // Config bundles every Detector dependency. The runtime constructor lives in
@@ -93,17 +101,18 @@ func New(cfg Config) *Detector {
 		cfg.WorkflowType = "RecoveryPipeline"
 	}
 	return &Detector{
-		incidents:     cfg.Incidents,
-		workflows:     cfg.Workflows,
-		workspaces:    cfg.Workspaces,
-		integrations:  cfg.Integrations,
-		audit:         cfg.Audit,
-		router:        cfg.Router,
-		workflowType:  cfg.WorkflowType,
-		interval:      cfg.Interval,
-		logger:        cfg.Logger,
-		lastSeen:      map[string]time.Time{},
-		lastTriggered: map[string]time.Time{},
+		incidents:      cfg.Incidents,
+		workflows:      cfg.Workflows,
+		workspaces:     cfg.Workspaces,
+		integrations:   cfg.Integrations,
+		audit:          cfg.Audit,
+		router:         cfg.Router,
+		workflowType:   cfg.WorkflowType,
+		interval:       cfg.Interval,
+		logger:         cfg.Logger,
+		lastSeen:       map[string]time.Time{},
+		lastTriggered:  map[string]time.Time{},
+		spikeBaselines: map[string]SpikeBaseline{},
 	}
 }
 
@@ -177,10 +186,25 @@ func (d *Detector) tick(ctx context.Context, now time.Time) {
 			continue
 		}
 		recentCount, err := d.incidents.CountRecent(ctx, orgID, SpikeWindow)
+		countOK := err == nil
 		if err != nil {
 			d.logger.Warn("sentinel.detector.count_recent", "org_id", orgID, "err", err)
 			recentCount = 0
 		}
+
+		// SPC bookkeeping: this tick is judged against the baseline built
+		// from PRIOR ticks only, then the current observation is folded in.
+		// A failed CountRecent is not observed — folding the substituted 0
+		// would drag the EWMA down and make the next real count look like a
+		// spike. The fold happens before the workspace lookup on purpose so
+		// orgs without a default workspace still accumulate a baseline and
+		// are statistically warm the moment a workspace appears.
+		d.mu.Lock()
+		baseline := d.spikeBaselines[orgID]
+		if countOK {
+			d.spikeBaselines[orgID] = baseline.Observe(float64(recentCount))
+		}
+		d.mu.Unlock()
 
 		wsID, err := d.workspaces.DefaultForOrg(ctx, orgID)
 		if err != nil {
@@ -192,7 +216,7 @@ func (d *Detector) tick(ctx context.Context, now time.Time) {
 			continue
 		}
 
-		triggers := Apply(orgID, wsID, last, lastTrig, fatals, recentCount, now)
+		triggers := Apply(orgID, wsID, last, lastTrig, fatals, recentCount, baseline, now)
 		triggers = d.dedupeTriggers(orgID, triggers, now)
 		// Project routing — resolve a project_id for each trigger so the
 		// recovery workflow has the right repo/app/channel mapping. The

@@ -18,11 +18,11 @@ import (
 // policy directly without needing a live approval.Service.
 type projectAwareActivities struct {
 	*recordingActivities
-	project           *domain.Project
-	loadErr           error
-	severity          string
-	loadCalls         int
-	slackDefaultUsed  string
+	project          *domain.Project
+	loadErr          error
+	severity         string
+	loadCalls        int
+	slackDefaultUsed string
 }
 
 func (p *projectAwareActivities) LoadProject(_ context.Context, in LoadProjectInput) (LoadProjectOutput, error) {

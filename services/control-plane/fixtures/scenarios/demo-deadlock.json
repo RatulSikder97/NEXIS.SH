@@ -1,0 +1,18 @@
+{
+  "label": "demo-deadlock",
+  "title": "Postgres deadlock detected in ledger-api concurrent fund transfers",
+  "service": "ledger-api",
+  "environment": "production",
+  "stacktrace": "ERROR: deadlock detected (SQLSTATE 40P01)\nDETAIL: Process 4123 waits for ShareLock on transaction 88991; blocked by process 4127. Process 4127 waits for ShareLock on transaction 88987; blocked by process 4123.\nHINT: See server log for query details.\n\tgithub.com/nexis-demo/ledger-api/internal/repo.(*LedgerRepo).TransferFunds\n\t\tledger_repo.go:132\n\tgithub.com/nexis-demo/ledger-api/internal/worker.(*SettlementWorker).process\n\t\tsettlement_worker.go:58",
+  "logs": "ts=2026-08-10T16:45:31Z level=error service=ledger-api msg=tx_aborted sqlstate=40P01 op=transfer_funds src_account=acct-2291 dst_account=acct-1108\nts=2026-08-10T16:45:31Z level=warn service=ledger-api msg=lock_order_mismatch note=\"settlement worker updates accounts debit-first; refund worker updates credit-first\"\nts=2026-08-10T16:45:44Z level=warn service=ledger-api msg=retry_storm op=transfer_funds retries_5m=412 deadlocks_5m=37",
+  "metadata": {
+    "service_name": "ledger-api",
+    "sqlstate": "40P01",
+    "table": "accounts",
+    "writer_a": "SettlementWorker (debit-first row order)",
+    "writer_b": "RefundWorker (credit-first row order)",
+    "deadlocks_5m": 37,
+    "incident_kind": "deadlock",
+    "expected_scenario": "unknown"
+  }
+}

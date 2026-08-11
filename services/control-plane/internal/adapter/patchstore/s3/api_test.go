@@ -25,9 +25,9 @@ type notFoundErr struct {
 	code string
 }
 
-func (e *notFoundErr) Error() string             { return e.code }
-func (e *notFoundErr) ErrorCode() string         { return e.code }
-func (e *notFoundErr) ErrorMessage() string      { return e.code }
+func (e *notFoundErr) Error() string                 { return e.code }
+func (e *notFoundErr) ErrorCode() string             { return e.code }
+func (e *notFoundErr) ErrorMessage() string          { return e.code }
 func (e *notFoundErr) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
 
 // makeStoreWithFakes wires a Store against fakes with our test KeyVault.

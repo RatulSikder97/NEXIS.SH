@@ -17,8 +17,10 @@
 
 const API =
   typeof window === "undefined"
-    ? process.env.API_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
-    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    ? (process.env.API_URL_INTERNAL ??
+      process.env.NEXT_PUBLIC_API_URL ??
+      "http://localhost:8080")
+    : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080");
 
 // Severity classes match the Phase 6 approval.Classify Go-side enum.
 export type ApprovalSeverity = "low" | "medium" | "high";
@@ -32,6 +34,7 @@ export type ApprovalDecisionState =
   | "reject"
   | "approved"
   | "rejected"
+  | "modified"
   | "auto"
   | "auto_approved"
   | "timed_out"
@@ -89,7 +92,9 @@ export type PendingApproval = {
 // returns 202 to signal "signal accepted, workflow is processing async".
 async function failOr<T>(r: Response): Promise<T | undefined> {
   if (!r.ok && r.status !== 202) {
-    const body = (await r.json().catch(() => ({}) as Record<string, unknown>)) as {
+    const body = (await r
+      .json()
+      .catch(() => ({}) as Record<string, unknown>)) as {
       error?: string;
     };
     throw new Error(body.error ?? r.statusText);
@@ -113,10 +118,10 @@ export const approvals = {
   // `decision='pending'`, joined with the workflow_runs metadata + the
   // Phase 5 agent summaries. The backend orders newest-first.
   pending: async (wsId: string): Promise<PendingApproval[]> => {
-    const r = await fetch(
-      `${API}/v1/workspaces/${wsId}/approvals/pending`,
-      { credentials: "include", cache: "no-store" },
-    );
+    const r = await fetch(`${API}/v1/workspaces/${wsId}/approvals/pending`, {
+      credentials: "include",
+      cache: "no-store",
+    });
     const out = await failOr<PendingApproval[]>(r);
     return out ?? [];
   },
@@ -140,7 +145,11 @@ export const approvals = {
   // approve and reject share the underlying POST shape; the only difference
   // is the `decision` payload field. We expose two narrow methods so call
   // sites don't have to remember the literal string.
-  approve: async (wsId: string, runId: string, notes?: string): Promise<void> => {
+  approve: async (
+    wsId: string,
+    runId: string,
+    notes?: string,
+  ): Promise<void> => {
     const r = await fetch(
       `${API}/v1/workspaces/${wsId}/pipelines/${runId}/approve`,
       {
@@ -153,7 +162,11 @@ export const approvals = {
     await failOr<void>(r);
   },
 
-  reject: async (wsId: string, runId: string, notes?: string): Promise<void> => {
+  reject: async (
+    wsId: string,
+    runId: string,
+    notes?: string,
+  ): Promise<void> => {
     const r = await fetch(
       `${API}/v1/workspaces/${wsId}/pipelines/${runId}/reject`,
       {
@@ -161,6 +174,31 @@ export const approvals = {
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ notes: notes ?? "" }),
+      },
+    );
+    await failOr<void>(r);
+  },
+
+  // modify is the RLHF "modify-then-approve" write: the engineer submits an
+  // edited unified diff which the workflow deploys INSTEAD of the agent's
+  // original, and the (original, edited) pair is recorded as a training
+  // example. `modifiedDiff` is required — the backend 400s without it.
+  modify: async (
+    wsId: string,
+    runId: string,
+    modifiedDiff: string,
+    notes?: string,
+  ): Promise<void> => {
+    const r = await fetch(
+      `${API}/v1/workspaces/${wsId}/pipelines/${runId}/modify`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          notes: notes ?? "",
+          modified_diff: modifiedDiff,
+        }),
       },
     );
     await failOr<void>(r);

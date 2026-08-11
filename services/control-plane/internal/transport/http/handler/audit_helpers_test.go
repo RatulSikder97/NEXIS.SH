@@ -24,11 +24,11 @@ import (
 // fakeLister captures the filter so the test can assert parseFilter's
 // translation of the query string was correct, and returns canned rows.
 type fakeLister struct {
-	mu       sync.Mutex
-	lastF    audit.AuditFilter
-	rows     []audit.AuditRow
-	total    int
-	failErr  error
+	mu      sync.Mutex
+	lastF   audit.AuditFilter
+	rows    []audit.AuditRow
+	total   int
+	failErr error
 }
 
 func (f *fakeLister) List(_ context.Context, _ string, filt audit.AuditFilter) ([]audit.AuditRow, int, error) {
@@ -220,4 +220,3 @@ func TestAuditCSV_ClampsLimitTo10k(t *testing.T) {
 		t.Fatalf("CSV must force limit=10000, got %d", fake.lastF.Limit)
 	}
 }
-

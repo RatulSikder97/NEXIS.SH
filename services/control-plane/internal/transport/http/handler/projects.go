@@ -366,4 +366,3 @@ func dtoPolicyToDomain(p dto.RecoveryPolicy) domain.RecoveryPolicy {
 		RollbackOnSLOBreach:     p.RollbackOnSLOBreach,
 	}
 }
-

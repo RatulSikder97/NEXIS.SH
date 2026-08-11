@@ -114,8 +114,8 @@ func TestSummariseAgentInput_Truncates(t *testing.T) {
 // still produces a useful summary (so input_summary is never empty).
 func TestSummariseAgentInput_FallbackWhenIncidentNil(t *testing.T) {
 	in := PipelineInput{
-		RunID:      "run-abc",
-		IncidentID: "demo",
+		RunID:       "run-abc",
+		IncidentID:  "demo",
 		TriggeredBy: "demo",
 	}
 	got := summariseAgentInput(in, domain.AgentNameBackend)

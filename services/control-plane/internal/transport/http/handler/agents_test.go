@@ -18,12 +18,12 @@ import (
 // non-integers are silently ignored (defaults take over).
 func TestParseLimitOffset(t *testing.T) {
 	cases := []struct {
-		name        string
-		query       string
-		defLimit    int
-		maxLimit    int
-		wantLimit   int
-		wantOffset  int
+		name       string
+		query      string
+		defLimit   int
+		maxLimit   int
+		wantLimit  int
+		wantOffset int
 	}{
 		{
 			name:       "defaults_when_empty",
@@ -142,10 +142,10 @@ func TestAgentsListEndpoint_StatusSucceededFilter(t *testing.T) {
 func TestTruncateLargeOutput(t *testing.T) {
 	big := strings.Repeat("A", 9000)
 	payload := map[string]any{
-		"content":     big,
+		"content":      big,
 		"model_output": big,
-		"summary":     "untouched",
-		"tool_calls":  []any{"keep me intact"},
+		"summary":      "untouched",
+		"tool_calls":   []any{"keep me intact"},
 	}
 	truncateLargeOutput(payload, 8*1024)
 

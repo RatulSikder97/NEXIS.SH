@@ -22,14 +22,14 @@ import (
 // what layer it belongs to, and per-org observability rolled up from
 // activity_events + token_ledger over the last 7 days.
 type AgentInfo struct {
-	Name           string  `json:"name"`             // canonical AgentName (snake_case)
-	Label          string  `json:"label"`            // human-readable
-	Layer          string  `json:"layer"`            // "l1" | "l2" | "router" | "detector"
+	Name           string  `json:"name"`  // canonical AgentName (snake_case)
+	Label          string  `json:"label"` // human-readable
+	Layer          string  `json:"layer"` // "l1" | "l2" | "router" | "detector"
 	Description    string  `json:"description"`
-	Status         string  `json:"status"`           // "available" | "degraded" | "disabled"
-	RecentRuns     int     `json:"recent_runs"`      // last 7 days
+	Status         string  `json:"status"`      // "available" | "degraded" | "disabled"
+	RecentRuns     int     `json:"recent_runs"` // last 7 days
 	LastSeenAt     string  `json:"last_seen_at,omitempty"`
-	TotalTokensIn  int     `json:"total_tokens_in"`  // last 7 days, sum
+	TotalTokensIn  int     `json:"total_tokens_in"` // last 7 days, sum
 	TotalTokensOut int     `json:"total_tokens_out"`
 	TotalCostCents float64 `json:"total_cost_cents_exact"`
 	P50DurationMs  int64   `json:"p50_duration_ms"`

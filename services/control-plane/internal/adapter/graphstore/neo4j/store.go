@@ -82,9 +82,12 @@ func (s *Store) Neighbours(ctx context.Context, n domain.GraphNode, kinds []doma
 
 	// %s for the relationship pattern is safe — it's built from enum constants,
 	// not user input. The traversal depth bound is also a const-derived int.
+	// size(r) is the path length in edges — surfaced as GraphEdge.Hops so
+	// Pathfinder can report each candidate's real distance from the symptom
+	// symbol to the causal sidecar's ranking.
 	cypher := fmt.Sprintf(
 		`MATCH (s:Symbol {name:$name, org_id:$org})-[r:%s*1..%d]-(t)
-		 RETURN type(r[0]) AS rel, t LIMIT %d`,
+		 RETURN type(r[0]) AS rel, t, size(r) AS hops LIMIT %d`,
 		relList, maxHops, limit,
 	)
 	res, err := sess.Run(ctx, cypher, map[string]any{"name": n.Name, "org": n.OrgID})
@@ -99,10 +102,17 @@ func (s *Store) Neighbours(ctx context.Context, n domain.GraphNode, kinds []doma
 		}
 		rel, _ := rec.Values[0].(string)
 		target, _ := rec.Values[1].(neo4jdrv.Node)
+		hops := 1
+		if len(rec.Values) > 2 {
+			if h, ok := rec.Values[2].(int64); ok && h > 0 {
+				hops = int(h)
+			}
+		}
 		out = append(out, domain.GraphEdge{
 			From: n,
 			To:   nodeToDomain(target, kindFromLabels(target.Labels)),
 			Kind: domain.GraphEdgeKind(rel),
+			Hops: hops,
 		})
 	}
 	return out, res.Err()

@@ -1,0 +1,147 @@
+\documentclass[12pt,oneside]{report}
+
+% ---------- Layout: single column, IEEE-influenced typography ----------
+\usepackage[margin=1in]{geometry}
+\usepackage{times}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{setspace}
+\usepackage{enumitem}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{tocloft}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue,
+  pdftitle={Nexis: A Multi-Agent Autonomous Engineering Platform with Closed-Loop Fault Recovery},
+  pdfauthor={Ratul Sikder}
+}
+
+\onehalfspacing
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{8pt}
+
+% Chapter/section heading style — plain, EduRide-style (not IEEE roman-numeral)
+\titleformat{\chapter}[hang]{\LARGE\bfseries}{Chapter \thechapter}{1em}{}
+\titlespacing*{\chapter}{0pt}{0pt}{24pt}
+\titleformat{\section}{\Large\bfseries}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.8em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
+\renewcommand{\headrulewidth}{0pt}
+\usepackage{lastpage}
+
+\captionsetup{labelfont=bf,font=small}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+  backgroundcolor=\color{gray!8},
+  captionpos=b
+}
+
+\newcommand{\code}[1]{\texttt{#1}}
+
+\begin{document}
+
+% ======================= TITLE PAGE =======================
+\begin{titlepage}
+\begin{center}
+\vspace*{0.3cm}
+{\Large University of Dhaka}\\[4pt]
+{\Large Institute of Information Technology (IIT)}\\[40pt]
+{\large Project\\On}\\[10pt]
+{\Large\bfseries ``Nexis: A Multi-Agent Autonomous Engineering Platform\\with Closed-Loop Fault Recovery''}\\[40pt]
+{\large Submitted By}\\[10pt]
+{\large Name: Ratul Sikder}\\
+{\large Exam Roll: 2506102}\\[30pt]
+{\normalsize A project submitted to the Institute of Information Technology (IIT), DU\\
+for the partial fulfillment of the degree requirements.}\\[30pt]
+{\large Supervised By}\\[10pt]
+{\large \rule{6cm}{0.4pt}}\\[4pt]
+{\normalsize Institute of Information Technology (IIT)}\\
+{\normalsize University of Dhaka}\\[30pt]
+{\normalsize Date: 11\textsuperscript{th} August, 2026}
+\end{center}
+\end{titlepage}
+
+% ======================= ACKNOWLEDGEMENT =======================
+\chapter*{Acknowledgement}
+\addcontentsline{toc}{chapter}{Acknowledgement}
+I would like to express my sincere gratitude to the faculty of the Institute of
+Information Technology (IIT), University of Dhaka, for the academic environment
+and guidance that made this project possible. Nexis grew out of a genuine,
+recurring frustration familiar to every engineering team I have worked with or
+studied: the gap between an AI tool that writes a function and a system that
+actually closes the loop on a production failure. I am grateful for the freedom
+to pursue that problem in depth, across nine cooperating agents, a real
+multi-tenant control plane, and a working closed-loop deployment engine, rather
+than a narrower proof of concept. I also thank my family for their patience
+during the long build-and-verify cycles this project demanded.
+
+% ======================= DECLARATION =======================
+\chapter*{Declaration}
+\addcontentsline{toc}{chapter}{Declaration}
+This is to declare that this project is my original work. No part of this work
+has been submitted elsewhere, partially or entirely, for the award of any other
+degree or diploma. All project-related information will remain confidential and
+shall not be disclosed without the formal consent of the project supervisor. The
+plagiarism policy, as stated by the supervisor, has been maintained.
+
+\vspace{40pt}
+Student's Name: Ratul Sikder
+
+\vspace{20pt}
+Student's Signature: \rule{6cm}{0.4pt}
+
+% ======================= SIGNATURE PAGE =======================
+\chapter*{Signature Page}
+\addcontentsline{toc}{chapter}{Signature Page}
+\renewcommand{\arraystretch}{2.2}
+\begin{tabular}{@{}p{4.4cm}p{0.4cm}p{9.7cm}@{}}
+Project & : & Nexis: A Multi-Agent Autonomous Engineering Platform with Closed-Loop Fault Recovery \\
+Student Name & : & Ratul Sikder \\
+Exam Roll & : & 2506102 \\
+Institute & : & Institute of Information Technology (IIT), University of Dhaka \\
+Date of Submission & : & 11\textsuperscript{th} August, 2026 \\
+Supervised By & : & \rule{6cm}{0.4pt} \\
+\textbf{Supervisor's Approval} & : & \rule{6cm}{0.4pt} \\
+\end{tabular}
+\renewcommand{\arraystretch}{1}
+
+% ======================= ABSTRACT =======================
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+\input{chapters/abstract}
+
+% ======================= TOC =======================
+\tableofcontents
+\listoffigures
+\listoftables
+
+% ======================= CHAPTERS =======================
+\input{chapters/ch1_introduction}
+\input{chapters/ch2_literature}
+\input{chapters/ch3_analysis}
+\input{chapters/ch4_design}
+\input{chapters/ch5_implementation}
+\input{chapters/ch6_testing}
+\input{chapters/ch7_conclusion}
+\input{chapters/references}
+
+\end{document}

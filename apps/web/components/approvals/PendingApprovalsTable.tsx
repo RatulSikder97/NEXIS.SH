@@ -74,89 +74,99 @@ export function PendingApprovalsTable({
   now,
   onApprove,
   onReject,
+  onModify,
 }: {
   rows: PendingApproval[];
   now: number;
   onApprove: (row: PendingApproval) => void;
   onReject: (row: PendingApproval) => void;
+  /** RLHF modify-then-approve — omit to hide the Modify affordance. */
+  onModify?: (row: PendingApproval) => void;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-sm">
-        <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
-          <tr>
-            <th className="px-4 py-2 font-medium">Severity</th>
-            <th className="px-4 py-2 font-medium">Run</th>
-            <th className="px-4 py-2 font-medium">Scenario</th>
-            <th className="px-4 py-2 font-medium">Awaiting</th>
-            <th className="px-4 py-2 font-medium">Synthesiser</th>
-            <th className="px-4 py-2 font-medium text-right">Decision</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
+        <table className="w-full min-w-[640px] text-sm">
+          <thead className="bg-[var(--color-muted)]/40 text-left text-xs uppercase tracking-widest text-[var(--color-muted-foreground)]">
             <tr>
-              <td
-                colSpan={6}
-                className="px-4 py-8 text-center text-sm text-[var(--color-muted-foreground)]"
-              >
-                No pending approvals.
-              </td>
+              <th className="px-4 py-2 font-medium">Severity</th>
+              <th className="px-4 py-2 font-medium">Run</th>
+              <th className="px-4 py-2 font-medium">Scenario</th>
+              <th className="px-4 py-2 font-medium">Awaiting</th>
+              <th className="px-4 py-2 font-medium">Synthesiser</th>
+              <th className="px-4 py-2 font-medium text-right">Decision</th>
             </tr>
-          ) : (
-            rows.map((row) => {
-              const short = row.run_id.slice(0, 8);
-              const synthConf = row.agent_summaries?.Synthesiser?.confidence;
-              return (
-                <tr
-                  key={row.run_id}
-                  className="border-t border-[var(--color-border)]"
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-4 py-8 text-center text-sm text-[var(--color-muted-foreground)]"
                 >
-                  <td className="px-4 py-3">
-                    <SeverityBadge severity={row.severity} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={
-                        `/console/incidents/${row.run_id}` as Route
-                      }
-                      className="font-mono text-xs text-[var(--color-foreground)] hover:underline"
-                    >
-                      {short}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-foreground)]">
-                    {formatScenario(row.scenario)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-[var(--color-muted-foreground)]">
-                    {formatRelative(row.awaiting_decision_since, now)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-[var(--color-muted-foreground)]">
-                    <span className="font-mono text-xs">
-                      {formatConfidence(synthConf)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="inline-flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onReject(row)}
+                  No pending approvals.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => {
+                const short = row.run_id.slice(0, 8);
+                const synthConf = row.agent_summaries?.Synthesiser?.confidence;
+                return (
+                  <tr
+                    key={row.run_id}
+                    className="border-t border-[var(--color-border)]"
+                  >
+                    <td className="px-4 py-3">
+                      <SeverityBadge severity={row.severity} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/console/incidents/${row.run_id}` as Route}
+                        className="font-mono text-xs text-[var(--color-foreground)] hover:underline"
                       >
-                        Reject
-                      </Button>
-                      <Button size="sm" onClick={() => onApprove(row)}>
-                        Approve
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
+                        {short}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-[var(--color-foreground)]">
+                      {formatScenario(row.scenario)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-[var(--color-muted-foreground)]">
+                      {formatRelative(row.awaiting_decision_since, now)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-[var(--color-muted-foreground)]">
+                      <span className="font-mono text-xs">
+                        {formatConfidence(synthConf)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onReject(row)}
+                        >
+                          Reject
+                        </Button>
+                        {onModify && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onModify(row)}
+                          >
+                            Modify
+                          </Button>
+                        )}
+                        <Button size="sm" onClick={() => onApprove(row)}>
+                          Approve
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

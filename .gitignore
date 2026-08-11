@@ -38,3 +38,5 @@ infra/tls/*.key
 
 # docker volumes
 .docker-data/
+__pycache__/
+*.pyc

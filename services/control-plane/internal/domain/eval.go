@@ -24,14 +24,14 @@ const (
 // 0014 extension. Status (legacy single column) survives as a string for
 // backwards-compatible writes from non-eval callers.
 type EvalRun struct {
-	ID             string
-	OrgID          string
-	IncidentLabel  string
-	Status         string
-	Providers      []string
-	StartedAt      time.Time
-	CompletedAt    *time.Time
-	Error          string
+	ID            string
+	OrgID         string
+	IncidentLabel string
+	Status        string
+	Providers     []string
+	StartedAt     time.Time
+	CompletedAt   *time.Time
+	Error         string
 
 	OpenAIStatus EvalRunStatus
 	OllamaStatus EvalRunStatus
@@ -55,24 +55,24 @@ type EvalRun struct {
 // them. SchemaValid is retained because the eval CLI's exit-code
 // classifier inspects it (exit 2 on any false).
 type EvalTranscript struct {
-	ID          string
-	EvalRunID   string
-	OrgID       string
-	Provider    string // "openai" | "ollama"
-	Agent       AgentName
-	Model       string
+	ID        string
+	EvalRunID string
+	OrgID     string
+	Provider  string // "openai" | "ollama"
+	Agent     AgentName
+	Model     string
 
 	InputJSON  map[string]any
 	OutputJSON map[string]any
 
-	Success      bool
-	SchemaValid  bool
+	Success     bool
+	SchemaValid bool
 
-	TokensIn      int
-	TokensOut     int
-	CachedTokens  int
-	CostCents     float64 // exact fractional cents
-	DurationMs    int64
+	TokensIn     int
+	TokensOut    int
+	CachedTokens int
+	CostCents    float64 // exact fractional cents
+	DurationMs   int64
 
 	StartedAt  time.Time
 	FinishedAt time.Time

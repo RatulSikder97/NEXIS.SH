@@ -1,0 +1,15 @@
+{
+  "label": "demo-zero-div",
+  "title": "ZeroDivisionError: division by zero in safe_div",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/app.py\", line 31, in predict\n    body = handler(req.args)\n  File \"src/nexis_fixture/api.py\", line 6, in handler\n    return safe_div(a, b)\n  File \"src/nexis_fixture/api.py\", line 8, in safe_div\n    return a / b\nZeroDivisionError: division by zero",
+  "logs": "ts=2026-08-09T14:07:52Z level=error service=nexis-fixture msg=unhandled_exception route=/predict request_id=req-88502 exc=ZeroDivisionError a=1 b=0\nts=2026-08-09T14:07:55Z level=warn service=nexis-fixture msg=missing_guard fn=safe_div note=\"no b==0 short-circuit branch before division\"",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/predict",
+    "root_cause_node": "nexis_fixture.api.safe_div",
+    "incident_kind": "zero-div",
+    "expected_scenario": "unknown"
+  }
+}

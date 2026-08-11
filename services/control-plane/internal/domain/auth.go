@@ -35,13 +35,21 @@ type Organization struct {
 }
 
 // Session is a server-side handle for a JWT — checked on every VerifyToken.
+//
+// Phase 9 adds device metadata (LastSeenAt / UserAgent / IP) so the settings
+// UI can render a "your devices" list. All three are best-effort: sessions
+// minted before the 0029 migration, or via non-browser paths (magic link,
+// invite claim, OAuth), carry zero values.
 type Session struct {
-	ID        string
-	UserID    string
-	OrgID     string
-	CreatedAt time.Time
-	ExpiresAt time.Time
-	RevokedAt *time.Time
+	ID         string
+	UserID     string
+	OrgID      string
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	RevokedAt  *time.Time
+	LastSeenAt *time.Time
+	UserAgent  string
+	IP         string
 }
 
 // Principal is the resolved actor for a request — populated by auth middleware,
@@ -53,11 +61,15 @@ type Principal struct {
 	SessionID string
 }
 
-// SignupInput is the user-facing signup payload.
+// SignupInput is the user-facing signup payload. UserAgent/IP are optional
+// device metadata captured by the HTTP handler and stamped onto the session
+// row for the Phase 9 session-management UI.
 type SignupInput struct {
-	Email    string
-	Password string
-	OrgName  string
+	Email     string
+	Password  string
+	OrgName   string
+	UserAgent string
+	IP        string
 }
 
 // SignupResult bundles everything the caller needs after a successful signup.
@@ -67,11 +79,14 @@ type SignupResult struct {
 	Session SessionToken
 }
 
-// LoginInput is the credential bundle for password login.
+// LoginInput is the credential bundle for password login. UserAgent/IP are
+// optional device metadata — see SignupInput.
 type LoginInput struct {
-	Email    string
-	Password string
-	MFACode  string // optional; required if user has MFA enabled
+	Email     string
+	Password  string
+	MFACode   string // optional; required if user has MFA enabled
+	UserAgent string
+	IP        string
 }
 
 // SessionToken wraps a signed JWT and its expiry.
@@ -144,6 +159,25 @@ type AuthProvider interface {
 
 	IssueMagicLink(ctx context.Context, email, purpose string) error
 	ConsumeMagicLink(ctx context.Context, token string) (SessionToken, error)
+
+	// RequestPasswordReset mints a single-use reset token for the account
+	// bound to email, persists only its hash, and emails a reset link.
+	// Unknown emails are silently accepted so the endpoint doesn't leak
+	// account existence — mirrors IssueMagicLink.
+	RequestPasswordReset(ctx context.Context, email string) error
+	// ResetPassword redeems a reset token (consume-once), replaces the
+	// user's password hash, and revokes every outstanding session for that
+	// user so a stolen credential can't linger after recovery.
+	ResetPassword(ctx context.Context, token, newPassword string) error
+
+	// ListSessions returns the user's active (unrevoked, unexpired)
+	// sessions, newest first. The caller decides which one is "current" by
+	// comparing against the requesting principal's SessionID.
+	ListSessions(ctx context.Context, userID string) ([]Session, error)
+	// RevokeSession revokes one of the user's own sessions by id. Sessions
+	// belonging to other users are reported as ErrNotFound rather than
+	// forbidden so the endpoint doesn't confirm foreign session ids.
+	RevokeSession(ctx context.Context, userID, sessionID string) error
 
 	// ConsumeOAuthCode exchanges an OAuth authorization code (today: WorkOS
 	// AuthKit) for the identity provider's user record, upserts the user +

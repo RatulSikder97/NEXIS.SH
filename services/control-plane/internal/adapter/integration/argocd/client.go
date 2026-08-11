@@ -113,8 +113,8 @@ type appResp struct {
 		Name string `json:"name"`
 	} `json:"metadata"`
 	Spec struct {
-		Project     string `json:"project"`
-		Source      struct {
+		Project string `json:"project"`
+		Source  struct {
 			TargetRevision string `json:"targetRevision"`
 		} `json:"source"`
 		Destination struct {
@@ -205,9 +205,9 @@ func (c *Client) GetApplication(ctx context.Context, project, name string) (App,
 // operationState (Phase 6's Approval Gate does this).
 func (c *Client) SyncApp(ctx context.Context, project, name string, req SyncReq) (Operation, error) {
 	body := map[string]any{
-		"name":     name,
-		"prune":    req.Prune,
-		"dryRun":   req.DryRun,
+		"name":   name,
+		"prune":  req.Prune,
+		"dryRun": req.DryRun,
 	}
 	if req.Revision != "" {
 		body["revision"] = req.Revision

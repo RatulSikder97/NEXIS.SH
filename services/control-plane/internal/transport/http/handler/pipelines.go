@@ -219,6 +219,18 @@ var demoScenarios = map[string]struct{}{
 	"null-deref":   {},
 	"oom":          {},
 	"synthetic":    {},
+	// Fault-injection classes for the evaluation benchmark (see
+	// docs/PROJECT_PLAN.md §7 — fault classes beyond the three demo
+	// scenarios). Each maps to a control-plane fixture in
+	// fixtures/scenarios/.
+	"zero-div":               {},
+	"api-contract-violation": {},
+	"dependency-breakage":    {},
+	"conn-pool-exhaustion":   {},
+	"deadlock":               {},
+	"memory-leak":            {},
+	"rate-limit-cascade":     {},
+	"disk-exhaustion":        {},
 }
 
 // scenarioToFixture maps a demo scenario to the fixture incident JSON file.
@@ -232,6 +244,16 @@ var scenarioToFixture = map[string]string{
 	"null-deref":   "demo-null-pointer.json",
 	"synthetic":    "demo-null-pointer.json",
 	"oom":          "demo-oom.json",
+	// Fault-injection classes (keep in sync with demoScenarios above and
+	// usecase.scenarioFixtureFiles).
+	"zero-div":               "demo-zero-div.json",
+	"api-contract-violation": "demo-api-contract-violation.json",
+	"dependency-breakage":    "demo-dependency-breakage.json",
+	"conn-pool-exhaustion":   "demo-conn-pool-exhaustion.json",
+	"deadlock":               "demo-deadlock.json",
+	"memory-leak":            "demo-memory-leak.json",
+	"rate-limit-cascade":     "demo-rate-limit-cascade.json",
+	"disk-exhaustion":        "demo-disk-exhaustion.json",
 }
 
 // loadFixtureIncident reads the per-scenario fixture from one of a small set

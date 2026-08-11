@@ -19,7 +19,7 @@ func TestToPaymentMethodResp(t *testing.T) {
 	pm := domain.PaymentMethod{
 		ID: "pm-1", OrgID: "org-1", Provider: "stripe",
 		Brand: "visa", Last4: "4242", ExpMonth: 12, ExpYear: 2030,
-		BillingEmail: "owner@example.com",
+		BillingEmail:            "owner@example.com",
 		ExternalCustomerID:      "cus_X",
 		ExternalPaymentMethodID: "pm_Y",
 		CreatedAt:               time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC),
