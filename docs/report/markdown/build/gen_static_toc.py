@@ -19,7 +19,7 @@ def toc_row(text, page, bold, indent_twips):
     return (
         f'<w:p><w:pPr><w:ind w:left="{indent_twips}"/>'
         f'<w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9600"/></w:tabs>'
-        f'<w:spacing w:after="{"70" if bold else "40"}"/></w:pPr>'
+        f'<w:spacing w:after="{"40" if bold else "20"}"/></w:pPr>'
         f'<w:r><w:rPr>{b_open}<w:sz w:val="{sz}"/></w:rPr><w:t xml:space="preserve">{esc(text)}</w:t></w:r>'
         f'<w:r><w:rPr>{b_open}<w:sz w:val="{sz}"/></w:rPr><w:tab/><w:t>{page_str}</w:t></w:r></w:p>'
     )
@@ -32,9 +32,8 @@ for h in data:
     else:
         lines.append(toc_row(h['text'], pg, bold=False, indent_twips=260))
 
-lines.append('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
 lines.append('```')
 lines.append('')
 
-open('markdown/00_toc_condensed.md', 'w').write('\n'.join(lines))
+open('markdown/00_toc_generated.md', 'w').write('\n'.join(lines))
 print(f'Wrote TOC with offset={offset}, {len(data)} entries')

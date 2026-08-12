@@ -2,6 +2,7 @@ import re, sys, json
 from pypdf import PdfReader
 
 pdf_path = sys.argv[1]
+chapters_dir = sys.argv[2] if len(sys.argv) > 2 else 'markdown/condensed'
 reader = PdfReader(pdf_path)
 pages_text = [(p.extract_text() or '') for p in reader.pages]
 
@@ -13,7 +14,7 @@ CHAPTER_FILES = [
 
 headings = []
 for fname in CHAPTER_FILES:
-    path = f'markdown/condensed/{fname}'
+    path = f'{chapters_dir}/{fname}'
     in_fence = False
     for line in open(path, encoding='utf-8'):
         line = line.rstrip('\n')
@@ -48,6 +49,15 @@ def find_page(text, start_page):
 
 results = []
 cursor = 0
+# If this build already contains a Table of Contents page, its own entries
+# repeat every heading's text as a dotted listing — searching from page 0
+# would match the TOC's own line for "Chapter 1: ..." instead of the real
+# heading later in the document. Skip past the TOC page(s) before scanning.
+for i, txt in enumerate(pages_text):
+    if 'Table of Contents' in txt:
+        cursor = i + 1
+        break
+
 for h in headings:
     pg = find_page(h['text'], cursor)
     if pg is not None:

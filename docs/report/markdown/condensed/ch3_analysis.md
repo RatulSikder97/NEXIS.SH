@@ -2,17 +2,17 @@
 
 ## 3.1 Requirement Analysis
 
-Nexis is a role-based, multi-tenant platform: every datum belongs to exactly one organisation, and every request is evaluated against the caller's organisation and role; analysis begins with the actors at the system boundary. Three human actor types were identified:
+Nexis was built as a role-based, multi-tenant platform in which every datum belongs to exactly one organisation, and every request is evaluated against the caller's organisation and role. Given this, the requirement analysis begins naturally with the actors sitting at the system boundary. Three human actor types were identified:
 
 - **Owner/Administrator** — owns membership, roles, billing, policy, integrations, and the final human decision on high-stakes automated repairs.
 - **Engineer/Member** — investigates incidents, exercises the evaluation tooling, works the recovery pipeline daily.
 - **Viewer** — a read-only observer (stakeholder or auditor): inspects system state, never changes it.
 
-The role model is *additive* — each tier holds every permission of the tier below — so Section 3.2 lists only what each role *adds*. (Internally: `owner`/`admin`/`member`; Viewer is RBAC-gated on frontend and API.)
+The role model itself is *additive*: each tier holds every permission of the tier below it, so Section 3.2 lists only what each role *adds*. (Internally, this maps to `owner`/`admin`/`member`; Viewer is RBAC-gated on the frontend and API.)
 
-A fourth actor is not human: the **nine-agent self-healing fleet**. It acts autonomously inside the boundary — detecting faults unprompted, writing the console's own PostgreSQL, Neo4j, and object-storage stores, and triggering real side effects: GitHub pull requests, Argo CD rollbacks [6], preview redeploys. Roughly half of all incident, patch, and audit-table writes are agent-authored; omitting the fleet would misrepresent the system, and modelling it makes the safety analysis explicit: every Section 3.2.4 capability is bounded by a Section 3.3 control — sandboxing, severity classification, or the human approval gate.
+A fourth actor here is not human at all: the **nine-agent self-healing fleet**. It acts autonomously inside the system boundary, detecting faults without being prompted and writing directly to the console's own PostgreSQL, Neo4j, and object-storage stores, and its actions carry real consequences: GitHub pull requests, Argo CD rollbacks [6], preview redeploys. Roughly half of all incident, patch, and audit-table writes are agent-authored, so leaving the fleet out would misrepresent the system; modelling it instead makes the safety analysis explicit, since every Section 3.2.4 capability is bounded by a Section 3.3 control — sandboxing, severity classification, or the human approval gate.
 
-The four actors' Level 0/1 use case and data flow diagrams appear in Sections 4.6–4.7.
+Level 0/1 use case and data flow diagrams for all four actors appear in Sections 4.6–4.7.
 
 ## 3.2 Functional Requirements
 
@@ -20,7 +20,7 @@ The four actors' Level 0/1 use case and data flow diagrams appear in Sections 4.
 
 - Manage membership and roles, including the role-recommendation banner: accept applies under an optimistic-concurrency guard, dismiss starts a 30-day cool-down.
 - Manage Stripe billing [13] and daily token budgets; export/verify the hash-chained audit log; get the daily digest; monitor System Health.
-- Decide approvals — **Approve**, **Reject**, or **Modify** (diff edits persist as RLHF feedback) — and set recovery policy, including auto-rollback on SLO breach.
+- Decide approvals (**Approve**, **Reject**, or **Modify**, where diff edits persist as RLHF feedback) and set recovery policy, including auto-rollback on SLO breach.
 - Operate the preview-deploy engine; install GitHub App, Sentry [14], Datadog [16], PagerDuty [15], Slack [17] (in-message approve/reject), and Argo CD [6]; export evaluation CSVs.
 
 ### 3.2.2 Engineer/Member can:
@@ -59,18 +59,18 @@ The four actors' Level 0/1 use case and data flow diagrams appear in Sections 4.
 | Responsiveness | Server-Sent Events stream the live incident timeline |
 | Usability | Role-scoped console, one-click approvals, plain-language rationales |
 
-Isolation must not depend on code remembering `WHERE org_id`: RLS policies [7], bound per request to `app.current_org_id`, make the database itself refuse cross-tenant access, humans and agents alike. A recovery run spans minutes and awaits a human decision, so pipeline state lives in Temporal [2] as journaled activities replayed deterministically after a crash — an in-memory orchestrator would strand incidents mid-repair, and was rejected. Generated code is untrusted by construction: patches execute only sandboxed, patch blobs are encrypted at rest, tokens exist only as SHA-256 hashes (30-minute TTL, non-leaky 202), and audit-log tampering detectably breaks the chain.
+Isolation cannot depend on a developer remembering to add `WHERE org_id` to every query. Instead, RLS policies [7], bound per request to `app.current_org_id`, make the database itself refuse cross-tenant access, whether the request comes from a human or from one of the agents. A recovery run can span several minutes and often waits on a human decision, so pipeline state lives in Temporal [2] as journaled activities replayed deterministically after a crash — an in-memory orchestrator was rejected for exactly this reason, since it would simply strand incidents mid-repair. Generated code, moreover, is untrusted by construction: patches execute only sandboxed, patch blobs are encrypted at rest, tokens exist only as SHA-256 hashes (30-minute TTL, non-leaky 202), and audit-log tampering detectably breaks the chain.
 
 ## 3.4 System Feasibility
 
 ### 3.4.1 Technical Feasibility
 
-Nexis is deliberately polyglot. Four independent backend Go services get static binaries, cheap concurrency, and a first-class Docker API client for webhook and container work. Next.js/React/TypeScript serves the role-gated, SSE-streaming, Monaco-editing console; the Python/FastAPI causal sidecar sits on the scientific-Python/Hypothesis [9] stack. PostgreSQL 17 with pgvector [19] supplies transactions, RLS, and vector retrieval in one engine; Neo4j [3] holds the dependency graph because diagnosis is graph traversal, poorly expressed relationally. Temporal [2] was proven by both live recovery runs in Chapter 6; everything was built and verified on one development machine, Podman [11] substituting for Docker [10].
+Nexis was deliberately built as a polyglot system. The four independent backend services are written in Go, for static binaries, cheap concurrency, and a first-class Docker API client on which the webhook and container work depends. The console, however, is Next.js/React/TypeScript, chosen for its role-gated, SSE-streaming, Monaco-editing interface, while the causal sidecar runs on Python/FastAPI, on the scientific-Python/Hypothesis [9] stack. PostgreSQL 17 with pgvector [19] supplies transactions, RLS, and vector retrieval in one engine, whereas Neo4j [3] holds the dependency graph because diagnosis is graph traversal, which relational queries express poorly. Temporal [2] was proven by both live recovery runs in Chapter 6, and the whole system was built and verified on one development machine, with Podman [11] substituting for Docker [10].
 
 ### 3.4.2 Economic Feasibility
 
-Every dependency is open source (PostgreSQL, Neo4j Community, Redis, MinIO, Temporal, OpenTelemetry [5], Grafana) — no licence cost. LLM inference, the one significant cost, is dual-path: OpenAI models for production, local Ollama [20] models (`gpt-oss:20b`, `qwen2.5-coder:14b`) for development. Every live run in this report used the local provider — the complete system exercised at zero token cost; the cost tracker and daily budgets bound the paid path.
+Every dependency Nexis relies on is open source, namely PostgreSQL, Neo4j Community, Redis, MinIO, Temporal, OpenTelemetry [5], and Grafana, so there is no licence cost. The one significant cost is LLM inference, handled as a dual path: OpenAI models for production, local Ollama [20] models (`gpt-oss:20b`, `qwen2.5-coder:14b`) for development. Every live run in this report in fact used the local provider, so the complete system was exercised at zero token cost; the cost tracker and daily budgets bound the paid path.
 
 ### 3.4.3 Operational Feasibility
 
-Administrators land on organisation-wide KPIs, approvals, and health; engineers on incidents and the live pipeline; viewers on the same truth, read-only. High-stakes autonomy reduces to one-click Approve/Reject/Modify, optionally from Slack [17]; severity classification lets low-risk fixes pass unattended while sensitive changes never do. The built-in NASA-TLX instrument [18] lets the operator-workload claim eventually be measured, not asserted; the intended operator is an ordinary engineer with a browser — no dedicated operations team.
+On logging in, administrators see organisation-wide KPIs, approvals, and system health; engineers see incidents and the live pipeline; viewers see the same picture, read-only. High-stakes autonomy, in this regard, reduces to a single click, Approve, Reject, or Modify, optionally from Slack [17], while severity classification lets low-risk fixes pass unattended but never the sensitive ones. The built-in NASA-TLX instrument [18] lets the operator-workload claim eventually be measured rather than simply asserted; the intended operator, furthermore, is an ordinary engineer with a browser, not a dedicated operations team.
