@@ -1,0 +1,20 @@
+{
+  "label": "oom_kill_loop",
+  "title": "Pod OOMKilled 6 times in 10 minutes \u2014 memory limit below working set",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "kubelet: Memory cgroup out of memory: Killed process 1 (python)\n  File \"src/nexis_fixture/deploy.py\", line 27, in container_resources\n    \"limits\": {\"cpu\": \"500m\", \"memory\": \"256Mi\"}\nOOMKilled: working set peaked at 412Mi against a 256Mi limit",
+  "logs": "ts=2026-08-14T19:10:02Z level=error service=kubelet msg=oom_killed pod=fixture-api-7c9 restarts=6 window=10m\nts=2026-08-14T19:10:02Z level=warn service=nexis-fixture msg=working_set_peak mib=412 limit_mib=256\nts=2026-08-14T19:11:30Z level=error service=nexis-fixture msg=crashloopbackoff pod=fixture-api-7c9",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/",
+    "root_cause_node": "nexis_fixture.deploy.container_resources",
+    "root_cause_file": "src/nexis_fixture/deploy.py",
+    "root_cause_line": 24,
+    "incident_kind": "oom_kill_loop",
+    "expected_scenario": "oom",
+    "restarts": 6,
+    "limit_mib": 256,
+    "peak_mib": 412
+  }
+}

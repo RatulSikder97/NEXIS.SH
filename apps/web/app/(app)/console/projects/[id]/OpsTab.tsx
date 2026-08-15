@@ -8,18 +8,22 @@
 // projecting props like the other tabs.
 //
 // Surface:
-//   * "Deploy now" — POST /v1/projects/{id}/deploy. The build + run +
-//     health check happen synchronously inside that request, so the call
-//     can take 10–60+ seconds; the in-flight state renders an explicit
-//     amber "building" panel (not a bare spinner) so the wait doesn't
-//     read as a hang.
+//   * "Deploy now" — POST /v1/projects/{id}/deploy queues the build and
+//     resolves in milliseconds with a "building" row; the clone + build +
+//     run + health check happen server-side and can legitimately take
+//     several minutes on a cold cache, well past what any single HTTP
+//     request should be left open for. This tab polls
+//     deploymentsSdk.pollUntilTerminal for the outcome and renders an
+//     explicit amber "building" panel (not a bare spinner) the whole time,
+//     so a slow build doesn't read as a hang — and doesn't silently vanish
+//     if it outlives some other timeout, the way it used to.
 //   * Latest deployment spotlight — colored status pill (emerald=running,
 //     red=failed, amber=building, muted=stopped, matching the console's
 //     pill language), live preview URL when running, error + self-healing
 //     note when failed (deploy_engine failures raise incidents that the
 //     Sentinel→…→QA loop fixes automatically), and collapsible
-//     build/container log disclosures. Logs arrive inline on the deploy
-//     response — no fetch-on-expand needed (unlike PatchDiffViewer).
+//     build/container log disclosures. Logs are empty until the poll
+//     resolves — the initial "building" row has none yet.
 //   * History — GET /v1/projects/{id}/deployments, newest first; each row
 //     is a collapsed <details> with status/time/stack in the summary.
 //
@@ -51,11 +55,7 @@ import {
 } from "@/lib/deployments";
 import type { Project } from "@/lib/projects";
 
-// PillStatus extends the wire statuses with the client-only "building"
-// state shown while the synchronous deploy request is in flight.
-type PillStatus = DeploymentStatus | "building";
-
-function pillClasses(status: PillStatus): string {
+function pillClasses(status: DeploymentStatus): string {
   switch (status) {
     case "running":
       return "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-300";
@@ -68,7 +68,7 @@ function pillClasses(status: PillStatus): string {
   }
 }
 
-function StatusPill({ status }: { status: PillStatus }) {
+function StatusPill({ status }: { status: DeploymentStatus }) {
   return (
     <span
       className={cn(
@@ -275,35 +275,96 @@ export function OpsTab({
     return () => window.clearInterval(id);
   }, []);
 
+  // pollAbortRef lets an in-flight poll be cancelled — when the user
+  // navigates away from this project's Ops tab, or the tab unmounts,
+  // there's no point spending the next several minutes issuing list()
+  // calls for a build nobody is watching anymore.
+  const pollAbortRef = React.useRef<AbortController | null>(null);
+  React.useEffect(() => {
+    return () => pollAbortRef.current?.abort();
+  }, [project.id]);
+
+  // replaceRow swaps one history entry in place by id — shared between the
+  // initial load's resumed poll and a fresh deploy's poll below.
+  const replaceRow = React.useCallback((row: Deployment) => {
+    setHistory((prev) =>
+      (prev ?? []).map((r) =>
+        r.deployment_id === row.deployment_id ? row : r,
+      ),
+    );
+  }, []);
+
+  // watchUntilDone polls one deployment to a terminal status, keeping
+  // `deploying` (and its "Building…" panel) true for the duration. Used both
+  // right after a fresh POST /deploy and to resume watching a build that was
+  // already "building" when this tab loaded — a page reload or tab switch
+  // must not orphan an in-flight build with no way to see it finish short of
+  // manually refetching.
+  const watchUntilDone = React.useCallback(
+    async (deploymentId: string) => {
+      pollAbortRef.current?.abort();
+      const controller = new AbortController();
+      pollAbortRef.current = controller;
+
+      setDeploying(true);
+      try {
+        const finalRow = await deploymentsSdk.pollUntilTerminal(
+          project.id,
+          deploymentId,
+          { signal: controller.signal },
+        );
+        if (controller.signal.aborted) return;
+        if (finalRow) {
+          replaceRow(finalRow);
+          if (finalRow.status === "building") {
+            // pollUntilTerminal gave up after its own budget, not because
+            // the build failed — say so plainly rather than pretending it
+            // finished.
+            setActionError(
+              "Still building after several minutes. It may still finish — refresh this tab to check, or view it in Deployment history below.",
+            );
+          }
+        }
+      } finally {
+        if (!controller.signal.aborted) setDeploying(false);
+      }
+    },
+    [project.id, replaceRow],
+  );
+
   React.useEffect(() => {
     if (backendMissing) return;
     let cancelled = false;
     void (async () => {
       const rows = await deploymentsSdk.list(project.id);
-      if (!cancelled) setHistory(rows);
+      if (cancelled) return;
+      setHistory(rows);
+      const inFlight = rows.find((d) => d.status === "building");
+      if (inFlight) void watchUntilDone(inFlight.deployment_id);
     })();
     return () => {
       cancelled = true;
     };
-  }, [project.id, backendMissing]);
+  }, [project.id, backendMissing, watchUntilDone]);
 
   const onDeploy = React.useCallback(async () => {
     setDeploying(true);
     setActionError(null);
     try {
       const d = await deploymentsSdk.deploy(project.id);
-      // The POST response IS the authoritative new row (200 running or
-      // 422 failed) — prepend it rather than refetching so the result
-      // shows immediately even if the list read lags.
+      // The POST response is the freshly-created "building" row, not the
+      // final result — prepend it immediately so the attempt is visible
+      // right away (and survives a refresh, since it's now persisted
+      // server-side), then poll until the build/run/health-check resolves.
       setHistory((prev) => [d, ...(prev ?? [])]);
+      await watchUntilDone(d.deployment_id);
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : "Deploy request failed.",
       );
-    } finally {
       setDeploying(false);
     }
-  }, [project.id]);
+  }, [project.id, watchUntilDone]);
 
   const onStop = React.useCallback(
     async (deploymentId: string) => {

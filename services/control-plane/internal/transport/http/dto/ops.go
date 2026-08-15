@@ -74,14 +74,26 @@ type IntegrationProbeResp struct {
 
 // ValidatorRunResp is one row of GET /v1/validator/runs. PatchSHA is a short
 // hash (8-12 chars) when available; otherwise blank.
+//
+// StartedAt and WorkflowRunID were added after the console page itself —
+// apps/web/app/(app)/console/validator/client.tsx has always read
+// `run.started_at` and `run.workflow_run_id`, but this struct never emitted
+// either (it had TS instead of StartedAt, and no run-id field at all), so
+// the Started and Workflow run columns rendered "—" from day one even once
+// real rows existed. `ts` stays as a deprecated alias so nothing that reads
+// the old field name breaks.
 type ValidatorRunResp struct {
-	ID         string `json:"id"`
-	PatchSHA   string `json:"patch_sha,omitempty"`
-	Status     string `json:"status"`
-	DurationMs int64  `json:"duration_ms"`
-	StdoutHead string `json:"stdout_head,omitempty"`
-	StderrHead string `json:"stderr_head,omitempty"`
-	TS         string `json:"ts"`
+	ID            string `json:"id"`
+	PatchSHA      string `json:"patch_sha,omitempty"`
+	Status        string `json:"status"`
+	DurationMs    int64  `json:"duration_ms"`
+	StdoutHead    string `json:"stdout_head,omitempty"`
+	StderrHead    string `json:"stderr_head,omitempty"`
+	StartedAt     string `json:"started_at"`
+	WorkflowRunID string `json:"workflow_run_id,omitempty"`
+	// TS is a deprecated alias for StartedAt, kept for any caller still
+	// reading the old field name.
+	TS string `json:"ts"`
 }
 
 // ValidatorRunsResp wraps the page. Note is an optional human-readable

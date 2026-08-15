@@ -1,0 +1,18 @@
+{
+  "label": "cert_expiring_soon",
+  "title": "TLS certificate for nexis.sh expires in 4 days \u2014 renewal window shorter than issuance lead time",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "cert-manager: certificate nexis-sh-tls expires 2026-08-19T00:00:00Z (4d)\n  File \"src/nexis_fixture/deploy.py\", line 53, in tls_cert\n    return {\"common_name\": \"nexis.sh\", \"renew_before_days\": 5, \"lifetime_days\": 90}\nRenewalWindowTooShort: ACME issuance needs 7d of lead time",
+  "logs": "ts=2026-08-15T00:00:00Z level=warn service=cert-manager msg=cert_expiring cn=nexis.sh days_left=4 renew_before_days=5\nts=2026-08-15T00:00:00Z level=error service=cert-manager msg=renewal_not_triggered reason=\"window opens inside the ACME retry budget\"",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/",
+    "root_cause_node": "nexis_fixture.deploy.tls_cert",
+    "root_cause_file": "src/nexis_fixture/deploy.py",
+    "root_cause_line": 51,
+    "incident_kind": "cert_expiring_soon",
+    "expected_scenario": "unknown",
+    "days_left": 4
+  }
+}

@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -214,6 +215,12 @@ func PipelineCreate(svc domain.WorkflowService, aud domain.AuditWriter) http.Han
 // demoScenarios is the whitelist of accepted `scenario` values. Anything else
 // is rejected with 400 so we never forward arbitrary user input into the
 // workflow payload.
+// demoFixtureRepoSHA is the synthetic repo tag the fixture codegraph is
+// seeded under. Must match cmd/seed-neo4j's --repo-sha default, otherwise
+// Pathfinder's FindSymbolContaining misses and the causal ranking has no
+// candidates to score.
+const demoFixtureRepoSHA = "fixture-seed-001"
+
 var demoScenarios = map[string]struct{}{
 	"schema-drift": {},
 	"null-deref":   {},
@@ -256,6 +263,39 @@ var scenarioToFixture = map[string]string{
 	"disk-exhaustion":        "demo-disk-exhaustion.json",
 }
 
+// scenarioIDRE bounds what may be turned into a filename by the fixture
+// lookup below. Scenario ids are catalogue-authored slugs; anything outside
+// this alphabet (a path separator, a dot segment) is rejected before it can
+// reach filepath.Join.
+var scenarioIDRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+
+// fixtureFileFor resolves the fixture filename for a scenario. Explicit
+// aliases in scenarioToFixture win — several legacy ids share one file — and
+// anything else resolves by convention to "<scenario>.json", so dropping a
+// fixture into fixtures/scenarios/ is all it takes to wire a new card in the
+// Live Demo catalogue.
+func fixtureFileFor(scenario string) (string, bool) {
+	if file, ok := scenarioToFixture[scenario]; ok {
+		return file, true
+	}
+	if !scenarioIDRE.MatchString(scenario) {
+		return "", false
+	}
+	return scenario + ".json", true
+}
+
+// scenarioAllowed reports whether a scenario may start a demo run. Legacy ids
+// are accepted unconditionally; every other id must resolve to a fixture file
+// that actually exists on disk, which keeps arbitrary user input out of the
+// workflow payload while removing the per-scenario Go edit the old static
+// allowlist required.
+func scenarioAllowed(scenario string) bool {
+	if _, ok := demoScenarios[scenario]; ok {
+		return true
+	}
+	return loadFixtureIncident(scenario) != nil
+}
+
 // loadFixtureIncident reads the per-scenario fixture from one of a small set
 // of well-known directories. Returns nil when the file is missing — agents
 // fall back to a placeholder incident in that case. The fixture base is
@@ -263,10 +303,11 @@ var scenarioToFixture = map[string]string{
 // portable across compose vs. local runs.
 //
 // Control-plane-owned demo fixtures live under
-// services/control-plane/fixtures/scenarios. Legacy validator fixtures are
-// still searched so demos that pre-date the migration keep working.
+// services/control-plane/fixtures/scenarios (copied to /app/fixtures in the
+// image). Legacy validator fixtures are still searched so demos that pre-date
+// the migration keep working.
 func loadFixtureIncident(scenario string) map[string]any {
-	file, ok := scenarioToFixture[scenario]
+	file, ok := fixtureFileFor(scenario)
 	if !ok {
 		return nil
 	}
@@ -327,7 +368,7 @@ func PipelineDemo(svc domain.WorkflowService, aud domain.AuditWriter, cfg config
 		if req.Scenario == "" {
 			req.Scenario = "synthetic"
 		}
-		if _, ok := demoScenarios[req.Scenario]; !ok {
+		if !scenarioAllowed(req.Scenario) {
 			writeError(w, http.StatusBadRequest, "invalid scenario")
 			return
 		}
@@ -336,6 +377,11 @@ func PipelineDemo(svc domain.WorkflowService, aud domain.AuditWriter, cfg config
 			"incident_id":  "demo",
 			"triggered_by": "demo",
 			"scenario":     req.Scenario,
+			// Scope Pathfinder's codegraph lookup to the seeded fixture
+			// repo. Without this the traversal runs against repo_sha="",
+			// finds no Symbol node, and the causal sidecar degrades to
+			// "no_signal". Matches cmd/seed-neo4j's default --repo-sha.
+			"repo_sha": demoFixtureRepoSHA,
 		}
 		if inc := loadFixtureIncident(req.Scenario); inc != nil {
 			demoPayload["incident"] = inc

@@ -20,3 +20,21 @@ def safe_div(a, b):
     if b == 0:
         raise ValueError("division by zero")
     return a / b
+
+
+def handler(args):
+    """Dispatch a /predict request body to the arithmetic primitives.
+
+    Called by app.predict; named in the demo incident stack traces so the
+    seeded codegraph carries a real app → api → safe_div call chain.
+    """
+    op = args.get("op", "add")
+    a = args.get("a", 0)
+    b = args.get("b", 0)
+    if op == "div":
+        return safe_div(a, b)
+    if op == "mul":
+        return mul(a, b)
+    if op == "sub":
+        return sub(a, b)
+    return add(a, b)

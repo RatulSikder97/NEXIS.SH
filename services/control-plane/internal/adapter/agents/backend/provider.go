@@ -6,6 +6,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
 	"text/template"
 	"time"
 
@@ -44,6 +47,14 @@ func (p *Provider) Run(ctx context.Context, in domain.AgentInput) (domain.AgentO
 	query := inc.Title + " " + inc.Stacktrace + " " + archPlanJSON
 	rctx, _, _ := p.Retrieval.ContextFor(ctx, in.OrgID, in.RepoSHA, query)
 
+	// Exact contents of the files the Architect committed to touching. With
+	// them we can run in rewrite mode — the agent returns whole files and the
+	// diff is computed here — which removes the "diff does not apply" class
+	// of failure entirely. Without them we fall back to asking for a diff.
+	originals, _ := p.Retrieval.FileTexts(ctx, in.OrgID, in.RepoSHA, affectedFiles(in.PriorOutputs))
+	fctx := renderFileBlock(originals)
+	rewriteMode := len(originals) > 0
+
 	var buf bytes.Buffer
 	if err := template.Must(template.New("u").Parse(UserTemplate)).Execute(&buf, map[string]any{
 		"Title":             inc.Title,
@@ -52,14 +63,20 @@ func (p *Provider) Run(ctx context.Context, in domain.AgentInput) (domain.AgentO
 		"Stacktrace":        inc.Stacktrace,
 		"ArchitectPlanJSON": archPlanJSON,
 		"RetrievalContext":  rctx,
+		"FileContext":       fctx,
 	}); err != nil {
 		return domain.AgentOutput{}, err
+	}
+
+	system := SystemPrompt
+	if rewriteMode {
+		system = SystemPromptRewrite
 	}
 
 	res, err := p.LLM.Invoke(ctx, agents.InvokeRequest{
 		Agent:             domain.AgentNameBackend,
 		Model:             p.Model,
-		System:            SystemPrompt,
+		System:            system,
 		User:              buf.String(),
 		MaxTokens:         4000,
 		JSONResponse:      false, // free-form prose + diff
@@ -68,6 +85,20 @@ func (p *Provider) Run(ctx context.Context, in domain.AgentInput) (domain.AgentO
 		OrgID:             in.OrgID,
 		EstimatedTokensIn: 5000,
 		Validate: func(content string) (map[string]any, error) {
+			if rewriteMode {
+				diff, files, summary, rerr := diffFromRewrite(content, originals)
+				if rerr != nil {
+					return nil, rerr
+				}
+				if summary == "" {
+					summary = SummaryFromContent(content)
+				}
+				return map[string]any{
+					"patch_diff":    diff,
+					"files_changed": files,
+					"summary":       summary,
+				}, nil
+			}
 			diff, files, err := ExtractDiff(content)
 			if err != nil {
 				return nil, err
@@ -82,7 +113,7 @@ func (p *Provider) Run(ctx context.Context, in domain.AgentInput) (domain.AgentO
 	if err != nil {
 		return domain.AgentOutput{
 			Success: false, Content: res.Content,
-			SystemPrompt: SystemPrompt, UserPrompt: buf.String(),
+			SystemPrompt: system, UserPrompt: buf.String(),
 		}, err
 	}
 
@@ -98,7 +129,57 @@ func (p *Provider) Run(ctx context.Context, in domain.AgentInput) (domain.AgentO
 		Model:         res.Model,
 		Provider:      res.Provider,
 		SchemaRetries: res.SchemaRetries,
-		SystemPrompt:  SystemPrompt,
+		SystemPrompt:  system,
 		UserPrompt:    buf.String(),
 	}, nil
+}
+
+// affectedFiles pulls the Architect's `affected_files` contract out of the
+// prior-output map. That list is already enforced downstream — a diff that
+// strays outside it forces HIGH severity — so it is exactly the set of files
+// the Backend agent should be looking at while writing the patch.
+func affectedFiles(prior map[string]any) []string {
+	if prior == nil {
+		return nil
+	}
+	arch, ok := prior["architect"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, ok := arch["affected_files"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// renderFileBlock formats path → content as the "current file contents" block,
+// with real line numbers so hunk headers and context lines have something
+// exact to be checked against.
+func renderFileBlock(files map[string]string) string {
+	if len(files) == 0 {
+		return ""
+	}
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+
+	var b strings.Builder
+	b.WriteString("## Current file contents — your rewrite must start from these exact lines\n\n")
+	for _, path := range paths {
+		fmt.Fprintf(&b, "### `%s`\n```\n", path)
+		for i, line := range strings.Split(files[path], "\n") {
+			fmt.Fprintf(&b, "%d: %s\n", i+1, line)
+		}
+		b.WriteString("```\n\n")
+	}
+	return b.String()
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
@@ -146,7 +147,7 @@ func (s *ProjectsService) Create(ctx context.Context, princ domain.Principal, in
 		return domain.Project{}, ErrCapExceeded
 	}
 
-	if err := s.checkGitHubBinding(ctx, princ.OrgID, in.Selectors); err != nil {
+	if err := s.checkGitHubBinding(ctx, princ.OrgID, &in.Selectors); err != nil {
 		return domain.Project{}, err
 	}
 
@@ -235,7 +236,7 @@ func (s *ProjectsService) Update(ctx context.Context, princ domain.Principal, pr
 		if err := validateSelectors(*in.Selectors); err != nil {
 			return domain.Project{}, err
 		}
-		if err := s.checkGitHubBinding(ctx, princ.OrgID, *in.Selectors); err != nil {
+		if err := s.checkGitHubBinding(ctx, princ.OrgID, in.Selectors); err != nil {
 			return domain.Project{}, err
 		}
 		fields["github_repo"] = in.Selectors.GitHubRepo
@@ -363,7 +364,7 @@ func (s *ProjectsService) auditMaybe(ctx context.Context, princ domain.Principal
 // installation_id matches the stored one. We don't call GitHub directly here
 // — that work happened at Connect time and would be a 300ms tax on every
 // project mutation otherwise.
-func (s *ProjectsService) checkGitHubBinding(ctx context.Context, orgID string, sel domain.ProjectSelectors) error {
+func (s *ProjectsService) checkGitHubBinding(ctx context.Context, orgID string, sel *domain.ProjectSelectors) error {
 	if sel.GitHubRepo == "" {
 		return nil
 	}
@@ -383,9 +384,19 @@ func (s *ProjectsService) checkGitHubBinding(ctx context.Context, orgID string, 
 	if conn.Status != domain.StatusConnected {
 		return ErrIntegrationRequired
 	}
-	// installation_id check: only require a match when the caller supplied
-	// one. Some workflows (e.g. mock-install) leave it 0 — accept that.
+	// installation_id: when the caller didn't supply one, inherit the org's.
+	//
+	// Binding a repo through the console sends only github_repo, so projects
+	// were stored with installation_id = 0 and every later use — Deploy now,
+	// GitOps PR creation — failed with "project has no github installation
+	// bound" even though the org had the App installed. Inheriting here means
+	// a repo binding is complete the moment it is made.
 	if sel.GitHubInstallationID == 0 {
+		if conn.InstallationID != "" {
+			if id, perr := strconv.ParseInt(conn.InstallationID, 10, 64); perr == nil && id > 0 {
+				sel.GitHubInstallationID = id
+			}
+		}
 		return nil
 	}
 	if conn.InstallationID == "" {

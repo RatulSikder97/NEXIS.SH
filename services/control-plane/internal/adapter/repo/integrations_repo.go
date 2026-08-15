@@ -182,7 +182,7 @@ func (r *IntegrationsRepo) ConnectedIncidentOrgs(ctx context.Context) ([]string,
 	}
 	rows, err := r.adminPool.Query(ctx, `
 		SELECT DISTINCT org_id FROM integrations
-		WHERE provider IN ('sentry','datadog','pagerduty')
+		WHERE provider IN ('sentry','datadog','pagerduty','webhook')
 		      AND status='connected'
 		ORDER BY org_id
 	`)

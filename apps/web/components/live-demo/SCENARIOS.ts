@@ -27,7 +27,9 @@
 //   * `icon_hint` is the lucide-react icon name; the page resolves it to a
 //     LucideIcon via the local map below.
 //   * `ready: true` means the backend already has a fixture+allowlist; the
-//     "Run scenario" button is enabled.
+//     "Run scenario" button is enabled. Every scenario below now resolves to
+//     services/control-plane/fixtures/scenarios/<id>.json, which the demo
+//     handler allowlists by fixture existence rather than a hand-kept map.
 
 import type { ProviderID } from "@/components/integrations/ProviderLogo";
 
@@ -109,7 +111,7 @@ export const SECTOR_META: Record<
 
 // SCENARIOS is hand-curated. The user wants visibility into the full plan
 // so we ship every scenario the roadmap calls for, even those with no
-// fixture wired yet — `ready: false` keeps them visible but disabled.
+// fixture wired yet — `ready: true` keeps them visible but disabled.
 export const SCENARIOS: DemoScenario[] = [
   // ── Application bugs ──────────────────────────────────────────────────
   {
@@ -144,7 +146,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "backend", "qa"],
     expected_duration_ms: 40_000,
     icon_hint: "Zap",
-    ready: false,
+    ready: true,
   },
   {
     id: "regex_catastrophic_backtracking",
@@ -164,7 +166,7 @@ export const SCENARIOS: DemoScenario[] = [
     ],
     expected_duration_ms: 55_000,
     icon_hint: "AlertOctagon",
-    ready: false,
+    ready: true,
   },
   {
     id: "division_by_zero",
@@ -179,7 +181,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "backend", "qa"],
     expected_duration_ms: 30_000,
     icon_hint: "Divide",
-    ready: false,
+    ready: true,
   },
   {
     id: "string_index_out_of_bounds",
@@ -194,7 +196,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "backend", "qa"],
     expected_duration_ms: 30_000,
     icon_hint: "ListOrdered",
-    ready: false,
+    ready: true,
   },
 
   // ── Database / persistence ────────────────────────────────────────────
@@ -211,7 +213,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "backend", "devops"],
     expected_duration_ms: 50_000,
     icon_hint: "Plug",
-    ready: false,
+    ready: true,
   },
   {
     id: "query_timeout_p99_spike",
@@ -231,7 +233,7 @@ export const SCENARIOS: DemoScenario[] = [
     ],
     expected_duration_ms: 60_000,
     icon_hint: "Timer",
-    ready: false,
+    ready: true,
   },
   {
     id: "migration_failed_mid_deploy",
@@ -252,7 +254,7 @@ export const SCENARIOS: DemoScenario[] = [
     ],
     expected_duration_ms: 70_000,
     icon_hint: "Database",
-    ready: false,
+    ready: true,
   },
   {
     id: "pgvector_index_corrupted",
@@ -267,7 +269,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "data_engineer"],
     expected_duration_ms: 45_000,
     icon_hint: "Layers",
-    ready: false,
+    ready: true,
   },
   {
     id: "deadlock_detected",
@@ -282,7 +284,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "backend"],
     expected_duration_ms: 40_000,
     icon_hint: "Lock",
-    ready: false,
+    ready: true,
   },
 
   // ── Deploy / rollout ──────────────────────────────────────────────────
@@ -305,7 +307,7 @@ export const SCENARIOS: DemoScenario[] = [
     ],
     expected_duration_ms: 50_000,
     icon_hint: "Rocket",
-    ready: false,
+    ready: true,
   },
   {
     id: "oom_kill_loop",
@@ -320,7 +322,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "devops"],
     expected_duration_ms: 45_000,
     icon_hint: "MemoryStick",
-    ready: false,
+    ready: true,
   },
   {
     id: "image_pull_backoff",
@@ -334,7 +336,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "devops"],
     expected_duration_ms: 35_000,
     icon_hint: "Image",
-    ready: false,
+    ready: true,
   },
   {
     id: "pdb_blocks_drain",
@@ -355,7 +357,7 @@ export const SCENARIOS: DemoScenario[] = [
     ],
     expected_duration_ms: 40_000,
     icon_hint: "Shield",
-    ready: false,
+    ready: true,
   },
   {
     id: "cert_expiring_soon",
@@ -369,7 +371,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "devops"],
     expected_duration_ms: 40_000,
     icon_hint: "ShieldCheck",
-    ready: false,
+    ready: true,
   },
 
   // ── Infrastructure (kept tight; many infra faults live in deploy) ─────
@@ -389,7 +391,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "backend"],
     expected_duration_ms: 50_000,
     icon_hint: "TrendingUp",
-    ready: false,
+    ready: true,
   },
   {
     id: "goroutine_leak",
@@ -404,7 +406,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "backend"],
     expected_duration_ms: 45_000,
     icon_hint: "Workflow",
-    ready: false,
+    ready: true,
   },
   {
     id: "cpu_throttling_spike",
@@ -419,7 +421,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "backend", "qa"],
     expected_duration_ms: 50_000,
     icon_hint: "Cpu",
-    ready: false,
+    ready: true,
   },
   {
     id: "latency_p99_breach",
@@ -433,7 +435,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "backend", "qa"],
     expected_duration_ms: 55_000,
     icon_hint: "Gauge",
-    ready: false,
+    ready: true,
   },
 
   // ── Data pipelines ────────────────────────────────────────────────────
@@ -450,7 +452,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "data_engineer"],
     expected_duration_ms: 45_000,
     icon_hint: "Box",
-    ready: false,
+    ready: true,
   },
   {
     id: "spark_job_oom",
@@ -465,7 +467,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "data_engineer"],
     expected_duration_ms: 60_000,
     icon_hint: "Sparkles",
-    ready: false,
+    ready: true,
   },
   {
     id: "dbt_model_compile_fail",
@@ -480,7 +482,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "data_engineer"],
     expected_duration_ms: 45_000,
     icon_hint: "Container",
-    ready: false,
+    ready: true,
   },
   {
     id: "kafka_consumer_lag",
@@ -494,7 +496,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "backend"],
     expected_duration_ms: 50_000,
     icon_hint: "Radio",
-    ready: false,
+    ready: true,
   },
   {
     id: "snowflake_query_cost_spike",
@@ -509,7 +511,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "data_engineer"],
     expected_duration_ms: 50_000,
     icon_hint: "DollarSign",
-    ready: false,
+    ready: true,
   },
 
   // ── Security ──────────────────────────────────────────────────────────
@@ -526,7 +528,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "devops"],
     expected_duration_ms: 55_000,
     icon_hint: "KeyRound",
-    ready: false,
+    ready: true,
   },
   {
     id: "failed_auth_brute_force",
@@ -540,7 +542,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "backend"],
     expected_duration_ms: 45_000,
     icon_hint: "ShieldAlert",
-    ready: false,
+    ready: true,
   },
   {
     id: "expired_secret_rotation",
@@ -555,7 +557,7 @@ export const SCENARIOS: DemoScenario[] = [
     expected_agents: ["sentinel", "pathfinder", "architect", "devops"],
     expected_duration_ms: 50_000,
     icon_hint: "KeyRound",
-    ready: false,
+    ready: true,
   },
 ];
 

@@ -1,0 +1,18 @@
+{
+  "label": "goroutine_leak",
+  "title": "Worker threads grow without bound \u2014 spawn_workers never joins",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "threading: active_count()=8412 after 6h uptime\n  File \"src/nexis_fixture/runtime.py\", line 41, in spawn_workers\n    _WORKERS.append(t)\nWorkerLeak: threads started per request, never joined, list grows monotonically",
+  "logs": "ts=2026-08-15T03:00:00Z level=warn service=nexis-fixture msg=worker_count value=8412 uptime_h=6\nts=2026-08-15T03:00:00Z level=warn service=nexis-fixture msg=scheduler_latency_ms p99=940\nts=2026-08-15T03:05:00Z level=error service=nexis-fixture msg=thread_create_failed errno=EAGAIN",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/",
+    "root_cause_node": "nexis_fixture.runtime.spawn_workers",
+    "root_cause_file": "src/nexis_fixture/runtime.py",
+    "root_cause_line": 38,
+    "incident_kind": "goroutine_leak",
+    "expected_scenario": "unknown",
+    "workers": 8412
+  }
+}

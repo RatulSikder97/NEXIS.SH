@@ -12,6 +12,7 @@
 // `provider` matches `domain.IntegrationProvider` in the Go control-plane.
 
 export type IntegrationProvider =
+  | "webhook"
   | "github"
   | "sentry"
   | "argocd"
@@ -50,6 +51,32 @@ export type IntegrationManifest = {
 };
 
 export const INTEGRATION_MANIFESTS: Record<IntegrationProvider, IntegrationManifest> = {
+  webhook: {
+    provider: "webhook",
+    label: "Incident intake",
+    flow: "form",
+    docs_url: "/docs/integrations#webhook",
+    description:
+      "Let any service report its own faults to NEXIS with a signed HTTP call. This is the one incident source that needs no vendor account — connect it and NEXIS starts detecting immediately.",
+    fields: [
+      {
+        name: "label",
+        label: "Name",
+        type: "text",
+        required: false,
+        default: "Incident intake",
+        help: "Shown on the card. Use the service name if you run one intake per service.",
+      },
+      {
+        name: "signing_secret",
+        label: "Signing secret",
+        type: "password",
+        required: false,
+        help: "Leave blank and NEXIS generates one — it is shown once, immediately after you connect. Supply your own only if your service already ships with a secret.",
+      },
+    ],
+  },
+
   github: {
     provider: "github",
     label: "GitHub",

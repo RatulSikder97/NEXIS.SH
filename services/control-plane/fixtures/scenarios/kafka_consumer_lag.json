@@ -1,0 +1,18 @@
+{
+  "label": "kafka_consumer_lag",
+  "title": "orders-projector lag 1.2M messages \u2014 commit only after a 10k batch",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "kafka.consumer: group orders-projector lag=1204882 partitions=6\n  File \"src/nexis_fixture/jobs.py\", line 72, in consumer_config\n    \"max_poll_records\": 10000,\nRebalanceLoop: poll interval exceeded while handling a 10k batch, group rebalances before commit",
+  "logs": "ts=2026-08-15T09:14:00Z level=error service=kafka msg=consumer_lag group=orders-projector lag=1204882\nts=2026-08-15T09:14:20Z level=warn service=kafka msg=rebalance_triggered reason=max_poll_interval_exceeded batch=10000\nts=2026-08-15T09:15:00Z level=warn service=nexis-fixture msg=duplicate_processing note=\"uncommitted batch replayed after rebalance\"",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/pipelines/orders-projector",
+    "root_cause_node": "nexis_fixture.jobs.consumer_config",
+    "root_cause_file": "src/nexis_fixture/jobs.py",
+    "root_cause_line": 69,
+    "incident_kind": "kafka_consumer_lag",
+    "expected_scenario": "unknown",
+    "lag": 1204882
+  }
+}

@@ -50,3 +50,71 @@ func (r *RetrievalClient) ContextFor(ctx context.Context, orgID, repoSHA, query 
 	}
 	return b.String(), chunks, nil
 }
+
+// FilesFor renders the exact indexed contents of the named files as a
+// markdown block, with real line numbers.
+//
+// ContextFor answers "what code looks relevant"; this answers "what does the
+// file I am about to patch actually say". A unified diff has to reproduce
+// context lines byte-for-byte, so the agent needs the second question
+// answered or it invents plausible surroundings — imports that aren't there,
+// helpers that don't exist — and `git apply` rejects the result.
+//
+// Returns "" when the store is unset, no paths are given, or none of them are
+// indexed; the caller's prompt then falls back to similarity context alone.
+func (r *RetrievalClient) FilesFor(ctx context.Context, orgID, repoSHA string, paths []string) (string, error) {
+	if r == nil || r.Store == nil || len(paths) == 0 || strings.TrimSpace(repoSHA) == "" {
+		return "", nil
+	}
+	chunks, err := r.Store.FileChunks(ctx, orgID, repoSHA, paths)
+	if err != nil || len(chunks) == 0 {
+		return "", err
+	}
+
+	byFile := map[string][]domain.Chunk{}
+	order := []string{}
+	for _, c := range chunks {
+		if _, seen := byFile[c.FilePath]; !seen {
+			order = append(order, c.FilePath)
+		}
+		byFile[c.FilePath] = append(byFile[c.FilePath], c)
+	}
+
+	var b strings.Builder
+	b.WriteString("## Current file contents — the diff MUST match these lines exactly\n\n")
+	for _, path := range order {
+		fmt.Fprintf(&b, "### `%s`\n```\n", path)
+		for _, c := range byFile[path] {
+			line := c.ChunkStart
+			for _, text := range strings.Split(c.Content, "\n") {
+				fmt.Fprintf(&b, "%d: %s\n", line, text)
+				line++
+			}
+		}
+		b.WriteString("```\n\n")
+	}
+	return b.String(), nil
+}
+
+// FileTexts returns the indexed text of the named files as path → content,
+// reassembled in line order. This is the raw material behind FilesFor: the
+// caller needs the map (not just the rendered block) when it has to diff the
+// agent's rewritten file against the original.
+func (r *RetrievalClient) FileTexts(ctx context.Context, orgID, repoSHA string, paths []string) (map[string]string, error) {
+	if r == nil || r.Store == nil || len(paths) == 0 || strings.TrimSpace(repoSHA) == "" {
+		return nil, nil
+	}
+	chunks, err := r.Store.FileChunks(ctx, orgID, repoSHA, paths)
+	if err != nil || len(chunks) == 0 {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, c := range chunks {
+		if prev, ok := out[c.FilePath]; ok {
+			out[c.FilePath] = prev + "\n" + c.Content
+			continue
+		}
+		out[c.FilePath] = c.Content
+	}
+	return out, nil
+}

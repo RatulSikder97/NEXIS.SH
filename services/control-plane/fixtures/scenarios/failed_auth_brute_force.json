@@ -1,0 +1,18 @@
+{
+  "label": "failed_auth_brute_force",
+  "title": "14,902 failed logins against 212 accounts in 9 minutes \u2014 no per-account throttle",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "auth: 14902 failures from 47 source IPs, 212 distinct accounts\n  File \"src/nexis_fixture/security.py\", line 43, in login_attempt\n    return {\"attempts\": seen, \"allowed\": True}\nNoThrottle: MAX_ATTEMPTS=0, allowed always True regardless of attempt count",
+  "logs": "ts=2026-08-15T12:00:00Z level=error service=nexis-fixture msg=auth_failure_burst count=14902 window_m=9 accounts=212\nts=2026-08-15T12:00:00Z level=warn service=nexis-fixture msg=throttle_not_applied max_attempts=0\nts=2026-08-15T12:04:00Z level=error service=nexis-fixture msg=account_compromise_suspected account=ops@nexis.sh",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/auth/login",
+    "root_cause_node": "nexis_fixture.security.login_attempt",
+    "root_cause_file": "src/nexis_fixture/security.py",
+    "root_cause_line": 38,
+    "incident_kind": "failed_auth_brute_force",
+    "expected_scenario": "unknown",
+    "failures": 14902
+  }
+}

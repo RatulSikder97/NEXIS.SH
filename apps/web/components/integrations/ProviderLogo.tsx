@@ -25,10 +25,12 @@ import {
   Server,
   ShieldCheck,
   Sparkles,
+  Webhook as WebhookIcon,
   type LucideIcon,
 } from "lucide-react";
 
 export type ProviderID =
+  | "webhook"
   | "github"
   | "sentry"
   | "argocd"
@@ -144,6 +146,7 @@ const SVG_LOGOS: Partial<Record<ProviderID, React.ReactNode>> = {
 // ---- Fallback icons for roadmap providers ----------------------------------
 
 const FALLBACK_ICONS: Record<ProviderID, LucideIcon> = {
+  webhook: WebhookIcon,
   github: GitBranch,
   sentry: AlertTriangle,
   argocd: Rocket,

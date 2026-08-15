@@ -1,0 +1,19 @@
+{
+  "label": "migration_failed_mid_deploy",
+  "title": "Migration 0042 failed mid-apply and left the schema half-migrated",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/db.py\", line 48, in apply_migration\n    cur.execute(stmt)\npsycopg2.errors.UndefinedColumn: column \"region\" does not exist\nLINE 1: select o.id, c.region from customers c ...\n  statement 3 of 5 in 0042_add_region.up.sql",
+  "logs": "ts=2026-08-14T15:02:44Z level=error service=nexis-fixture msg=migration_failed file=0042_add_region.up.sql stmt_index=3 of=5\nts=2026-08-14T15:02:44Z level=error service=nexis-fixture msg=schema_partially_applied applied=2 rolled_back=0 note=\"statements run outside a transaction\"\nts=2026-08-14T15:03:12Z level=error service=nexis-fixture msg=deploy_blocked revision=8f2ac31",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/admin/migrate",
+    "root_cause_node": "nexis_fixture.db.apply_migration",
+    "root_cause_file": "src/nexis_fixture/db.py",
+    "root_cause_line": 44,
+    "incident_kind": "migration_failed_mid_deploy",
+    "expected_scenario": "schema_drift",
+    "statements_applied": 2,
+    "statements_total": 5
+  }
+}

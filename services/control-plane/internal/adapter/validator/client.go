@@ -68,6 +68,9 @@ func (c *Client) Validate(ctx context.Context, in recoverywf.ValidateRequest) (r
 		Coverage    float64 `json:"coverage"`
 		DurationMs  int64   `json:"duration_ms"`
 		Logs        string  `json:"logs"`
+
+		PatchApplied bool   `json:"patch_applied"`
+		PatchError   string `json:"patch_error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return recoverywf.ValidateResponse{}, fmt.Errorf("validator: decode: %w", err)
@@ -83,7 +86,9 @@ func (c *Client) Validate(ctx context.Context, in recoverywf.ValidateRequest) (r
 		TestCount:   out.TestCount,
 		FailCount:   out.FailCount,
 		Coverage:    out.Coverage,
-		DurationMs:  out.DurationMs,
-		Logs:        out.Logs,
+		DurationMs:   out.DurationMs,
+		Logs:         out.Logs,
+		PatchApplied: out.PatchApplied,
+		PatchError:   out.PatchError,
 	}, nil
 }

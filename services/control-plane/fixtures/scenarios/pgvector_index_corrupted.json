@@ -1,0 +1,18 @@
+{
+  "label": "pgvector_index_corrupted",
+  "title": "pgvector retrieval falling back to sequential scan \u2014 index built without an opclass",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/db.py\", line 58, in ensure_vector_index\n    cur.execute(...)\npsycopg.errors.UndefinedObject: operator class \"vector_l2_ops\" not specified for access method \"ivfflat\"",
+  "logs": "ts=2026-08-14T16:11:20Z level=warn service=nexis-fixture msg=vector_seq_scan table=code_embeddings rows_scanned=48211 elapsed_ms=2140\nts=2026-08-14T16:11:20Z level=error service=nexis-fixture msg=knowledge_retrieval_degraded recall_at_5=0.11\nts=2026-08-14T16:12:03Z level=warn service=nexis-fixture msg=index_invalid indexname=code_embeddings_embedding_idx",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/knowledge/query",
+    "root_cause_node": "nexis_fixture.db.ensure_vector_index",
+    "root_cause_file": "src/nexis_fixture/db.py",
+    "root_cause_line": 55,
+    "incident_kind": "pgvector_index_corrupted",
+    "expected_scenario": "unknown",
+    "recall_at_5": 0.11
+  }
+}

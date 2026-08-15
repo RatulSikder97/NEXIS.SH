@@ -1,0 +1,207 @@
+[
+  {
+    "level": 1,
+    "text": "Chapter 1: Introduction",
+    "page": 5
+  },
+  {
+    "level": 2,
+    "text": "1.1 Background",
+    "page": 5
+  },
+  {
+    "level": 2,
+    "text": "1.2 Motivation",
+    "page": 5
+  },
+  {
+    "level": 2,
+    "text": "1.3 Problem Statement",
+    "page": 6
+  },
+  {
+    "level": 2,
+    "text": "1.4 Project Objectives",
+    "page": 6
+  },
+  {
+    "level": 2,
+    "text": "1.5 Scope of the Project",
+    "page": 6
+  },
+  {
+    "level": 2,
+    "text": "1.6 Significance of the Project",
+    "page": 7
+  },
+  {
+    "level": 1,
+    "text": "Chapter 2: Literature Review",
+    "page": 8
+  },
+  {
+    "level": 2,
+    "text": "2.1 Overview",
+    "page": 8
+  },
+  {
+    "level": 2,
+    "text": "2.2 Research Gap",
+    "page": 9
+  },
+  {
+    "level": 2,
+    "text": "2.3 Conclusion",
+    "page": 10
+  },
+  {
+    "level": 1,
+    "text": "Chapter 3: System Analysis and Requirements",
+    "page": 11
+  },
+  {
+    "level": 2,
+    "text": "3.1 Requirement Analysis",
+    "page": 11
+  },
+  {
+    "level": 2,
+    "text": "3.2 Functional Requirements",
+    "page": 11
+  },
+  {
+    "level": 2,
+    "text": "3.3 Non-Functional Requirements",
+    "page": 13
+  },
+  {
+    "level": 2,
+    "text": "3.4 System Feasibility",
+    "page": 14
+  },
+  {
+    "level": 1,
+    "text": "Chapter 4: System Design and Architecture",
+    "page": 16
+  },
+  {
+    "level": 2,
+    "text": "4.1 System Context",
+    "page": 16
+  },
+  {
+    "level": 2,
+    "text": "4.2 Component Architecture",
+    "page": 16
+  },
+  {
+    "level": 2,
+    "text": "4.3 Data and Storage Architecture",
+    "page": 17
+  },
+  {
+    "level": 2,
+    "text": "4.4 Self-Healing Loop Pipeline",
+    "page": 18
+  },
+  {
+    "level": 2,
+    "text": "4.5 Deployment and Infrastructure",
+    "page": 19
+  },
+  {
+    "level": 2,
+    "text": "4.6 Use Case Diagrams",
+    "page": 20
+  },
+  {
+    "level": 2,
+    "text": "4.7 Data Flow Diagrams",
+    "page": 21
+  },
+  {
+    "level": 2,
+    "text": "4.8 Self-Healing Loop Sequence Diagram",
+    "page": 24
+  },
+  {
+    "level": 1,
+    "text": "Chapter 5: Implementation",
+    "page": 25
+  },
+  {
+    "level": 2,
+    "text": "5.1 Tools and Technology",
+    "page": 25
+  },
+  {
+    "level": 2,
+    "text": "5.2 Project View",
+    "page": 25
+  },
+  {
+    "level": 2,
+    "text": "5.3 Database Schema",
+    "page": 40
+  },
+  {
+    "level": 1,
+    "text": "Chapter 6: Testing and Results",
+    "page": 41
+  },
+  {
+    "level": 2,
+    "text": "6.1 Static Verification",
+    "page": 41
+  },
+  {
+    "level": 2,
+    "text": "6.2 Live End-to-End Recovery Runs",
+    "page": 41
+  },
+  {
+    "level": 2,
+    "text": "6.3 Live Deploy-Engine Verification",
+    "page": 42
+  },
+  {
+    "level": 2,
+    "text": "6.4 Defects Found and Fixed During This Engineering Cycle",
+    "page": 43
+  },
+  {
+    "level": 2,
+    "text": "6.5 Testing Summary",
+    "page": 43
+  },
+  {
+    "level": 1,
+    "text": "Chapter 7: Conclusion and Future Work",
+    "page": 44
+  },
+  {
+    "level": 2,
+    "text": "7.1 Overview",
+    "page": 44
+  },
+  {
+    "level": 2,
+    "text": "7.2 Limitations of the Project",
+    "page": 44
+  },
+  {
+    "level": 2,
+    "text": "7.3 Future Work",
+    "page": 45
+  },
+  {
+    "level": 2,
+    "text": "7.4 Conclusion",
+    "page": 45
+  },
+  {
+    "level": 1,
+    "text": "References",
+    "page": 46
+  }
+]

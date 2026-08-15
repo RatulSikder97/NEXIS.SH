@@ -1,0 +1,18 @@
+{
+  "label": "bad_canary_deploy_rollback",
+  "title": "Canary promoted to 100% with no analysis step \u2014 error rate 41% on the new revision",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "argocd.rollout: revision 8f2ac31 promoted setWeight=100 at t+0s\n  File \"src/nexis_fixture/deploy.py\", line 47, in canary_steps\n    return [{\"setWeight\": 100}]\nRolloutError: no pause/analysis step before full weight; abort window 0s",
+  "logs": "ts=2026-08-14T18:02:10Z level=info service=argocd msg=rollout_promoted revision=8f2ac31 weight=100\nts=2026-08-14T18:02:48Z level=error service=nexis-fixture msg=error_rate_breach revision=8f2ac31 error_pct=41.0 slo_pct=1.0\nts=2026-08-14T18:03:05Z level=error service=argocd msg=rollback_required previous_revision=1c99de4",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/rollouts",
+    "root_cause_node": "nexis_fixture.deploy.canary_steps",
+    "root_cause_file": "src/nexis_fixture/deploy.py",
+    "root_cause_line": 45,
+    "incident_kind": "bad_canary_deploy_rollback",
+    "expected_scenario": "unknown",
+    "error_pct": 41.0
+  }
+}

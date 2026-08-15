@@ -1,0 +1,100 @@
+# Caddyfile — public edge for the single-VM NEXIS deployment.
+#
+# Routing is SAME-ORIGIN on purpose. The web app and the control-plane are
+# served from one hostname and split by path:
+#
+#     https://nexis.sh/v1/*     -> control-plane:8080
+#     https://nexis.sh/healthz  -> control-plane:8080
+#     https://nexis.sh/*        -> web:3000
+#
+# Why not api.nexis.sh? Three things in the codebase require one origin:
+#   1. apps/web/app/(auth)/sign-in/page.tsx builds the WorkOS redirect as
+#      `${window.location.origin}/v1/auth/workos/callback` — the browser's own
+#      origin, not a configurable API host.
+#   2. The same page sets the `nexis_oauth_state` CSRF cookie via document.cookie
+#      on the web origin, while handler/auth_oauth.go reads it server-side on the
+#      API origin. Split origins break the OAuth state check.
+#   3. The session cookie is SameSite=Lax (handler/auth.go). It would stop riding
+#      cross-site fetches entirely and auth would fail silently. There is no
+#      SameSite=None code path.
+# Same-origin also makes the CORS middleware a no-op, which is exactly the
+# production mode its doc comment describes (middleware/cors.go).
+{
+	email dev@neutron.com.bd
+}
+
+# Shared so the direct-IP fallback below gets the same treatment as the real
+# site — during the DNS/firewall cutover that block is the only reachable path.
+# HSTS is deliberately NOT in here: sending it over plain HTTP is meaningless,
+# and pinning it from an IP-based response is a good way to lock yourself out.
+(security_headers) {
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+nexis.sh {
+	encode zstd gzip
+
+	import security_headers
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+	handle /v1/* {
+		reverse_proxy control-plane:8080 {
+			# Overwrite rather than append. handler/webhooks.go takes the LAST
+			# hop of X-Forwarded-For and there is no trusted-proxy allowlist,
+			# so a forged inbound header must not survive to the app.
+			header_up X-Forwarded-For {remote_host}
+			# Disable response buffering so the SSE endpoints
+			# (/v1/orgs/{id}/activity-stream, /v1/workspaces/{id}/events)
+			# stream instead of collecting in the proxy.
+			flush_interval -1
+		}
+	}
+
+	handle /healthz* {
+		reverse_proxy control-plane:8080 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+}
+
+# Direct-IP fallback, plain HTTP only.
+#
+# This exists for the cutover window: until the nexis.sh A record points here
+# AND inbound 80/443 are open, Caddy cannot complete an ACME challenge and the
+# block above serves nothing. This one lets the stack be exercised over
+# http://<ip>/ (or an SSH tunnel) in the meantime. Caddy matches the specific
+# hostname above ahead of this catch-all, and its internal ACME handler still
+# claims /.well-known/acme-challenge/, so leaving this in place does not
+# interfere with certificate issuance. Safe to delete once TLS is live.
+:80 {
+	encode zstd gzip
+	import security_headers
+
+	handle /v1/* {
+		reverse_proxy control-plane:8080 {
+			header_up X-Forwarded-For {remote_host}
+			flush_interval -1
+		}
+	}
+
+	handle /healthz* {
+		reverse_proxy control-plane:8080
+	}
+
+	handle {
+		reverse_proxy web:3000 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+}

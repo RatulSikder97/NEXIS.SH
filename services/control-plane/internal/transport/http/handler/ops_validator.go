@@ -101,11 +101,19 @@ func ValidatorRuns(pool *pgxpool.Pool) http.HandlerFunc {
 				return
 			}
 			row := dto.ValidatorRunResp{
-				ID:     runID,
-				Status: deriveValidatorRunStatus(anyFailed, anyStarted, anySucc),
+				ID: runID,
+				// A validator run has no identity independent of the
+				// RecoveryPipeline run it validated a patch for — the
+				// grouping key above IS the workflow_run_id. Echoing it
+				// under its own name is what lets the console link "this
+				// sandbox run" back to "that recovery run".
+				WorkflowRunID: runID,
+				Status:        deriveValidatorRunStatus(anyFailed, anyStarted, anySucc),
 			}
 			if startedAt != nil && !startedAt.IsZero() {
-				row.TS = startedAt.UTC().Format(time.RFC3339Nano)
+				ts := startedAt.UTC().Format(time.RFC3339Nano)
+				row.TS = ts
+				row.StartedAt = ts
 				if finishedAt != nil && !finishedAt.IsZero() {
 					row.DurationMs = finishedAt.Sub(*startedAt).Milliseconds()
 				}

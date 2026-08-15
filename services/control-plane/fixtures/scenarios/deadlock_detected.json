@@ -1,0 +1,18 @@
+{
+  "label": "deadlock_detected",
+  "title": "DeadlockDetected: transactions lock orders and wallets in opposite order",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/db.py\", line 40, in checkout_tx\n    cur.execute(\"SELECT * FROM wallets WHERE customer_id = %s FOR UPDATE\", (customer_id,))\npsycopg.errors.DeadlockDetected: deadlock detected\nDETAIL: Process 8821 waits for ShareLock on transaction 55120; blocked by process 8794.",
+  "logs": "ts=2026-08-14T17:44:09Z level=error service=nexis-fixture msg=deadlock_detected victim=pid8821 tables=\"orders,wallets\"\nts=2026-08-14T17:44:09Z level=warn service=nexis-fixture msg=lock_order_inconsistent note=\"checkout_tx locks orders then wallets; refund path locks wallets then orders\"\nts=2026-08-14T17:45:00Z level=error service=nexis-fixture msg=checkout_failures window=5m count=37",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/checkout",
+    "root_cause_node": "nexis_fixture.db.checkout_tx",
+    "root_cause_file": "src/nexis_fixture/db.py",
+    "root_cause_line": 37,
+    "incident_kind": "deadlock_detected",
+    "expected_scenario": "unknown",
+    "victims": 37
+  }
+}

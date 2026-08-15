@@ -4,7 +4,7 @@
   "service": "outbound-mailer",
   "environment": "production",
   "stacktrace": "RateLimitExceeded: HTTP 429 Too Many Requests from POST https://api.sendwave.io/v3/messages (retry-after: 32s, account quota 600 rpm)\n\tgithub.com/nexis-demo/outbound-mailer/internal/client/sendwave.(*Client).Send\n\t\tsendwave_client.go:74\n\tgithub.com/nexis-demo/outbound-mailer/internal/worker.(*Dispatcher).dispatch\n\t\tdispatcher.go:58",
-  "logs": "ts=2026-08-10T13:20:05Z level=warn service=outbound-mailer msg=provider_429 provider=sendwave status=429 retry_after_s=32 observed_rpm=3080 quota_rpm=600\nts=2026-08-10T13:20:06Z level=warn service=outbound-mailer msg=retry_scheduled attempt=3 backoff_ms=1000 note=\"constant 1s backoff, no jitter — every worker retries in lockstep\"\nts=2026-08-10T13:24:40Z level=error service=outbound-mailer msg=queue_backlog queue=email-outbound depth=48210 growth_per_min=1140 oldest_msg_age_m=41\nts=2026-08-10T13:26:02Z level=error service=signup-api msg=verification_email_delayed p95_delivery_m=44 sla_m=5",
+  "logs": "ts=2026-08-10T13:20:05Z level=warn service=outbound-mailer msg=provider_429 provider=sendwave status=429 retry_after_s=32 observed_rpm=3080 quota_rpm=600\nts=2026-08-10T13:20:06Z level=warn service=outbound-mailer msg=retry_scheduled attempt=3 backoff_ms=1000 note=\"constant 1s backoff, no jitter \u2014 every worker retries in lockstep\"\nts=2026-08-10T13:24:40Z level=error service=outbound-mailer msg=queue_backlog queue=email-outbound depth=48210 growth_per_min=1140 oldest_msg_age_m=41\nts=2026-08-10T13:26:02Z level=error service=signup-api msg=verification_email_delayed p95_delivery_m=44 sla_m=5",
   "metadata": {
     "service_name": "outbound-mailer",
     "provider": "sendwave",

@@ -1,0 +1,18 @@
+{
+  "label": "dbt_model_compile_fail",
+  "title": "dbt compile failed \u2014 orders_enriched selects a column stg_customers no longer exposes",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Compilation Error in model orders_enriched (models/orders_enriched.sql)\n  File \"src/nexis_fixture/jobs.py\", line 65, in dbt_model_sql\n    \"join {{ ref('stg_customers') }} c on c.id = o.customer_id\"\nColumn \"region_name\" not found in relation stg_customers (renamed to region in 0042_add_region)",
+  "logs": "ts=2026-08-15T08:02:11Z level=error service=dbt msg=compile_error model=orders_enriched column=region_name\nts=2026-08-15T08:02:11Z level=warn service=dbt msg=upstream_changed model=stg_customers migration=0042_add_region\nts=2026-08-15T08:02:12Z level=error service=github msg=ci_failed workflow=dbt-build sha=8f2ac31",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/pipelines/dbt",
+    "root_cause_node": "nexis_fixture.jobs.dbt_model_sql",
+    "root_cause_file": "src/nexis_fixture/jobs.py",
+    "root_cause_line": 61,
+    "incident_kind": "dbt_model_compile_fail",
+    "expected_scenario": "unknown",
+    "model": "orders_enriched"
+  }
+}

@@ -186,6 +186,11 @@ func Apply(
 			IncidentRawID: r.ID,
 			SourceEventID: r.SourceEventID,
 			Rule:          "fatal_level", DetectedAt: now, ReceivedAt: r.ReceivedAt,
+			Title:       r.Title,
+			Service:     r.Service,
+			Environment: r.Environment,
+			Stacktrace:  r.Stacktrace,
+			Logs:        r.Logs,
 			// Fingerprint carried forward so the router can resolve a
 			// project without re-reading the incidents_raw row. Source
 			// matches the persisted source string ("sentry"|"datadog"|

@@ -17,6 +17,11 @@ const (
 	IntegrationSlack     IntegrationProvider = "slack"
 	IntegrationDatadog   IntegrationProvider = "datadog"
 	IntegrationPagerDuty IntegrationProvider = "pagerduty"
+	// IntegrationWebhook is the vendor-neutral incident intake: any service
+	// can post its own faults with an HMAC-signed request. It is the only
+	// incident source that connects without an external account, which makes
+	// it the one that works on a fresh deployment.
+	IntegrationWebhook IntegrationProvider = "webhook"
 )
 
 // IntegrationStatus mirrors the CHECK constraint on integrations.status.

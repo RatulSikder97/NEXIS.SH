@@ -33,12 +33,15 @@ type Config struct {
 type Client struct{ cfg Config }
 
 // New returns a Client with a sensible default timeout if none is supplied.
-// A deploy clones + builds a docker image + boots a container; the default
-// request budget is 120s server-side, so the client allows extra slack for
-// network + image pulls.
+// A deploy clones + builds a docker image + boots a container; the request
+// budget the caller asks the engine to honour server-side is
+// handler.deployTimeoutMs (8 minutes as of this comment), so the client
+// timeout carries real slack on top of that rather than racing it — a
+// http.Client.Timeout firing first would produce a bare "context deadline
+// exceeded" instead of the engine's own, more specific error.
 func New(cfg Config) *Client {
 	if cfg.HTTPClient == nil {
-		cfg.HTTPClient = &http.Client{Timeout: 180 * time.Second}
+		cfg.HTTPClient = &http.Client{Timeout: 10 * time.Minute}
 	}
 	return &Client{cfg: cfg}
 }

@@ -25,12 +25,14 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/backend"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/data_engineer"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/devops"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/init_l2"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/agents/qa"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/approval"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/audit"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth"
 	authlocal "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/auth/local"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/billing"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/causal"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/deployengine"
 	gitopsclient "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/gitops"
 	neo4jstore "github.com/nexis-eco/nexis/services/control-plane/internal/adapter/graphstore/neo4j"
@@ -508,13 +510,58 @@ func main() {
 						synthModel = cfg.OllamaModelGen
 						cheapModel = cfg.OllamaModelCode
 					}
-					agentRegistry = agents.NewRegistry(map[domain.AgentName]domain.Agent{
-						domain.AgentNameArchitect:    architect.New(llmClient, retClient, synthModel),
-						domain.AgentNameBackend:      backend.New(llmClient, retClient, cheapModel),
-						domain.AgentNameQA:           qa.New(llmClient, retClient, cheapModel),
-						domain.AgentNameDevOps:       devops.New(llmClient, retClient, cheapModel),
-						domain.AgentNameDataEngineer: data_engineer.New(llmClient, retClient, synthModel),
-					})
+					// Per-agent overrides. The AGENT_MODEL_<ROLE>_<PROVIDER>
+					// settings existed in config but were never read here, so
+					// all five agents shared one "synth"/"cheap" pair. They
+					// have very different needs: Backend writes unified diffs
+					// that must apply against real files, while QA and DevOps
+					// emit short structured JSON — worth paying for a strong
+					// model on the first and not the rest.
+					pick := func(openai, ollama, fallback string) string {
+						v := openai
+						if cfg.LLMProvider == "ollama" {
+							v = ollama
+						}
+						if v == "" {
+							return fallback
+						}
+						return v
+					}
+					mArchitect := pick(cfg.AgentModelArchitectOpenAI, cfg.AgentModelArchitectOllama, synthModel)
+					mBackend := pick(cfg.AgentModelBackendOpenAI, cfg.AgentModelBackendOllama, cheapModel)
+					mQA := pick(cfg.AgentModelQAOpenAI, cfg.AgentModelQAOllama, cheapModel)
+					mDevOps := pick(cfg.AgentModelDevOpsOpenAI, cfg.AgentModelDevOpsOllama, cheapModel)
+					mDataEng := pick(cfg.AgentModelDataEngOpenAI, cfg.AgentModelDataEngOllama, synthModel)
+					logger.Info("agent models resolved", "architect", mArchitect,
+						"backend", mBackend, "qa", mQA, "devops", mDevOps, "data_engineer", mDataEng)
+					agentMap := map[domain.AgentName]domain.Agent{
+						domain.AgentNameArchitect:    architect.New(llmClient, retClient, mArchitect),
+						domain.AgentNameBackend:      backend.New(llmClient, retClient, mBackend),
+						domain.AgentNameQA:           qa.New(llmClient, retClient, mQA),
+						domain.AgentNameDevOps:       devops.New(llmClient, retClient, mDevOps),
+						domain.AgentNameDataEngineer: data_engineer.New(llmClient, retClient, mDataEng),
+					}
+					// Phase 6 L2 — Pathfinder + Synthesiser. Both tolerate a nil
+					// Graph/Causal port and degrade to evidence-only output, so
+					// they register even when Neo4j or the sidecar is absent.
+					var causalEngine domain.CausalEngine
+					if cfg.CausalEnabled && cfg.CausalGRPCEndpoint != "" {
+						causalEngine = causal.New(cfg.CausalGRPCEndpoint, 10*time.Second)
+						logger.Info("causal engine initialised", "endpoint", cfg.CausalGRPCEndpoint)
+					} else {
+						logger.Warn("causal engine disabled — pathfinder falls back to evidence-only")
+					}
+					for name, ag := range init_l2.New(init_l2.Config{
+						LLM:                 llmClient,
+						Graph:               graphStore,
+						Causal:              causalEngine,
+						PathfinderModel:     synthModel,
+						PathfinderLLMRefine: cfg.PathfinderLLMRefine,
+						SynthesiserModel:    synthModel,
+					}) {
+						agentMap[name] = ag
+					}
+					agentRegistry = agents.NewRegistry(agentMap)
 					logger.Info("agents registry initialised", "agents", agentRegistry.Names())
 				}
 			}
@@ -725,6 +772,7 @@ func main() {
 		sentinelDetector = sentinel.New(sentinel.Config{
 			Incidents:    incRepo,
 			Workflows:    wfService,
+			AppPool:      appPool,
 			Workspaces:   wsRepo,
 			Integrations: intRepo,
 			Audit:        auditWriter,
@@ -791,6 +839,7 @@ func main() {
 		Audit:             auditWriter,
 		AuditLister:       auditLister,
 		Integrations:      registry,
+		IntegrationsRepo:  intRepo,
 		Workspaces:        wsService,
 		WorkspacesRepo:    wsRepo,
 		Billing:           billingProvider,

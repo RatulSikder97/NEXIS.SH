@@ -40,6 +40,17 @@ type IncidentTrigger struct {
 	// Empty when no project owns the trigger.
 	ProjectID string
 
+	// Incident content, copied off the incidents_raw row. Without these the
+	// recovery workflow starts with an incident_id and nothing to reason
+	// about, so every LLM agent returns an empty structure and the run
+	// degrades to stub output. The demo path embeds a fixture for the same
+	// reason; the autonomous path has the real row and must pass it on.
+	Title       string
+	Service     string
+	Environment string
+	Stacktrace  string
+	Logs        string
+
 	// Fingerprint fields. Populated from the incidents_raw row by the rules
 	// layer (or by adapters' webhook paths for direct fan-out). The router
 	// reads these into a domain.IncidentFingerprint and asks ProjectMatcher

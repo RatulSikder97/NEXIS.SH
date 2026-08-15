@@ -1,0 +1,18 @@
+{
+  "label": "image_pull_backoff",
+  "title": "ImagePullBackOff \u2014 deployment pins a floating :latest tag",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "kubelet: Failed to pull image \"ghcr.io/nexis-sh/fixture-api:latest\": manifest unknown\n  File \"src/nexis_fixture/deploy.py\", line 34, in image_ref\n    return f\"{registry}/{name}:latest\"\nImagePullBackOff: Back-off pulling image",
+  "logs": "ts=2026-08-14T20:01:44Z level=error service=kubelet msg=image_pull_failed image=\"ghcr.io/nexis-sh/fixture-api:latest\" reason=manifest_unknown\nts=2026-08-14T20:01:59Z level=warn service=kubelet msg=backoff seconds=40 pod=fixture-api-84d\nts=2026-08-14T20:03:10Z level=error service=argocd msg=sync_degraded app=fixture-api",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/",
+    "root_cause_node": "nexis_fixture.deploy.image_ref",
+    "root_cause_file": "src/nexis_fixture/deploy.py",
+    "root_cause_line": 32,
+    "incident_kind": "image_pull_backoff",
+    "expected_scenario": "unknown",
+    "image": "ghcr.io/nexis-sh/fixture-api:latest"
+  }
+}

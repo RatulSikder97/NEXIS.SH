@@ -1,0 +1,19 @@
+{
+  "label": "query_timeout_p99_spike",
+  "title": "Query p99 above SLO \u2014 no statement_timeout on the read path",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/db.py\", line 34, in run_query\n    cur.execute(sql, params or ())\npsycopg.errors.QueryCanceled: canceling statement due to client timeout\n  query: SELECT * FROM orders WHERE customer_id = %s",
+  "logs": "ts=2026-08-14T14:31:07Z level=warn service=nexis-fixture msg=slow_query elapsed_ms=18422 rows=1 sql=\"SELECT * FROM orders WHERE customer_id=$1\"\nts=2026-08-14T14:31:07Z level=error service=nexis-fixture msg=p99_breach route=/orders p99_ms=18422 slo_ms=800\nts=2026-08-14T14:31:40Z level=warn service=nexis-fixture msg=connection_held_open seconds=18 note=\"no statement_timeout configured\"",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/orders",
+    "root_cause_node": "nexis_fixture.db.run_query",
+    "root_cause_file": "src/nexis_fixture/db.py",
+    "root_cause_line": 31,
+    "incident_kind": "query_timeout_p99_spike",
+    "expected_scenario": "unknown",
+    "p99_ms": 18422,
+    "slo_ms": 800
+  }
+}

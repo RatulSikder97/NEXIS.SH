@@ -213,11 +213,26 @@ func GitHubInstallCallback(reg *integration.Registry, aud domain.AuditWriter, cf
 		}
 		state := r.URL.Query().Get("state")
 		if !verifyInstallState(r, state) {
-			http.Redirect(w, r, installErrorURL(cfg.AppBaseURL, "github", "state_mismatch"), http.StatusFound)
+			// Two different failures land here and the operator needs to
+			// tell them apart: an install started somewhere other than the
+			// console (GitHub's own "Install app" button never carries our
+			// state) versus a genuine mismatch. Both are refused — the
+			// state cookie is the only CSRF defence on this route — but the
+			// console renders different guidance per code.
+			code := "state_mismatch"
+			if state == "" {
+				code = "state_missing"
+			}
+			slog.Default().Warn("github install callback state rejected",
+				"code", code, "setup_action", r.URL.Query().Get("setup_action"))
+			http.Redirect(w, r, installErrorURL(cfg.AppBaseURL, "github", code), http.StatusFound)
 			return
 		}
 		installID := r.URL.Query().Get("installation_id")
 		if installID == "" {
+			// GitHub omits installation_id when the user lands here after a
+			// permissions *update* on an install we never recorded, or when
+			// the App's Setup URL fires on a cancelled flow.
 			http.Redirect(w, r, installErrorURL(cfg.AppBaseURL, "github", "missing_installation_id"), http.StatusFound)
 			return
 		}

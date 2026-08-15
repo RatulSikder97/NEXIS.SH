@@ -15,6 +15,11 @@ COPY --from=builder /out/server /app/server
 COPY --from=builder /out/seed-pgvector /app/seed-pgvector
 COPY --from=builder /out/eval /app/eval
 COPY --from=builder /out/seed-neo4j /app/seed-neo4j
+# Scenario incidents read at runtime by handler.loadFixtureIncident and the
+# eval runner. Without them the demo/eval paths start a pipeline with no
+# `incident` payload and every agent reasons over a placeholder, which is what
+# made deployed runs look stubbed.
+COPY --from=builder /src/fixtures /app/fixtures
 USER nonroot:nonroot
 EXPOSE 8080
 ENTRYPOINT ["/app/server"]

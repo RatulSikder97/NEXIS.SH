@@ -20,6 +20,14 @@ type Chunk struct {
 type RetrievalStore interface {
 	Insert(ctx context.Context, batch []Chunk) error
 	TopK(ctx context.Context, orgID, repoSHA string, query []float32, k int) ([]Chunk, error)
+	// FileChunks returns every indexed chunk for the named paths, ordered by
+	// file then start line — i.e. the exact current text of those files.
+	//
+	// Similarity search alone is not enough to write a unified diff: the
+	// agent needs the real context lines, and top-K by cosine distance can
+	// return a neighbouring function while omitting the lines being patched.
+	// That is how diffs end up referencing imports the file does not have.
+	FileChunks(ctx context.Context, orgID, repoSHA string, paths []string) ([]Chunk, error)
 }
 
 // EmbeddingProvider is implemented by both the OpenAI and Ollama LLM

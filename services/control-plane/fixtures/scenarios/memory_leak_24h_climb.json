@@ -1,0 +1,18 @@
+{
+  "label": "memory_leak_24h_climb",
+  "title": "Heap climbs 3.1x over 24h \u2014 unbounded memo dict in runtime.remember",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "MemoryProfiler: _MEMO holds 1,842,301 entries (612 MiB retained)\n  File \"src/nexis_fixture/runtime.py\", line 31, in remember\n    _MEMO[key] = value\nUnboundedCache: no eviction policy, no max size",
+  "logs": "ts=2026-08-14T02:00:00Z level=info service=nexis-fixture msg=heap_sample rss_mib=198\nts=2026-08-15T02:00:00Z level=warn service=nexis-fixture msg=heap_sample rss_mib=612 growth_ratio=3.1 window_h=24\nts=2026-08-15T02:00:00Z level=warn service=nexis-fixture msg=memo_entries count=1842301 evictions=0",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/",
+    "root_cause_node": "nexis_fixture.runtime.remember",
+    "root_cause_file": "src/nexis_fixture/runtime.py",
+    "root_cause_line": 29,
+    "incident_kind": "memory_leak_24h_climb",
+    "expected_scenario": "unknown",
+    "growth_ratio": 3.1
+  }
+}

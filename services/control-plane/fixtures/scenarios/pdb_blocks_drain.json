@@ -1,0 +1,19 @@
+{
+  "label": "pdb_blocks_drain",
+  "title": "Node drain stuck \u2014 PDB minAvailable equals the replica count",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "kubectl drain node-3: Cannot evict pod as it would violate the pod's disruption budget\n  File \"src/nexis_fixture/deploy.py\", line 40, in pod_disruption_budget\n    return {\"minAvailable\": REPLICAS, \"selector\": {\"app\": \"fixture-api\"}}\nEvictionBlocked: minAvailable=3 of 3 replicas",
+  "logs": "ts=2026-08-14T21:15:00Z level=warn service=kubectl msg=eviction_blocked pod=fixture-api-84d pdb=fixture-api node=node-3\nts=2026-08-14T21:35:00Z level=error service=cluster-autoscaler msg=drain_timeout node=node-3 elapsed_m=20\nts=2026-08-14T21:35:01Z level=warn service=cluster-autoscaler msg=patch_deferred kernel_cve=CVE-2026-1102",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/",
+    "root_cause_node": "nexis_fixture.deploy.pod_disruption_budget",
+    "root_cause_file": "src/nexis_fixture/deploy.py",
+    "root_cause_line": 38,
+    "incident_kind": "pdb_blocks_drain",
+    "expected_scenario": "unknown",
+    "min_available": 3,
+    "replicas": 3
+  }
+}

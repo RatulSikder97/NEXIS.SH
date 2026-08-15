@@ -21,7 +21,7 @@
 // reload doesn't replay the notice.
 
 import * as React from "react";
-import { CheckCircle2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { IntegrationCard } from "@/components/integrations/IntegrationCard";
@@ -29,8 +29,36 @@ import { ConfigureDialog } from "@/components/integrations/ConfigureDialog";
 import { HealthPill } from "@/components/integrations/HealthPill";
 import { type ProviderID } from "@/components/integrations/ProviderLogo";
 import { INTEGRATION_MANIFESTS } from "@/lib/integrations-config";
-import type { Integration, IntegrationHealth, IntegrationProvider } from "@/lib/integrations";
+import type {
+  Integration,
+  IntegrationHealth,
+  IntegrationProvider,
+} from "@/lib/integrations";
 import { cn } from "@/lib/utils";
+
+// Failure codes emitted by the control-plane's OAuth install callbacks
+// (handler/integration_oauth.go). Each one gets an actionable sentence — the
+// operator has just been bounced back from a provider and needs to know
+// whether to retry, re-check the App config, or fix credentials.
+function installErrorMessage(provider: string, code: string): string {
+  const name = provider.charAt(0).toUpperCase() + provider.slice(1);
+  switch (code) {
+    case "unauthorized":
+      return `${name} sent you back but your session had expired. Sign in and start the install again from this page.`;
+    case "state_missing":
+      return `${name} install could not be verified because it did not start here. Click Configure on the ${name} card and follow the flow from the console.`;
+    case "state_mismatch":
+      return `${name} install was refused: the security token did not match. Start the install again from this page, in this browser.`;
+    case "missing_installation_id":
+      return `${name} did not return an installation id — the install was cancelled or the App's Setup URL is misconfigured.`;
+    case "provider_unavailable":
+      return `The ${name} provider is not configured on this deployment. Check the server's ${provider.toUpperCase()} settings.`;
+    case "connect_failed":
+      return `${name} returned the install, but validating it failed. Check that the App credentials on the server match this installation.`;
+    default:
+      return `${name} install failed (${code}).`;
+  }
+}
 
 type CardSpec = {
   // Provider widened to the full ProviderID set (includes roadmap providers
@@ -39,64 +67,295 @@ type CardSpec = {
   name: string;
   description: string;
   available: boolean;
-  category: "source" | "observability" | "incident" | "deploy" | "chat" | "data" | "security";
+  category:
+    | "source"
+    | "observability"
+    | "incident"
+    | "deploy"
+    | "chat"
+    | "data"
+    | "security";
 };
 
 const CARDS: CardSpec[] = [
+  // ---- Incident intake ----
+  // First card on the page on purpose: it is the only incident source that
+  // connects without a vendor account, so on a fresh deployment it is the
+  // one that makes Sentinel start detecting.
+  {
+    provider: "webhook",
+    name: "Incident intake",
+    description:
+      "Signed webhook any service can post its own faults to. No vendor account needed.",
+    available: true,
+    category: "observability",
+  },
   // ---- Source control ----
-  { provider: "github",      name: "GitHub",       description: "PR creation + repo metadata for code changes.", available: true,  category: "source" },
-  { provider: "gitlab",      name: "GitLab",       description: "Merge requests + repo metadata.",               available: false, category: "source" },
-  { provider: "bitbucket",   name: "Bitbucket",    description: "Pull requests + branch operations.",            available: false, category: "source" },
+  {
+    provider: "github",
+    name: "GitHub",
+    description: "PR creation + repo metadata for code changes.",
+    available: true,
+    category: "source",
+  },
+  {
+    provider: "gitlab",
+    name: "GitLab",
+    description: "Merge requests + repo metadata.",
+    available: false,
+    category: "source",
+  },
+  {
+    provider: "bitbucket",
+    name: "Bitbucket",
+    description: "Pull requests + branch operations.",
+    available: false,
+    category: "source",
+  },
 
   // ---- Observability ----
-  { provider: "sentry",         name: "Sentry",         description: "Error tracking + issue webhooks.",            available: true,  category: "observability" },
-  { provider: "datadog",        name: "Datadog",        description: "Metrics, APM, and anomaly detection.",        available: true,  category: "observability" },
-  { provider: "newrelic",       name: "New Relic",      description: "Full-stack observability and APM.",           available: false, category: "observability" },
-  { provider: "grafana_cloud",  name: "Grafana Cloud",  description: "Hosted Grafana + Mimir/Loki/Tempo.",          available: false, category: "observability" },
-  { provider: "prometheus",     name: "Prometheus",     description: "Metrics + Alertmanager webhook ingestion.",   available: false, category: "observability" },
-  { provider: "honeycomb",      name: "Honeycomb",      description: "Structured-event observability + BubbleUp.",  available: false, category: "observability" },
-  { provider: "splunk",         name: "Splunk",         description: "Log search + Observability Cloud alerts.",    available: false, category: "observability" },
+  {
+    provider: "sentry",
+    name: "Sentry",
+    description: "Error tracking + issue webhooks.",
+    available: true,
+    category: "observability",
+  },
+  {
+    provider: "datadog",
+    name: "Datadog",
+    description: "Metrics, APM, and anomaly detection.",
+    available: true,
+    category: "observability",
+  },
+  {
+    provider: "newrelic",
+    name: "New Relic",
+    description: "Full-stack observability and APM.",
+    available: false,
+    category: "observability",
+  },
+  {
+    provider: "grafana_cloud",
+    name: "Grafana Cloud",
+    description: "Hosted Grafana + Mimir/Loki/Tempo.",
+    available: false,
+    category: "observability",
+  },
+  {
+    provider: "prometheus",
+    name: "Prometheus",
+    description: "Metrics + Alertmanager webhook ingestion.",
+    available: false,
+    category: "observability",
+  },
+  {
+    provider: "honeycomb",
+    name: "Honeycomb",
+    description: "Structured-event observability + BubbleUp.",
+    available: false,
+    category: "observability",
+  },
+  {
+    provider: "splunk",
+    name: "Splunk",
+    description: "Log search + Observability Cloud alerts.",
+    available: false,
+    category: "observability",
+  },
 
   // ---- Incident management ----
-  { provider: "pagerduty",   name: "PagerDuty",   description: "On-call routing + paging.",                     available: true,  category: "incident" },
-  { provider: "opsgenie",    name: "Opsgenie",    description: "Atlassian on-call + escalation.",              available: false, category: "incident" },
-  { provider: "incident_io", name: "incident.io", description: "Modern incident response platform.",           available: false, category: "incident" },
+  {
+    provider: "pagerduty",
+    name: "PagerDuty",
+    description: "On-call routing + paging.",
+    available: true,
+    category: "incident",
+  },
+  {
+    provider: "opsgenie",
+    name: "Opsgenie",
+    description: "Atlassian on-call + escalation.",
+    available: false,
+    category: "incident",
+  },
+  {
+    provider: "incident_io",
+    name: "incident.io",
+    description: "Modern incident response platform.",
+    available: false,
+    category: "incident",
+  },
 
   // ---- Deploy / infra ----
-  { provider: "argocd",          name: "ArgoCD",            description: "Deployment + rollback orchestration.",       available: true,  category: "deploy" },
-  { provider: "flux_cd",         name: "Flux CD",           description: "GitOps deploys + Helm controller.",          available: false, category: "deploy" },
-  { provider: "kubernetes",      name: "Kubernetes",        description: "Direct cluster API: scale, restart, drain.", available: false, category: "deploy" },
-  { provider: "aws_cloudwatch",  name: "AWS CloudWatch",    description: "AWS metrics, alarms, and Lambda recovery.",  available: false, category: "deploy" },
-  { provider: "gcp_monitoring",  name: "GCP Monitoring",    description: "GCP alerts + Cloud Run/GKE recovery.",       available: false, category: "deploy" },
-  { provider: "azure_monitor",   name: "Azure Monitor",     description: "Azure alerts + AKS recovery.",               available: false, category: "deploy" },
+  {
+    provider: "argocd",
+    name: "ArgoCD",
+    description: "Deployment + rollback orchestration.",
+    available: true,
+    category: "deploy",
+  },
+  {
+    provider: "flux_cd",
+    name: "Flux CD",
+    description: "GitOps deploys + Helm controller.",
+    available: false,
+    category: "deploy",
+  },
+  {
+    provider: "kubernetes",
+    name: "Kubernetes",
+    description: "Direct cluster API: scale, restart, drain.",
+    available: false,
+    category: "deploy",
+  },
+  {
+    provider: "aws_cloudwatch",
+    name: "AWS CloudWatch",
+    description: "AWS metrics, alarms, and Lambda recovery.",
+    available: false,
+    category: "deploy",
+  },
+  {
+    provider: "gcp_monitoring",
+    name: "GCP Monitoring",
+    description: "GCP alerts + Cloud Run/GKE recovery.",
+    available: false,
+    category: "deploy",
+  },
+  {
+    provider: "azure_monitor",
+    name: "Azure Monitor",
+    description: "Azure alerts + AKS recovery.",
+    available: false,
+    category: "deploy",
+  },
 
   // ---- Chat / notifications ----
-  { provider: "slack",      name: "Slack",            description: "Notify channels + DM approvers.",       available: true,  category: "chat" },
-  { provider: "ms_teams",   name: "Microsoft Teams",  description: "Channel posts + approval actions.",     available: false, category: "chat" },
-  { provider: "discord",    name: "Discord",          description: "Webhook notifications.",                 available: false, category: "chat" },
+  {
+    provider: "slack",
+    name: "Slack",
+    description: "Notify channels + DM approvers.",
+    available: true,
+    category: "chat",
+  },
+  {
+    provider: "ms_teams",
+    name: "Microsoft Teams",
+    description: "Channel posts + approval actions.",
+    available: false,
+    category: "chat",
+  },
+  {
+    provider: "discord",
+    name: "Discord",
+    description: "Webhook notifications.",
+    available: false,
+    category: "chat",
+  },
 
   // ---- Data / pipelines ----
-  { provider: "spark",       name: "Apache Spark",     description: "Job failure detection + retry orchestration.",     available: false, category: "data" },
-  { provider: "databricks",  name: "Databricks",       description: "Cluster + workflow recovery.",                     available: false, category: "data" },
-  { provider: "airflow",     name: "Apache Airflow",   description: "DAG failure recovery + backfill triggers.",        available: false, category: "data" },
-  { provider: "snowflake",   name: "Snowflake",        description: "Query failures + warehouse scaling.",              available: false, category: "data" },
-  { provider: "dbt",         name: "dbt",              description: "Model failure recovery + lineage-aware retries.",  available: false, category: "data" },
-  { provider: "kafka",       name: "Kafka",            description: "Consumer lag + dead-letter routing.",              available: false, category: "data" },
+  {
+    provider: "spark",
+    name: "Apache Spark",
+    description: "Job failure detection + retry orchestration.",
+    available: false,
+    category: "data",
+  },
+  {
+    provider: "databricks",
+    name: "Databricks",
+    description: "Cluster + workflow recovery.",
+    available: false,
+    category: "data",
+  },
+  {
+    provider: "airflow",
+    name: "Apache Airflow",
+    description: "DAG failure recovery + backfill triggers.",
+    available: false,
+    category: "data",
+  },
+  {
+    provider: "snowflake",
+    name: "Snowflake",
+    description: "Query failures + warehouse scaling.",
+    available: false,
+    category: "data",
+  },
+  {
+    provider: "dbt",
+    name: "dbt",
+    description: "Model failure recovery + lineage-aware retries.",
+    available: false,
+    category: "data",
+  },
+  {
+    provider: "kafka",
+    name: "Kafka",
+    description: "Consumer lag + dead-letter routing.",
+    available: false,
+    category: "data",
+  },
 
   // ---- Security / flags ----
-  { provider: "launchdarkly", name: "LaunchDarkly",    description: "Auto-kill flags on incident detection.",          available: false, category: "security" },
-  { provider: "vault",        name: "HashiCorp Vault", description: "Secret rotation on credential compromise.",       available: false, category: "security" },
+  {
+    provider: "launchdarkly",
+    name: "LaunchDarkly",
+    description: "Auto-kill flags on incident detection.",
+    available: false,
+    category: "security",
+  },
+  {
+    provider: "vault",
+    name: "HashiCorp Vault",
+    description: "Secret rotation on credential compromise.",
+    available: false,
+    category: "security",
+  },
 ];
 
-const CATEGORY_ORDER: CardSpec["category"][] = ["source", "observability", "incident", "deploy", "chat", "data", "security"];
-const CATEGORY_LABELS: Record<CardSpec["category"], { title: string; description: string }> = {
-  source:        { title: "Source control",       description: "Where your code + PRs live." },
-  observability: { title: "Observability",        description: "Where incidents are detected." },
-  incident:      { title: "Incident management",  description: "On-call routing + paging." },
-  deploy:        { title: "Deploy & infrastructure", description: "Where rollbacks land." },
-  chat:          { title: "Chat & notifications", description: "Where approvers get pinged." },
-  data:          { title: "Data & pipelines",     description: "Job and pipeline recovery." },
-  security:      { title: "Security & flags",     description: "Feature flags + secret rotation." },
+const CATEGORY_ORDER: CardSpec["category"][] = [
+  "source",
+  "observability",
+  "incident",
+  "deploy",
+  "chat",
+  "data",
+  "security",
+];
+const CATEGORY_LABELS: Record<
+  CardSpec["category"],
+  { title: string; description: string }
+> = {
+  source: {
+    title: "Source control",
+    description: "Where your code + PRs live.",
+  },
+  observability: {
+    title: "Observability",
+    description: "Where incidents are detected.",
+  },
+  incident: {
+    title: "Incident management",
+    description: "On-call routing + paging.",
+  },
+  deploy: {
+    title: "Deploy & infrastructure",
+    description: "Where rollbacks land.",
+  },
+  chat: {
+    title: "Chat & notifications",
+    description: "Where approvers get pinged.",
+  },
+  data: {
+    title: "Data & pipelines",
+    description: "Job and pipeline recovery.",
+  },
+  security: {
+    title: "Security & flags",
+    description: "Feature flags + secret rotation.",
+  },
 };
 
 // Derives a HealthPill-ready health DTO from whatever the backend returned.
@@ -153,9 +412,8 @@ export function IntegrationsClient({ initial }: IntegrationsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [activeProvider, setActiveProvider] = React.useState<IntegrationProvider | null>(
-    null,
-  );
+  const [activeProvider, setActiveProvider] =
+    React.useState<IntegrationProvider | null>(null);
 
   // Lazy useState initialiser reads searchParams once on first render and
   // seeds the banner; subsequent renders preserve the value through normal
@@ -166,10 +424,25 @@ export function IntegrationsClient({ initial }: IntegrationsClientProps) {
     () => searchParams?.get("installed") === "github",
   );
 
+  // The OAuth callbacks redirect here with `?install_error=<code>&provider=`
+  // on every failure branch. Until now nothing rendered it, so a failed
+  // install looked identical to never having clicked Connect.
+  const [installError, setInstallError] = React.useState<{
+    provider: string;
+    code: string;
+  } | null>(() => {
+    const code = searchParams?.get("install_error");
+    if (!code) return null;
+    return { provider: searchParams?.get("provider") ?? "provider", code };
+  });
+
   // Side-effect for the same signal: scrub the query string and revalidate.
   // We only mutate the router (an external system), never component state.
   React.useEffect(() => {
-    if (searchParams?.get("installed") === "github") {
+    if (
+      searchParams?.get("installed") === "github" ||
+      searchParams?.get("install_error")
+    ) {
       router.replace("/console/integrations");
       router.refresh();
     }
@@ -233,6 +506,28 @@ export function IntegrationsClient({ initial }: IntegrationsClientProps) {
         </div>
       )}
 
+      {installError && (
+        <div
+          className="flex items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300"
+          role="alert"
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              {installErrorMessage(installError.provider, installError.code)}
+            </span>
+          </div>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setInstallError(null)}
+            className="rounded p-1 hover:bg-red-500/10"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {CATEGORY_ORDER.map((cat) => {
         const cards = CARDS.filter((c) => c.category === cat);
         if (cards.length === 0) return null;
@@ -266,7 +561,8 @@ export function IntegrationsClient({ initial }: IntegrationsClientProps) {
                     comingSoon={!c.available}
                     onConfigure={
                       c.available
-                        ? () => setActiveProvider(c.provider as IntegrationProvider)
+                        ? () =>
+                            setActiveProvider(c.provider as IntegrationProvider)
                         : undefined
                     }
                     statusSlot={

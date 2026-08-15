@@ -1,0 +1,17 @@
+{
+  "label": "string_index_out_of_bounds",
+  "title": "IndexError: list index out of range in parse_sku",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/app.py\", line 13, in predict\n    body = handler(req.get(\"args\", {}))\n  File \"src/nexis_fixture/validation.py\", line 35, in parse_sku\n    return parts[0], parts[1], parts[2]\nIndexError: list index out of range",
+  "logs": "ts=2026-08-14T12:20:55Z level=error service=nexis-fixture msg=unhandled_exception route=/catalog sku=\"ABC-1234\" exc=IndexError\nts=2026-08-14T12:20:57Z level=warn service=nexis-fixture msg=revision_suffix_missing pct_of_catalog=18.2",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/catalog",
+    "root_cause_node": "nexis_fixture.validation.parse_sku",
+    "root_cause_file": "src/nexis_fixture/validation.py",
+    "root_cause_line": 33,
+    "incident_kind": "string_index_out_of_bounds",
+    "expected_scenario": "unknown"
+  }
+}

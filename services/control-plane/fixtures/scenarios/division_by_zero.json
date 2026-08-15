@@ -1,0 +1,17 @@
+{
+  "label": "division_by_zero",
+  "title": "ZeroDivisionError: division by zero in unit_price",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/app.py\", line 13, in predict\n    body = handler(req.get(\"args\", {}))\n  File \"src/nexis_fixture/pricing.py\", line 14, in unit_price\n    return line_total / quantity\nZeroDivisionError: division by zero",
+  "logs": "ts=2026-08-14T10:41:02Z level=error service=nexis-fixture msg=unhandled_exception route=/checkout exc=ZeroDivisionError line_total=49.9 quantity=0\nts=2026-08-14T10:41:02Z level=warn service=nexis-fixture msg=cancelled_line_priced order_id=ord-7741 note=\"quantity 0 reaches unit_price without a guard\"",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/checkout",
+    "root_cause_node": "nexis_fixture.pricing.unit_price",
+    "root_cause_file": "src/nexis_fixture/pricing.py",
+    "root_cause_line": 12,
+    "incident_kind": "division_by_zero",
+    "expected_scenario": "unknown"
+  }
+}

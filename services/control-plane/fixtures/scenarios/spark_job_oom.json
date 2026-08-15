@@ -1,0 +1,18 @@
+{
+  "label": "spark_job_oom",
+  "title": "Spark executor OOM on the nightly aggregation \u2014 2g executors against 2000 shuffle partitions",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "ExecutorLostFailure (executor 7 exited caused by one of the running tasks) Reason: Container killed by YARN, out of memory: 2.4 GB of 2 GB physical memory used\n  File \"src/nexis_fixture/jobs.py\", line 52, in spark_config\n    \"executor_memory\": \"2g\",\nOutOfMemoryError: GC overhead limit exceeded",
+  "logs": "ts=2026-08-15T07:20:00Z level=error service=spark msg=executor_lost executor_id=7 reason=oom used_gb=2.4 limit_gb=2\nts=2026-08-15T07:20:31Z level=warn service=spark msg=stage_retry stage=4 attempt=2 shuffle_partitions=2000\nts=2026-08-15T07:41:02Z level=error service=spark msg=job_failed job=orders_agg attempts=3",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/pipelines/orders_agg",
+    "root_cause_node": "nexis_fixture.jobs.spark_config",
+    "root_cause_file": "src/nexis_fixture/jobs.py",
+    "root_cause_line": 49,
+    "incident_kind": "spark_job_oom",
+    "expected_scenario": "oom",
+    "executor_memory": "2g"
+  }
+}

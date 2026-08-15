@@ -8,7 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/platform/db"
 )
 
 // WorkspacesReader is the narrow port the detector depends on to look up the
@@ -44,6 +48,7 @@ type Detector struct {
 	workflows    domain.WorkflowService
 	workspaces   WorkspacesReader
 	integrations IntegrationsReader
+	appPool      *pgxpool.Pool
 	audit        domain.AuditWriter
 	router       *Router
 	workflowType string
@@ -75,7 +80,13 @@ type Config struct {
 	Workflows    domain.WorkflowService
 	Workspaces   WorkspacesReader
 	Integrations IntegrationsReader
-	Audit        domain.AuditWriter
+	// AppPool is the RLS-bound application pool. The detector runs on a
+	// background ticker with no request tx, so workflow_runs INSERTs are
+	// refused by the tenant policy unless we open one ourselves and pin
+	// app.current_org_id. Nil is tolerated (tests, and any deployment whose
+	// pool has RLS disabled) — fire() then calls Start directly.
+	AppPool *pgxpool.Pool
+	Audit   domain.AuditWriter
 	// Router resolves a project_id for each emitted trigger. Optional —
 	// when nil the detector skips project routing and every trigger fires
 	// with ProjectID="" (workflow falls back to fixtures). Constructed
@@ -105,6 +116,7 @@ func New(cfg Config) *Detector {
 		workflows:      cfg.Workflows,
 		workspaces:     cfg.Workspaces,
 		integrations:   cfg.Integrations,
+		appPool:        cfg.AppPool,
 		audit:          cfg.Audit,
 		router:         cfg.Router,
 		workflowType:   cfg.WorkflowType,
@@ -302,6 +314,54 @@ func (d *Detector) TriggerOne(ctx context.Context, orgID, incidentID string) (do
 
 // fire kicks off one RecoveryPipeline run for the given trigger. Errors are
 // logged at WARN — a Temporal-side failure should not take down the detector.
+
+// startRun invokes the workflow service inside a tenant-pinned transaction.
+//
+// WorkflowService.Start inserts the workflow_runs row on whatever tx is in
+// ctx so RLS can see app.current_org_id. HTTP callers get that binding from
+// the RLS middleware; the detector is a background ticker with no request, so
+// without this wrapper every autonomous detection died with "new row violates
+// row-level security policy for table workflow_runs" — detection worked and
+// recovery never started.
+func (d *Detector) startRun(ctx context.Context, princ domain.Principal, t domain.IncidentTrigger, input map[string]any) (domain.WorkflowRun, error) {
+	if d.appPool == nil {
+		inputJSON, _ := json.Marshal(input)
+		return d.workflows.Start(ctx, princ, t.WorkspaceID, d.workflowType, inputJSON)
+	}
+	tx, err := d.appPool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return domain.WorkflowRun{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, "SELECT set_config('app.current_org_id', $1, true)", t.OrgID); err != nil {
+		return domain.WorkflowRun{}, err
+	}
+	// Tell Pathfinder which codebase to walk. The demo path stamps the
+	// fixture's repo_sha explicitly; on the autonomous path we use the most
+	// recently indexed one for the org, because that is exactly the code
+	// NEXIS has a graph for. Without it the traversal runs against
+	// repo_sha="" , finds no Symbol node, and the causal ranking returns no
+	// candidate at all.
+	if _, ok := input["repo_sha"]; !ok {
+		var sha string
+		if err := tx.QueryRow(ctx,
+			`SELECT repo_sha FROM code_embeddings
+			  WHERE org_id = $1 AND repo_sha <> ''
+			  ORDER BY created_at DESC LIMIT 1`, t.OrgID).Scan(&sha); err == nil && sha != "" {
+			input["repo_sha"] = sha
+		}
+	}
+	inputJSON, _ := json.Marshal(input)
+	run, err := d.workflows.Start(db.WithTx(ctx, tx), princ, t.WorkspaceID, d.workflowType, inputJSON)
+	if err != nil {
+		return domain.WorkflowRun{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.WorkflowRun{}, err
+	}
+	return run, nil
+}
+
 func (d *Detector) fire(ctx context.Context, t domain.IncidentTrigger) {
 	princ := domain.Principal{Role: "system", OrgID: t.OrgID, UserID: ""}
 	input := map[string]any{
@@ -313,8 +373,21 @@ func (d *Detector) fire(ctx context.Context, t domain.IncidentTrigger) {
 	if t.ProjectID != "" {
 		input["project_id"] = t.ProjectID
 	}
-	inputJSON, _ := json.Marshal(input)
-	run, err := d.workflows.Start(ctx, princ, t.WorkspaceID, d.workflowType, inputJSON)
+	// Hand the agents the actual fault. WorkflowService.Start reads this
+	// object into PipelineInput.Incident, which is what the Architect,
+	// Backend and QA prompts are built from — omit it and each one is asked
+	// to plan a repair for an incident it cannot see.
+	if t.Title != "" {
+		input["incident"] = map[string]any{
+			"label":       t.Source,
+			"title":       t.Title,
+			"service":     t.Service,
+			"environment": t.Environment,
+			"stacktrace":  t.Stacktrace,
+			"logs":        t.Logs,
+		}
+	}
+	run, err := d.startRun(ctx, princ, t, input)
 	if err != nil {
 		d.logger.Warn("sentinel.detector.workflow_start",
 			"org_id", t.OrgID, "incident_id", t.IncidentID, "rule", t.Rule, "err", err)

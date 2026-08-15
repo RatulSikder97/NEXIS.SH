@@ -67,16 +67,20 @@ func (noopAudit) Write(_ context.Context, _ domain.Principal, _, _ string, _ map
 // interface (List). We keep two fields for cleanliness so the write-path
 // stays bound to the narrower domain.AuditWriter interface.
 type Deps struct {
-	Pool           *pgxpool.Pool
-	AppPool        *pgxpool.Pool
-	Auth           domain.AuthProvider
-	Audit          domain.AuditWriter
-	AuditLister    audit.Lister
-	Integrations   *integration.Registry
-	Workspaces     domain.WorkspaceService
-	WorkspacesRepo *repo.WorkspacesRepo
-	Billing        domain.BillingProvider
-	BillingRepo    *repo.BillingRepo
+	Pool         *pgxpool.Pool
+	AppPool      *pgxpool.Pool
+	Auth         domain.AuthProvider
+	Audit        domain.AuditWriter
+	AuditLister  audit.Lister
+	Integrations *integration.Registry
+	// IntegrationsRepo is the raw connections read. The deploy path uses it
+	// to resolve the org's GitHub App installation when a project row does
+	// not carry one.
+	IntegrationsRepo *repo.IntegrationsRepo
+	Workspaces       domain.WorkspaceService
+	WorkspacesRepo   *repo.WorkspacesRepo
+	Billing          domain.BillingProvider
+	BillingRepo      *repo.BillingRepo
 
 	// Phase 4 — Temporal-backed pipeline runs.
 	Workflows     domain.WorkflowService
@@ -230,6 +234,10 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 			GitHub:      deps.DeployGitHub,
 			Incidents:   deps.Incidents,
 		}
+		if deps.IntegrationsRepo != nil {
+			deployDeps.Integrations = deps.IntegrationsRepo
+		}
+		deployDeps.AppPool = deps.AppPool
 		deployReady := deps.Projects != nil && deps.Deployments != nil && deps.DeployEngine != nil && deps.DeployGitHub != nil
 
 		// Public auth routes. WorkspacesRepo is wrapped as a WorkspaceChecker
@@ -586,13 +594,16 @@ func New(cfg config.Config, logger *slog.Logger, deps Deps) http.Handler {
 				}
 
 				// Phase 4 — pipeline mutations are owner|admin. The /demo
-				// route is gated to dev so prod-shaped clusters don't
-				// accidentally accept synthetic-incident triggers.
+				// route is mounted in every environment: the Live Demo
+				// console is the platform's primary evidence surface, and
+				// dev-gating it meant a deployed cluster 404'd every
+				// scenario card. It stays safe because it is owner|admin,
+				// workspace-scoped, RLS-bound, and every run it starts is
+				// stamped triggered_by=demo so real incidents stay
+				// distinguishable from injected ones.
 				if deps.Workflows != nil {
 					g2.Post("/v1/workspaces/{ws_id}/pipelines", handler.PipelineCreate(deps.Workflows, aud))
-					if cfg.AppEnv == "dev" {
-						g2.Post("/v1/workspaces/{ws_id}/pipelines/demo", handler.PipelineDemo(deps.Workflows, aud, cfg))
-					}
+					g2.Post("/v1/workspaces/{ws_id}/pipelines/demo", handler.PipelineDemo(deps.Workflows, aud, cfg))
 				}
 
 				// Phase 5 Stage 7 — POST /v1/workspaces/{ws}/eval is

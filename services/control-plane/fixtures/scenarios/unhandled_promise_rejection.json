@@ -1,0 +1,18 @@
+{
+  "label": "unhandled_promise_rejection",
+  "title": "Unhandled task exception: ValueError('order_id required') in schedule_refund",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/jobs.py\", line 28, in issue_refund\n    raise ValueError(\"order_id required\")\nValueError: order_id required\n\nTask exception was never retrieved\nfuture: <Task finished coro=<issue_refund() done> exception=ValueError('order_id required')>",
+  "logs": "ts=2026-08-14T09:12:03Z level=error service=nexis-fixture msg=task_exception_never_retrieved fn=schedule_refund order_id=\"\" note=\"create_task result discarded, no done-callback attached\"\nts=2026-08-14T09:12:41Z level=warn service=nexis-fixture msg=refund_backlog pending=214 window=15m",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/refunds",
+    "root_cause_node": "nexis_fixture.jobs.schedule_refund",
+    "root_cause_file": "src/nexis_fixture/jobs.py",
+    "root_cause_line": 34,
+    "incident_kind": "unhandled_promise_rejection",
+    "expected_scenario": "unknown",
+    "failing_calls": 214
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "label": "snowflake_query_cost_spike",
+  "title": "Warehouse spend up 4.7x \u2014 unbounded SELECT * over fact_orders",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "snowflake.query_history: bytes_scanned=2.1TB credits_used=94.2 query_tag=daily_revenue\n  File \"src/nexis_fixture/jobs.py\", line 79, in warehouse_query\n    return f\"select * from analytics.fact_orders where order_date = '{day}'\"\nFullTableScan: no column projection, no clustering key predicate",
+  "logs": "ts=2026-08-15T10:00:00Z level=warn service=snowflake msg=credits_spike used=94.2 baseline=20.1 ratio=4.7\nts=2026-08-15T10:00:00Z level=warn service=snowflake msg=bytes_scanned value_tb=2.1 query_tag=daily_revenue\nts=2026-08-15T10:05:00Z level=error service=finops msg=budget_breach pct_of_month=61",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/pipelines/daily_revenue",
+    "root_cause_node": "nexis_fixture.jobs.warehouse_query",
+    "root_cause_file": "src/nexis_fixture/jobs.py",
+    "root_cause_line": 77,
+    "incident_kind": "snowflake_query_cost_spike",
+    "expected_scenario": "unknown",
+    "credit_ratio": 4.7
+  }
+}

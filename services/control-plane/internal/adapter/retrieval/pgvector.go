@@ -79,3 +79,32 @@ func (s *Store) TopK(ctx context.Context, orgID, repoSHA string, query []float32
 	}
 	return out, rows.Err()
 }
+
+// FileChunks returns the indexed text of the named files, in line order.
+// Paths are matched exactly as indexed; unknown paths are simply absent from
+// the result rather than an error, because the Architect's plan can name a
+// file that was never indexed (a new file, or one outside the seeded tree).
+func (s *Store) FileChunks(ctx context.Context, orgID, repoSHA string, paths []string) ([]domain.Chunk, error) {
+	if len(paths) == 0 {
+		return []domain.Chunk{}, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+        SELECT file_path, chunk_start, chunk_end, content
+        FROM code_embeddings
+        WHERE org_id=$1 AND repo_sha=$2 AND file_path = ANY($3)
+        ORDER BY file_path, chunk_start`,
+		orgID, repoSHA, paths)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.Chunk{}
+	for rows.Next() {
+		c := domain.Chunk{OrgID: orgID, RepoSHA: repoSHA}
+		if err := rows.Scan(&c.FilePath, &c.ChunkStart, &c.ChunkEnd, &c.Content); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}

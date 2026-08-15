@@ -2,9 +2,12 @@ package recovery
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -164,6 +167,13 @@ type ValidateResponse struct {
 	Coverage    float64
 	DurationMs  int64
 	Logs        string
+
+	// PatchApplied is false when `git apply` rejected a non-empty patch.
+	// The sandbox used to swallow that case and report a green baseline
+	// suite, so the gate saw "validated" for a patch that never touched the
+	// tree. Surfaced on the Backend step so the console can say which it was.
+	PatchApplied bool
+	PatchError   string
 }
 
 // DeployEngineClient is the port the deploy activities depend on to run a
@@ -847,11 +857,19 @@ func (a *Activities) SentinelDetect(ctx context.Context, in PipelineInput) (doma
 		},
 	}, nil
 }
-func (a *Activities) PathfinderDiagnose(ctx context.Context, _ PipelineInput) (domain.ActivityResult, error) {
-	return a.stub(ctx, domain.AgentPathfinder, "Pathfinder.Diagnose")
+
+// PathfinderDiagnose runs the L2 Pathfinder agent: Neo4j traversal for
+// root-cause candidates, then the causal sidecar's evidence ranking. When the
+// registry is unwired runAgent falls back to the stub, so the test path is
+// unchanged.
+func (a *Activities) PathfinderDiagnose(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
+	return a.runAgent(ctx, domain.AgentNamePathfinder, in)
 }
-func (a *Activities) SynthesiserPlan(ctx context.Context, _ PipelineInput) (domain.ActivityResult, error) {
-	return a.stub(ctx, domain.AgentSynthesiser, "Synthesiser.Plan")
+
+// SynthesiserPlan runs the L2 Synthesiser agent, which turns the Pathfinder's
+// hypothesis into the fleet plan the L1 agents execute.
+func (a *Activities) SynthesiserPlan(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
+	return a.runAgent(ctx, domain.AgentNameSynthesiser, in)
 }
 func (a *Activities) ArchitectSolution(ctx context.Context, in PipelineInput) (domain.ActivityResult, error) {
 	return a.runAgent(ctx, domain.AgentNameArchitect, in)
@@ -890,15 +908,35 @@ func (a *Activities) BackendCodegen(ctx context.Context, in PipelineInput) (doma
 	}
 
 	if a.Validator != nil && patchDiff != "" {
+		// Sandbox validation is a distinct step with its own timeline frames,
+		// even though it is driven from inside Backend.Codegen. Without them
+		// the shadow-execution that gates every patch is invisible: the
+		// Validator Sandbox console read zero rows and reported "validator
+		// runs not yet emitted" no matter how many patches had been run.
+		a.emitValidatorEvent(ctx, in, domain.ActStarted, "", map[string]any{
+			"patch_sha": patchSHA(patchDiff),
+		})
+
 		rep, vErr := a.Validator.Validate(ctx, ValidateRequest{
 			RepoSHA: in.RepoSHA, PatchDiff: patchDiff,
 		})
 		if vErr != nil {
 			activity.GetLogger(ctx).Warn("Backend.Codegen validator failed", "err", vErr)
+			a.emitValidatorEvent(ctx, in, domain.ActFailed,
+				"sandbox unreachable: "+vErr.Error(), map[string]any{
+					"patch_sha":   patchSHA(patchDiff),
+					"stderr_head": head(vErr.Error(), 400),
+				})
 		} else {
 			res.Payload["tests_passed"] = rep.TestsPassed
 			res.Payload["test_count"] = rep.TestCount
 			res.Payload["coverage"] = rep.Coverage
+			res.Payload["patch_applied"] = rep.PatchApplied
+			if rep.PatchError != "" {
+				res.Payload["patch_error"] = rep.PatchError
+				activity.GetLogger(ctx).Warn("Backend.Codegen patch did not apply",
+					"err", rep.PatchError, "run_id", in.RunID)
+			}
 			reportJSON, _ := json.Marshal(rep)
 			reportKey := "reports/" + in.RunID + "/Backend.Codegen.report.json.enc"
 			_ = a.Patches.Put(ctx, domain.PutOptions{
@@ -906,9 +944,75 @@ func (a *Activities) BackendCodegen(ctx context.Context, in PipelineInput) (doma
 				ContentType: "application/json",
 			})
 			res.Payload["report_key"] = reportKey
+
+			// A verdict frame carrying what the sandbox actually decided.
+			// "tests green" and "patch applied" are separate facts — a patch
+			// git refused leaves the baseline suite passing — so both are
+			// stated rather than collapsed into one status.
+			status := domain.ActSucceeded
+			msg := fmt.Sprintf("patch applied, %d tests passed", rep.TestCount)
+			if !rep.PatchApplied {
+				status = domain.ActFailed
+				msg = "patch did not apply — " + rep.PatchError
+			} else if !rep.TestsPassed {
+				status = domain.ActFailed
+				msg = fmt.Sprintf("%d of %d tests failed", rep.FailCount, rep.TestCount)
+			}
+			a.emitValidatorEvent(ctx, in, status, msg, map[string]any{
+				"patch_sha":     patchSHA(patchDiff),
+				"patch_applied": rep.PatchApplied,
+				"tests_passed":  rep.TestsPassed,
+				"test_count":    rep.TestCount,
+				"fail_count":    rep.FailCount,
+				"coverage":      rep.Coverage,
+				"duration_ms":   rep.DurationMs,
+				"stdout_head":   head(rep.Logs, 400),
+				"stderr_head":   head(rep.PatchError, 400),
+				"report_key":    reportKey,
+			})
 		}
 	}
 	return res, nil
+}
+
+// emitValidatorEvent writes one validator_l2 frame. Best-effort by design:
+// the sandbox verdict is already recorded on the Backend step's payload, so a
+// timeline write that fails must not fail the repair.
+func (a *Activities) emitValidatorEvent(ctx context.Context, in PipelineInput, status domain.ActivityStatus, msg string, payload map[string]any) {
+	if a.Repo == nil {
+		return
+	}
+	if err := a.RecordActivityEvent(ctx, RecordEventInput{
+		OrgID:         in.OrgID,
+		WorkflowRunID: in.RunID,
+		AgentRole:     domain.AgentRole("validator_l2"),
+		ActivityName:  "Validator.Sandbox",
+		Status:        status,
+		Attempt:       1,
+		Message:       msg,
+		Payload:       payload,
+	}); err != nil {
+		activity.GetLogger(ctx).Warn("validator timeline frame", "err", err, "run_id", in.RunID)
+	}
+}
+
+// patchSHA is the short content hash the validator console shows per run. It
+// identifies which diff a sandbox verdict belongs to without storing the diff
+// itself on the timeline.
+func patchSHA(diff string) string {
+	sum := sha256.Sum256([]byte(diff))
+	return hex.EncodeToString(sum[:])[:12]
+}
+
+// head truncates on a rune boundary so a log tail can be embedded in a JSON
+// payload without carrying the whole sandbox transcript into every timeline
+// read.
+func head(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n]) + "…"
 }
 
 // QATestGen runs the L1 QA agent and, when it produced a structured tests

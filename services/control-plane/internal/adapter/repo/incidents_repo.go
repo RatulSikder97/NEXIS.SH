@@ -187,7 +187,7 @@ func (r *IncidentsRepo) PollFatalSince(ctx context.Context, orgID string, since 
 		       COALESCE(raw_payload->'_fingerprint'->>'pagerduty_service_id', '')      AS pagerduty_service_id,
 		       COALESCE(raw_payload->'_fingerprint'->>'github_repo', '')               AS github_repo
 		FROM incidents_raw
-		WHERE org_id=$1 AND source IN ('sentry','datadog','pagerduty','schema_drift','qa_loop','deploy_engine')
+		WHERE org_id=$1 AND source IN ('sentry','datadog','pagerduty','schema_drift','qa_loop','deploy_engine','webhook')
 		      AND level='fatal' AND received_at > $2
 		ORDER BY received_at ASC
 		LIMIT 50

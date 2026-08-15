@@ -9,10 +9,16 @@ import { ThemeAwareLogo } from "@/components/ThemeAwareLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { content } from "@/lib/content";
+import { useSession } from "@/lib/useSession";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  // Signed-in visitors landing on the marketing site must not be asked to
+  // sign in again — swap both CTAs for a single Dashboard link. The probe is
+  // client-side because these pages are static (see lib/useSession).
+  const session = useSession();
+  const signedIn = session.status === "authenticated";
 
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -72,12 +78,25 @@ export default function Navbar() {
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-              <Link href={"/sign-in" as Route}>Sign in</Link>
-            </Button>
-            <Button size="sm" asChild className="hidden sm:inline-flex">
-              <Link href={"/sign-up" as Route}>{content.navbar.cta}</Link>
-            </Button>
+            {signedIn ? (
+              <Button size="sm" asChild className="hidden sm:inline-flex">
+                <Link href={"/console" as Route}>Dashboard</Link>
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className="hidden sm:inline-flex"
+                >
+                  <Link href={"/sign-in" as Route}>Sign in</Link>
+                </Button>
+                <Button size="sm" asChild className="hidden sm:inline-flex">
+                  <Link href={"/sign-up" as Route}>{content.navbar.cta}</Link>
+                </Button>
+              </>
+            )}
             {/* Mobile hamburger */}
             <button
               type="button"
@@ -132,16 +151,35 @@ export default function Navbar() {
               </Link>
             ))}
             <div className="mt-6 flex flex-col gap-2 border-t border-[var(--color-border)] pt-6">
-              <Button variant="outline" size="lg" asChild>
-                <Link href={"/sign-in" as Route} onClick={() => setMobileOpen(false)}>
-                  Sign in
-                </Link>
-              </Button>
-              <Button size="lg" asChild>
-                <Link href={"/sign-up" as Route} onClick={() => setMobileOpen(false)}>
-                  {content.navbar.cta}
-                </Link>
-              </Button>
+              {signedIn ? (
+                <Button size="lg" asChild>
+                  <Link
+                    href={"/console" as Route}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Dashboard
+                  </Link>
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" size="lg" asChild>
+                    <Link
+                      href={"/sign-in" as Route}
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      Sign in
+                    </Link>
+                  </Button>
+                  <Button size="lg" asChild>
+                    <Link
+                      href={"/sign-up" as Route}
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      {content.navbar.cta}
+                    </Link>
+                  </Button>
+                </>
+              )}
             </div>
           </nav>
         </div>

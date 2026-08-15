@@ -269,6 +269,25 @@ func (s stubStore) TopK(_ context.Context, _, _ string, _ []float32, _ int) ([]d
 	return s.chunks, s.err
 }
 
+// FileChunks returns the same fixture chunks filtered to the requested paths,
+// which is enough for the prompt-shape assertions in this package.
+func (s stubStore) FileChunks(_ context.Context, _, _ string, paths []string) ([]domain.Chunk, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	want := map[string]bool{}
+	for _, p := range paths {
+		want[p] = true
+	}
+	out := []domain.Chunk{}
+	for _, c := range s.chunks {
+		if want[c.FilePath] {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
 type stubEmbed struct {
 	vectors [][]float32
 	err     error

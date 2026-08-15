@@ -1,0 +1,19 @@
+{
+  "label": "latency_p99_breach",
+  "title": "P99 latency 4.2x the SLO on /orders \u2014 N+1 query in list_orders",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Trace nexis-fixture /orders: 141 spans, 138 identical db.query children\n  File \"src/nexis_fixture/runtime.py\", line 56, in list_orders\n    out.extend(run_query(conn, \"SELECT * FROM orders WHERE customer_id = %s\", (cid,)))\nNPlusOne: one query per customer id instead of a single batched read",
+  "logs": "ts=2026-08-15T05:30:00Z level=error service=nexis-fixture msg=p99_breach route=/orders p99_ms=3380 slo_ms=800\nts=2026-08-15T05:30:00Z level=warn service=nexis-fixture msg=query_fanout spans=138 route=/orders\nts=2026-08-15T05:31:00Z level=warn service=nexis-fixture msg=db_cpu_pct value=71",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/orders",
+    "root_cause_node": "nexis_fixture.runtime.list_orders",
+    "root_cause_file": "src/nexis_fixture/runtime.py",
+    "root_cause_line": 51,
+    "incident_kind": "latency_p99_breach",
+    "expected_scenario": "unknown",
+    "p99_ms": 3380,
+    "slo_ms": 800
+  }
+}

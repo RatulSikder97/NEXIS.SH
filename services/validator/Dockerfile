@@ -34,12 +34,19 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server 
 FROM python:3.12-slim
 WORKDIR /app
 
-# Install the docker CLI + curl (used by container healthchecks). We pin
-# nothing here because the runner only needs the CLI surface
-# (`docker run --rm ...`) — version drift is tolerated.
+# curl is used by the container healthcheck.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends docker.io curl ca-certificates \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# The Docker CLI comes from the official image rather than `apt-get install
+# docker.io`. That package resolved to a set without /usr/bin/docker on this
+# base, so the image shipped with docker-init but no client: every sandbox
+# validation failed with `exec: "docker": executable file not found in $PATH`,
+# the control-plane logged it as a best-effort WARN, and unvalidated patches
+# reached the approval gate silently. Copying the static binary is
+# deterministic and keeps the failure mode from coming back.
+COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
 
 # Phase 6: hypothesis + pytest for the in-container property-test sidecar.
 # Pinned to a known-good range — hypothesis 6.99 ships the deadline + max

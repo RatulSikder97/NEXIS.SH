@@ -1,0 +1,18 @@
+{
+  "label": "cpu_throttling_spike",
+  "title": "CFS throttling 38% of periods \u2014 CPU limit set just above the request",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "cgroup cpu.stat: nr_throttled=41022 throttled_time=118s over 300s\n  File \"src/nexis_fixture/runtime.py\", line 47, in cpu_budget\n    return {\"request_millicores\": 500, \"limit_millicores\": 600}\nThrottled: steady-state usage 780m against a 600m limit",
+  "logs": "ts=2026-08-15T04:12:00Z level=warn service=nexis-fixture msg=cpu_throttled pct_periods=38.0 limit_millicores=600 usage_millicores=780\nts=2026-08-15T04:12:00Z level=error service=nexis-fixture msg=p99_breach route=/predict p99_ms=1420 slo_ms=800",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/predict",
+    "root_cause_node": "nexis_fixture.runtime.cpu_budget",
+    "root_cause_file": "src/nexis_fixture/runtime.py",
+    "root_cause_line": 45,
+    "incident_kind": "cpu_throttling_spike",
+    "expected_scenario": "unknown",
+    "throttled_pct": 38.0
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "label": "connection_pool_exhausted",
+  "title": "PoolTimeout: connection pool exhausted after 30s",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/app.py\", line 13, in predict\n    body = handler(req.get(\"args\", {}))\n  File \"src/nexis_fixture/db.py\", line 34, in run_query\n    cur = conn.cursor()\npsycopg_pool.PoolTimeout: couldn't get a connection after 30.0 sec",
+  "logs": "ts=2026-08-14T13:05:11Z level=error service=nexis-fixture msg=pool_timeout waited_s=30 pool_max=5 workers=32\nts=2026-08-14T13:05:11Z level=warn service=nexis-fixture msg=queue_depth value=27 note=\"max_size=5 against MAX_WORKERS=32\"\nts=2026-08-14T13:06:02Z level=error service=nexis-fixture msg=error_rate_breach route=/orders error_pct=62.0",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/orders",
+    "root_cause_node": "nexis_fixture.db.pool_settings",
+    "root_cause_file": "src/nexis_fixture/db.py",
+    "root_cause_line": 20,
+    "incident_kind": "connection_pool_exhausted",
+    "expected_scenario": "unknown",
+    "pool_max": 5,
+    "workers": 32
+  }
+}

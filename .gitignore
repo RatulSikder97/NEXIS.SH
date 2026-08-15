@@ -22,6 +22,10 @@ secrets/*.pem
 secrets/*.key
 secrets/*.crt
 !secrets/*.example
+# `secret/` (singular) is a common typo for the directory above — ignore the
+# whole thing so a GitHub App key dropped there can never be committed.
+secret/
+*.private-key.pem
 
 # OS / editor
 .DS_Store
@@ -40,3 +44,6 @@ infra/tls/*.key
 .docker-data/
 __pycache__/
 *.pyc
+
+# native dev stack runtime (pids, logs, built binaries)
+.run/

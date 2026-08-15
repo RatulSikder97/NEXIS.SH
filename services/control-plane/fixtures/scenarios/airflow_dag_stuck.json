@@ -1,0 +1,18 @@
+{
+  "label": "airflow_dag_stuck",
+  "title": "orders_daily stuck in queued for 2h \u2014 concurrency 1 against a single pool slot",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "airflow.scheduler: DAG orders_daily has 3 runs queued, 0 running, pool_slots_free=0\n  File \"src/nexis_fixture/jobs.py\", line 41, in dag_config\n    \"concurrency\": 1,\nQueuedForever: max_active_runs=1, pool_slots=1, execution_timeout_s=None",
+  "logs": "ts=2026-08-15T06:00:00Z level=warn service=airflow msg=dag_queued dag_id=orders_daily queued_runs=3 waited_m=124\nts=2026-08-15T06:00:00Z level=warn service=airflow msg=pool_exhausted pool=default_pool slots=1 used=1\nts=2026-08-15T06:05:00Z level=error service=airflow msg=sla_miss dag_id=orders_daily task=aggregate_orders",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/pipelines/orders_daily",
+    "root_cause_node": "nexis_fixture.jobs.dag_config",
+    "root_cause_file": "src/nexis_fixture/jobs.py",
+    "root_cause_line": 38,
+    "incident_kind": "airflow_dag_stuck",
+    "expected_scenario": "unknown",
+    "queued_runs": 3
+  }
+}

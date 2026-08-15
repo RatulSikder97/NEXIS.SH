@@ -16,15 +16,36 @@ import { formatDurationMs, formatRelative } from "@/lib/agents-format";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
+// One row of GET /v1/knowledge/status. The control-plane
+// (dto.KnowledgeWorkspaceStatus) sends `name` + `chunk_count`; this client was
+// written against `workspace_name` + `chunks_indexed`, so every row read
+// undefined and `.toLocaleString()` threw the moment the index stopped being
+// empty — which is exactly what "the KB page is broken" looked like. Both
+// spellings are accepted now, and the count is normalised through
+// `chunkCount()` so a future rename degrades to 0 instead of a blank page.
 export type KnowledgeWorkspace = {
   workspace_id: string;
+  // Control-plane spelling.
+  name?: string;
+  chunk_count?: number;
+  // Legacy client spelling, kept so nothing that already sends it breaks.
   workspace_name?: string;
-  chunks_indexed: number;
+  chunks_indexed?: number;
   last_indexed_at?: string;
   last_query_latency_ms?: number;
   index_status?: "ready" | "degraded" | "indexing" | "error";
   error?: string;
 };
+
+/** Chunk count for a row, whichever spelling the API used. */
+function chunkCount(row: KnowledgeWorkspace): number {
+  return row.chunk_count ?? row.chunks_indexed ?? 0;
+}
+
+/** Display label for a row, falling back to a short id. */
+function workspaceLabel(row: KnowledgeWorkspace): string {
+  return row.workspace_name ?? row.name ?? row.workspace_id.slice(0, 8);
+}
 
 type KnowledgeResp = {
   workspaces: KnowledgeWorkspace[];
@@ -56,14 +77,19 @@ async function reindex(workspaceId: string): Promise<{
   }
 }
 
-function StatusBadge({ status }: { status: KnowledgeWorkspace["index_status"] }) {
+function StatusBadge({
+  status,
+}: {
+  status: KnowledgeWorkspace["index_status"];
+}) {
   const s = status ?? "ready";
   const cls: Record<NonNullable<KnowledgeWorkspace["index_status"]>, string> = {
     ready:
       "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30 dark:text-emerald-300",
     degraded:
       "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300",
-    indexing: "bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300",
+    indexing:
+      "bg-blue-500/15 text-blue-700 ring-blue-500/30 dark:text-blue-300",
     error: "bg-red-500/15 text-red-700 ring-red-500/30 dark:text-red-300",
   };
   return (
@@ -81,11 +107,7 @@ function StatusBadge({ status }: { status: KnowledgeWorkspace["index_status"] })
   );
 }
 
-function WorkspaceCard({
-  row,
-}: {
-  row: KnowledgeWorkspace;
-}) {
+function WorkspaceCard({ row }: { row: KnowledgeWorkspace }) {
   const [pending, setPending] = React.useState(false);
   const [msg, setMsg] = React.useState<{
     tone: "ok" | "err";
@@ -106,7 +128,7 @@ function WorkspaceCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-[var(--color-foreground)]">
-            {row.workspace_name ?? row.workspace_id.slice(0, 8)}
+            {workspaceLabel(row)}
           </p>
           <p className="font-mono text-[10px] text-[var(--color-muted-foreground)]">
             {row.workspace_id}
@@ -118,7 +140,7 @@ function WorkspaceCard({
         <div>
           <dt className="text-[var(--color-muted-foreground)]">Chunks</dt>
           <dd className="font-mono text-[var(--color-foreground)]">
-            {row.chunks_indexed.toLocaleString()}
+            {chunkCount(row).toLocaleString()}
           </dd>
         </div>
         <div>
@@ -128,7 +150,9 @@ function WorkspaceCard({
           </dd>
         </div>
         <div>
-          <dt className="text-[var(--color-muted-foreground)]">Query latency</dt>
+          <dt className="text-[var(--color-muted-foreground)]">
+            Query latency
+          </dt>
           <dd className="font-mono text-[var(--color-foreground)]">
             {typeof row.last_query_latency_ms === "number"
               ? formatDurationMs(row.last_query_latency_ms)
@@ -188,14 +212,14 @@ function segmentsFor(rows: KnowledgeWorkspace[]): OperationalSegment[] {
               ? "failed"
               : "pending";
     return {
-      label: r.workspace_name ?? r.workspace_id.slice(0, 8),
+      label: workspaceLabel(r),
       started_at: r.last_indexed_at ?? new Date().toISOString(),
       finished_at: r.last_indexed_at,
       duration_ms: r.last_query_latency_ms,
       status,
       detail:
         r.error ??
-        `${r.chunks_indexed.toLocaleString()} chunks indexed · status ${r.index_status ?? "ready"}`,
+        `${chunkCount(r).toLocaleString()} chunks indexed · status ${r.index_status ?? "ready"}`,
     };
   });
 }
@@ -217,8 +241,8 @@ export function KnowledgeClient({
             Knowledge base
           </h1>
           <p className="max-w-2xl text-sm text-[var(--color-muted-foreground)]">
-            Retrieval health for the pgvector indexes that power Pathfinder
-            and the L1 agents.
+            Retrieval health for the pgvector indexes that power Pathfinder and
+            the L1 agents.
           </p>
         </div>
         <EmptyState
@@ -244,7 +268,7 @@ export function KnowledgeClient({
         </h1>
         <p className="max-w-2xl text-sm text-[var(--color-muted-foreground)]">
           {typeof initial.total_chunks === "number"
-            ? `${initial.total_chunks.toLocaleString()} chunks indexed across ${rows.length} workspace${rows.length === 1 ? "" : "s"}.`
+            ? `${(initial.total_chunks ?? 0).toLocaleString()} chunks indexed across ${rows.length} workspace${rows.length === 1 ? "" : "s"}.`
             : `Retrieval health across ${rows.length} workspace${rows.length === 1 ? "" : "s"}.`}
         </p>
       </div>

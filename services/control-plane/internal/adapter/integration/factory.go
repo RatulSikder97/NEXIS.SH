@@ -13,6 +13,7 @@ import (
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration/pagerduty"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration/sentry"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration/slack"
+	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/integration/webhook"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
 )
@@ -33,6 +34,7 @@ type Registry struct {
 	Slack     *slack.Provider
 	Datadog   *datadog.Provider
 	PagerDuty *pagerduty.Provider
+	Webhook   *webhook.Provider
 }
 
 // Deps bundles every dependency NewRegistry needs. Constructed in
@@ -62,6 +64,9 @@ func NewRegistry(d Deps) *Registry {
 	sl := slack.New(d.Repo, d.KV)
 	dd := datadog.NewWithSigningSecret(d.Repo, d.KV, d.IncidentSink, d.DatadogSigningSecret)
 	pd := pagerduty.New(d.Repo, d.KV, d.IncidentSink, fromEmail)
+	// Vendor-neutral intake — the only incident source that connects with no
+	// external account, so a fresh deployment can detect faults on day one.
+	wh := webhook.New(d.Repo, d.KV, d.IncidentSink)
 
 	return &Registry{
 		providers: map[domain.IntegrationProvider]domain.Integration{
@@ -71,6 +76,7 @@ func NewRegistry(d Deps) *Registry {
 			domain.IntegrationSlack:     sl,
 			domain.IntegrationDatadog:   dd,
 			domain.IntegrationPagerDuty: pd,
+			domain.IntegrationWebhook:   wh,
 		},
 		repo:      d.Repo,
 		kv:        d.KV,
@@ -80,6 +86,7 @@ func NewRegistry(d Deps) *Registry {
 		Slack:     sl,
 		Datadog:   dd,
 		PagerDuty: pd,
+		Webhook:   wh,
 	}
 }
 

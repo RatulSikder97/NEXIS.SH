@@ -7,11 +7,27 @@
 //	GET  /v1/projects/{id}/deployments                         (any member)
 //	POST /v1/projects/{id}/deployments/{deployment_id}/stop    (owner|admin)
 //
-// The deploy call is synchronous: control-plane mints the deployment id,
-// mints a short-lived GitHub installation token, calls the deploy-engine
-// sidecar, persists the round-trip into the deployments table, and — on a
-// failed build — inserts a RawIncident so the failure enters the exact same
-// self-healing pipeline every other incident source uses.
+// The deploy call is ASYNCHRONOUS. Only the fast part — minting the
+// deployment id, resolving the GitHub installation, minting a short-lived
+// token, and a cheap Dockerfile preflight probe — runs inline; the response
+// carries a "building" row the instant that's done. The actual clone + image
+// build + container run + health check runs in a detached goroutine and
+// updates the same row when it finishes, then — on a failed build — inserts
+// a RawIncident so the failure enters the exact same self-healing pipeline
+// every other incident source uses.
+//
+// It was NOT always this shape. The whole request used to block on the
+// engine round-trip, wrapped in the router's 60-second global Timeout
+// middleware. A cold build (no cached base-image layers, a large `npm ci`)
+// routinely takes longer than that, and when it did, two things went wrong
+// at once: the client saw a bare timeout with no explanation, and the
+// handler's own attempt to persist a "failed" row afterward used r.Context(),
+// which the Timeout middleware had already canceled — so
+// DeploymentsRepo.Create failed too, and NOTHING was recorded. The Ops tab
+// showed no history at all for an attempt that very much happened. This
+// package's `DeploymentStatusBuilding` constant existed, unused, before this
+// change — the async shape was the original intent; the handler that used it
+// was never written.
 package handler
 
 import (
@@ -25,8 +41,11 @@ import (
 	"strings"
 	"time"
 
+	"strconv"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/adapter/repo"
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
@@ -36,8 +55,22 @@ import (
 
 // deployTimeoutMs is the per-deploy budget forwarded to the engine — the
 // contract's default. The engine enforces it server-side; the adapter
-// client's HTTP timeout adds slack on top.
-const deployTimeoutMs = 120000
+// client's HTTP timeout (services/control-plane/internal/adapter/deployengine)
+// and deployAsyncBudget below both allow slack on top so the engine's own
+// timeout fires cleanly instead of being preempted by ours.
+//
+// 8 minutes, not 2: a cold build (no cached base-image layers, a real
+// `npm ci`/`pip install`) has been observed taking several minutes end to
+// end. This budget was only ever survivable at 120000ms because it used to
+// run inside a 60-second HTTP request anyway, so raising it here is what
+// running it in a detached goroutine (see DeploymentsCreate) actually buys.
+const deployTimeoutMs = 480000
+
+// deployAsyncBudget bounds the detached goroutine DeploymentsCreate starts.
+// Deliberately looser than deployTimeoutMs so the engine's own budget is
+// what actually fires on a hung build, producing a real error message
+// instead of a bare "context canceled".
+const deployAsyncBudget = 10 * time.Minute
 
 // deployLogTailBytes bounds how much of the build/container logs ride into
 // the RawIncident payload. Failures surface at the END of a build log, so we
@@ -80,6 +113,30 @@ type DeploymentsDeps struct {
 	Engine      DeployEngineService
 	GitHub      GitHubTokenMinter
 	Incidents   domain.IncidentSink
+
+	// Integrations resolves the org's GitHub App installation when a project
+	// row predates installation-id inheritance. Optional: nil just means no
+	// fallback, and the request fails with the same message as before.
+	Integrations OrgIntegrationReader
+
+	// AppPool is the RLS-bound application pool. runDeploy is a detached
+	// goroutine with no request-scoped principal in ctx, so Deployments.Update
+	// and Incidents.Insert — both RLS-enforced — need app.current_org_id
+	// pinned by hand via runWithTenantTx (integration_oauth.go), the same
+	// fix Sentinel's detector needed for the identical reason: a background
+	// goroutine's plain context.Background() satisfies no tenant policy, so
+	// every write inside it either silently no-ops ("not found" on an
+	// UPDATE whose WHERE clause RLS narrowed to nothing) or is flatly
+	// refused. Nil is tolerated (dev boot without Postgres, or unit tests
+	// using an in-memory store); runWithTenantTx degrades to calling
+	// straight through when AppPool is nil.
+	AppPool *pgxpool.Pool
+}
+
+// OrgIntegrationReader is the narrow read the deploy path needs to fall back
+// to the org-level GitHub installation. *repo.IntegrationsRepo satisfies it.
+type OrgIntegrationReader interface {
+	Get(ctx context.Context, orgID string, provider domain.IntegrationProvider) (domain.Connection, []byte, error)
 }
 
 // deploymentResp is the wire shape of one deployments row. Timestamps are
@@ -144,6 +201,13 @@ func DeploymentsCreate(d DeploymentsDeps) http.HandlerFunc {
 		}
 		instID := project.Selectors.GitHubInstallationID
 		if instID <= 0 {
+			// Projects bound through the console before installation-id
+			// inheritance landed carry 0 here even though the org has the
+			// App installed. Resolve it from the org connection rather than
+			// making the operator re-bind the repo.
+			instID = orgInstallationID(r.Context(), d.Integrations, princ.OrgID)
+		}
+		if instID <= 0 {
 			writeError(w, http.StatusBadRequest, "project has no github installation bound")
 			return
 		}
@@ -175,35 +239,15 @@ func DeploymentsCreate(d DeploymentsDeps) http.HandlerFunc {
 		}
 
 		deploymentID := uuid.NewString()
-		resp, err := d.Engine.Deploy(r.Context(), recoverywf.DeployRequest{
-			DeploymentID: deploymentID,
-			ProjectID:    project.ID,
-			OrgID:        princ.OrgID,
-			Repo:         repoFull,
-			Branch:       branch,
-			CommitSHA:    "",
-			GitHubToken:  instToken,
-			TimeoutMs:    deployTimeoutMs,
+		startedAt := time.Now().UTC()
+		row, err := d.Deployments.Create(r.Context(), repo.Deployment{
+			ID:               deploymentID,
+			ProjectID:        project.ID,
+			OrgID:            princ.OrgID,
+			Status:           repo.DeploymentStatusBuilding,
+			DockerfileSource: preview,
+			StartedAt:        &startedAt,
 		})
-		if err != nil {
-			// Transport/auth failure — the engine never ran the pipeline.
-			// Persist a failed row anyway so the ops timeline shows the
-			// attempt, then surface 502.
-			if _, cErr := d.Deployments.Create(r.Context(), repo.Deployment{
-				ID:        deploymentID,
-				ProjectID: project.ID,
-				OrgID:     princ.OrgID,
-				Status:    repo.DeploymentStatusFailed,
-				Error:     err.Error(),
-			}); cErr != nil {
-				slog.Default().Warn("deployments.create.persist_failed",
-					"deployment_id", deploymentID, "err", cErr)
-			}
-			writeError(w, http.StatusBadGateway, "deploy engine: "+err.Error())
-			return
-		}
-
-		row, err := d.Deployments.Create(r.Context(), deploymentRowFromEngine(project, princ.OrgID, deploymentID, resp))
 		if err != nil {
 			slog.Default().Error("deployments.create.persist_failed",
 				"deployment_id", deploymentID, "err", err)
@@ -211,27 +255,117 @@ func DeploymentsCreate(d DeploymentsDeps) http.HandlerFunc {
 			return
 		}
 
-		// THE integration point with the self-healing loop: a failed deploy
-		// becomes a RawIncident in the same pipeline every other source
-		// feeds. GitHubRepo is the fingerprint Sentinel's router matches
-		// back to this project; the stacktrace/logs payload keys are what
-		// PollFatalSince projects into IncidentRow for Pathfinder.
-		if resp.Status != repo.DeploymentStatusRunning && d.Incidents != nil {
-			if iErr := d.Incidents.Insert(r.Context(), princ.OrgID,
-				deployFailureIncident(project, deploymentID, resp)); iErr != nil {
-				slog.Default().Warn("deployments.create.incident_insert_failed",
-					"deployment_id", deploymentID, "err", iErr)
-			}
-		}
+		// The slow part — clone, build, run, health-check — happens off the
+		// request. context.Background() deliberately: r.Context() dies with
+		// this response, and the build must outlive it. project/princ.OrgID
+		// are copied by value into the closure so nothing here reads r after
+		// the handler returns.
+		go d.runDeploy(deploymentID, project, princ.OrgID, repoFull, branch, instToken)
 
 		out := toDeploymentResp(row)
 		out.DockerfilePreview = preview
-		code := http.StatusCreated
-		if row.Status != repo.DeploymentStatusRunning {
-			code = http.StatusUnprocessableEntity
-		}
-		httpJSON(w, code, out)
+		httpJSON(w, http.StatusAccepted, out)
 	}
+}
+
+// runDeploy is the detached second half of DeploymentsCreate: it calls the
+// engine, then updates the row that was already returned to the client.
+// Every exit path updates that row — a transport failure, an engine-reported
+// build/health-check failure, and success all resolve it to a terminal
+// state, because a "building" row that never resolves is worse than a
+// "failed" one: the console would show a spinner forever with no way to
+// tell a slow build from an abandoned one.
+func (d DeploymentsDeps) runDeploy(deploymentID string, project domain.Project, orgID, repoFull, branch, token string) {
+	ctx, cancel := context.WithTimeout(context.Background(), deployAsyncBudget)
+	defer cancel()
+
+	resp, engineErr := d.Engine.Deploy(ctx, recoverywf.DeployRequest{
+		DeploymentID: deploymentID,
+		ProjectID:    project.ID,
+		OrgID:        orgID,
+		Repo:         repoFull,
+		Branch:       branch,
+		CommitSHA:    "",
+		GitHubToken:  token,
+		TimeoutMs:    deployTimeoutMs,
+	})
+	if engineErr != nil {
+		// Transport/auth failure — the engine never ran the pipeline. The row
+		// already exists (created synchronously before this goroutine
+		// started), so this is an Update, not a Create — the fix for the bug
+		// where a slow build vanished from history entirely.
+		//
+		// runWithTenantTx pins app.current_org_id for the duration of the
+		// Update. Without it this call ran under a bare, unbound ctx (the
+		// preceding Engine.Deploy call needed no such binding — it's an HTTP
+		// request to a different service, not a DB write) and the RLS policy
+		// on `deployments` hid every row from it, so Update's WHERE id=$1
+		// matched nothing and returned "not found" — the exact same defect
+		// class Sentinel's detector had before AppPool was wired there.
+		fields := map[string]any{
+			"status":      repo.DeploymentStatusFailed,
+			"error":       engineErr.Error(),
+			"finished_at": time.Now().UTC(),
+		}
+		if uErr := runWithTenantTx(ctx, d.AppPool, domain.Principal{OrgID: orgID}, func(txCtx context.Context) error {
+			_, err := d.Deployments.Update(txCtx, deploymentID, fields)
+			return err
+		}); uErr != nil {
+			slog.Default().Warn("deployments.run.update_failed",
+				"deployment_id", deploymentID, "err", uErr)
+		}
+		return
+	}
+
+	finalRow := deploymentRowFromEngine(project, orgID, deploymentID, resp)
+	if uErr := runWithTenantTx(ctx, d.AppPool, domain.Principal{OrgID: orgID}, func(txCtx context.Context) error {
+		_, err := d.Deployments.Update(txCtx, deploymentID, deploymentUpdateFields(finalRow))
+		return err
+	}); uErr != nil {
+		slog.Default().Warn("deployments.run.update_failed",
+			"deployment_id", deploymentID, "err", uErr)
+	}
+
+	// THE integration point with the self-healing loop: a failed deploy
+	// becomes a RawIncident in the same pipeline every other source feeds.
+	// GitHubRepo is the fingerprint Sentinel's router matches back to this
+	// project; the stacktrace/logs payload keys are what PollFatalSince
+	// projects into IncidentRow for Pathfinder. Same RLS binding as above —
+	// incidents_raw has the identical tenant_isolation policy.
+	if resp.Status != repo.DeploymentStatusRunning && d.Incidents != nil {
+		iErr := runWithTenantTx(ctx, d.AppPool, domain.Principal{OrgID: orgID}, func(txCtx context.Context) error {
+			return d.Incidents.Insert(txCtx, orgID, deployFailureIncident(project, deploymentID, resp))
+		})
+		if iErr != nil {
+			slog.Default().Warn("deployments.run.incident_insert_failed",
+				"deployment_id", deploymentID, "err", iErr)
+		}
+	}
+}
+
+// deploymentUpdateFields projects a repo.Deployment onto the column
+// allow-list DeploymentsRepo.Update accepts. started_at is deliberately
+// excluded: the row already carries the time the user clicked Deploy, which
+// is the more useful "when did this happen" for the console than whatever
+// instant the engine itself began building.
+func deploymentUpdateFields(row repo.Deployment) map[string]any {
+	fields := map[string]any{
+		"status":            row.Status,
+		"url":               row.URL,
+		"port":              row.Port,
+		"image_tag":         row.ImageTag,
+		"dockerfile_source": row.DockerfileSource,
+		"detected_stack":    row.DetectedStack,
+		"build_log":         row.BuildLog,
+		"container_log":     row.ContainerLog,
+		"error":             row.Error,
+	}
+	if row.FinishedAt != nil {
+		fields["finished_at"] = *row.FinishedAt
+	} else {
+		fields["finished_at"] = time.Now().UTC()
+	}
+	return fields
 }
 
 // DeploymentsList wires GET /v1/projects/{id}/deployments. Any authenticated
@@ -435,4 +569,23 @@ func toDeploymentResp(d repo.Deployment) deploymentResp {
 		out.CreatedAt = d.CreatedAt.UTC().Format(time.RFC3339)
 	}
 	return out
+}
+
+// orgInstallationID reads the org's connected GitHub App installation id.
+// Returns 0 when the reader is unwired, the org has no connected GitHub
+// integration, or the stored id is not a positive integer — every one of
+// which leaves the caller's original "not bound" error intact.
+func orgInstallationID(ctx context.Context, reader OrgIntegrationReader, orgID string) int64 {
+	if reader == nil {
+		return 0
+	}
+	conn, _, err := reader.Get(ctx, orgID, domain.IntegrationGitHub)
+	if err != nil || conn.Status != domain.StatusConnected || conn.InstallationID == "" {
+		return 0
+	}
+	id, err := strconv.ParseInt(conn.InstallationID, 10, 64)
+	if err != nil || id <= 0 {
+		return 0
+	}
+	return id
 }

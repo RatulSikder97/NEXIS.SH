@@ -1,0 +1,18 @@
+{
+  "label": "regex_catastrophic_backtracking",
+  "title": "Request timeout in validate_email \u2014 catastrophic regex backtracking",
+  "service": "nexis-fixture",
+  "environment": "production",
+  "stacktrace": "Traceback (most recent call last):\n  File \"src/nexis_fixture/app.py\", line 13, in predict\n    body = handler(req.get(\"args\", {}))\n  File \"src/nexis_fixture/validation.py\", line 24, in validate_email\n    return bool(EMAIL_RE.match(value))\nTimeoutError: request exceeded 30s budget while matching EMAIL_RE",
+  "logs": "ts=2026-08-14T11:02:19Z level=error service=nexis-fixture msg=request_timeout route=/signup elapsed_ms=30001 fn=validate_email input_len=54\nts=2026-08-14T11:02:19Z level=warn service=nexis-fixture msg=cpu_saturation cores=2 util_pct=99.4 note=\"single request pinning both cores\"\nts=2026-08-14T11:03:44Z level=error service=nexis-fixture msg=p99_breach route=/signup p99_ms=30000 slo_ms=800",
+  "metadata": {
+    "service_name": "nexis-fixture",
+    "endpoint": "/signup",
+    "root_cause_node": "nexis_fixture.validation.validate_email",
+    "root_cause_file": "src/nexis_fixture/validation.py",
+    "root_cause_line": 22,
+    "incident_kind": "regex_catastrophic_backtracking",
+    "expected_scenario": "unknown",
+    "pattern": "^([A-Za-z0-9_.+-]+)+@([A-Za-z0-9-]+\\.)+[A-Za-z]{2,}$"
+  }
+}

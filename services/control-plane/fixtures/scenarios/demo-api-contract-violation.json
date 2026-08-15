@@ -10,8 +10,12 @@
     "upstream_service": "orders-api",
     "contract": "openapi/orders-v2.yaml",
     "schema": "OrderTotal",
-    "unexpected_fields": ["discount_cents"],
-    "declared_scope": ["internal/billing/rounding.go"],
+    "unexpected_fields": [
+      "discount_cents"
+    ],
+    "declared_scope": [
+      "internal/billing/rounding.go"
+    ],
     "actual_changed_files": [
       "internal/http/handlers/total.go",
       "internal/billing/discount.go"
