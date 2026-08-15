@@ -15,6 +15,23 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/packages/db/node_modules ./packages/db/node_modules
 COPY . .
+# NEXT_PUBLIC_* are inlined into the client bundle by the Next compiler at
+# build time — setting them as runtime container env has no effect on already
+# compiled JS. They must be present here or every browser-side fetch falls
+# back to the `?? "http://localhost:8080"` literal in apps/web/lib/*.ts and
+# dials the visitor's own machine. Defaults keep local `docker compose build`
+# working unchanged; docker-compose.prod.yml passes the real origin.
+ARG NEXT_PUBLIC_API_URL=http://localhost:8080
+ARG NEXT_PUBLIC_APP_URL=http://localhost:3000
+ARG NEXT_PUBLIC_SITE_URL=https://nexis.sh
+# lib/db.ts throws when DATABASE_URL is unset. It is lazy (Proxy-wrapped), so
+# this placeholder is only ever a compile-time stand-in — the runtime value
+# comes from the container env.
+ARG DATABASE_URL=postgres://build:build@localhost:5432/build
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
+    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
+    NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
+    DATABASE_URL=$DATABASE_URL
 WORKDIR /app/apps/web
 RUN pnpm build
 

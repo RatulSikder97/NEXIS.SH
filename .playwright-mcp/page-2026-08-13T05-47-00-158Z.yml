@@ -1,0 +1,200 @@
+- generic:
+  - generic:
+    - link:
+      - /url: "#main"
+      - text: Skip to content
+    - complementary:
+      - generic:
+        - generic: NEXIS
+        - button
+      - button:
+        - generic:
+          - generic: Production
+          - generic: us-east-1
+      - navigation:
+        - generic:
+          - paragraph: Workspace
+          - list:
+            - listitem:
+              - link:
+                - /url: /console
+                - generic: Dashboard
+            - listitem:
+              - link:
+                - /url: /console/projects
+                - generic: Projects
+            - listitem:
+              - link:
+                - /url: /console/incidents
+                - generic: Incidents
+            - listitem:
+              - link:
+                - /url: /console/approvals
+                - generic: Approvals
+            - listitem:
+              - link:
+                - /url: /console/audit
+                - generic: Audit Log
+        - generic:
+          - paragraph: Fleet
+          - list:
+            - listitem:
+              - link:
+                - /url: /console/agents
+                - generic: Agents
+                - generic: "9"
+            - listitem:
+              - link:
+                - /url: /console/workflows
+                - generic: Workflows
+            - listitem:
+              - link:
+                - /url: /console/activity
+                - generic: Activity Stream
+            - listitem:
+              - link:
+                - /url: /console/validator
+                - generic: Validator Sandbox
+        - generic:
+          - paragraph: Observability
+          - list:
+            - listitem:
+              - link:
+                - /url: /console/performance
+                - generic: Performance
+            - listitem:
+              - link:
+                - /url: /console/cost
+                - generic: Cost Tracker
+            - listitem:
+              - link:
+                - /url: /console/health
+                - generic: System Health
+        - generic:
+          - paragraph: Integrations
+          - list:
+            - listitem:
+              - link:
+                - /url: /console/integrations
+                - generic: All Integrations
+                - generic: 0/6
+            - listitem:
+              - link:
+                - /url: /console/webhooks
+                - generic: Webhook Activity
+            - listitem:
+              - link:
+                - /url: /console/connections
+                - generic: Connection Health
+        - generic:
+          - paragraph: Operations
+          - list:
+            - listitem:
+              - link:
+                - /url: /console/recovery
+                - generic: Recovery Pipeline
+            - listitem:
+              - link:
+                - /url: /console/eval
+                - generic: Eval Harness
+            - listitem:
+              - link:
+                - /url: /console/live-demo
+                - generic: Live Demo
+                - generic: "1"
+            - listitem:
+              - link:
+                - /url: /console/knowledge
+                - generic: Knowledge Base
+      - generic:
+        - link:
+          - /url: /console/settings/profile
+          - generic: Settings
+      - generic:
+        - paragraph: Live
+        - link:
+          - /url: /console/activity
+          - generic:
+            - generic: Agent Invoked
+            - generic: 2d ago
+          - paragraph: b140ee98-9e6b-421e-a52e-0d057c407230
+        - link:
+          - /url: /console/health
+          - generic: Status unknown
+    - generic:
+      - banner:
+        - generic:
+          - generic:
+            - generic: 🇺🇸
+            - generic: Production
+            - generic: us-east-1
+          - generic:
+            - navigation:
+              - generic: Settings
+              - generic: /
+              - generic: Profile
+        - generic:
+          - button:
+            - generic: Jump to…
+            - generic: ⌘K
+          - generic:
+            - button:
+              - generic: "5"
+          - button
+          - button [expanded]:
+            - generic: D
+            - generic: demo
+      - main:
+        - generic:
+          - navigation:
+            - paragraph: Settings
+            - link:
+              - /url: /console/settings/profile
+              - text: Profile
+            - link:
+              - /url: /console/settings/organization
+              - text: Organization
+            - link:
+              - /url: /console/settings/members
+              - text: Members & Roles
+            - link:
+              - /url: /console/settings/workspaces
+              - text: Workspaces
+            - link:
+              - /url: /console/settings/api-keys
+              - text: API Keys
+            - link:
+              - /url: /console/settings/sessions
+              - text: Sessions
+            - link:
+              - /url: /console/settings/billing
+              - text: Billing
+            - link:
+              - /url: /console/settings/preferences
+              - text: Preferences
+          - generic:
+            - generic:
+              - generic:
+                - heading [level=1]: Profile
+                - paragraph: Your account details. Display name + avatar coming soon.
+              - generic:
+                - generic:
+                  - paragraph: Email
+                  - paragraph: demo@nexis.local
+                - generic:
+                  - paragraph: User ID
+                  - paragraph: 196f36d3-d4f7-4ee4-bf9b-82c1c907c3de
+                - generic:
+                  - paragraph: Role
+                  - paragraph: owner
+  - button "Open Next.js Dev Tools" [ref=f3e17] [cursor=pointer]
+  - alert
+  - menu "Account menu" [active] [ref=f3e284]:
+    - generic [ref=f3e285]:
+      - text: Signed in as
+      - generic [ref=f3e286]: demo@nexis.local
+    - separator [ref=f3e287]
+    - menuitem "Profile" [ref=f3e288] [cursor=pointer]
+    - menuitem "Settings" [ref=f3e292] [cursor=pointer]
+    - separator [ref=f3e296]
+    - menuitem "Log out" [ref=f3e297] [cursor=pointer]

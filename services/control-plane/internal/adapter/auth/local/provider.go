@@ -322,7 +322,11 @@ func (p *Provider) IssueMagicLink(ctx context.Context, email, purpose string) er
 		return fmt.Errorf("magic link: persist: %w", err)
 	}
 
-	link := p.baseURL + "/auth/verify?token=" + plaintext
+	// The web verify page lives at apps/web/app/(auth)/verify/page.tsx.
+	// "(auth)" is a Next.js route *group* — it does not appear in the URL, so
+	// the served path is /verify. There is no /auth/* route and no rewrite in
+	// next.config.ts, so "/auth/verify" 404s every emailed magic link.
+	link := p.baseURL + "/verify?token=" + plaintext
 	if err := p.mailer.SendMagicLink(ctx, email, link); err != nil {
 		return fmt.Errorf("magic link: send: %w", err)
 	}

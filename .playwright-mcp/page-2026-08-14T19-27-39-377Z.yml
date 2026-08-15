@@ -1,0 +1,25 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]:
+      - link [ref=e5] [cursor=pointer]:
+        - /url: /
+        - img "NEXIS" [ref=e6]
+      - generic [ref=e7]:
+        - heading "Sign in to NEXIS" [level=1] [ref=e8]
+        - paragraph [ref=e9]: Welcome back. Use your email and password to continue.
+        - generic [ref=e10]:
+          - generic [ref=e11]:
+            - generic [ref=e12]: Email
+            - textbox "Email" [ref=e13]
+          - generic [ref=e14]:
+            - generic [ref=e15]: Password
+            - textbox "Password" [ref=e16]
+          - paragraph [ref=e17]:
+            - link "Forgot password?" [ref=e18] [cursor=pointer]:
+              - /url: /forgot-password
+          - button "Sign in" [ref=e19]
+        - paragraph [ref=e20]:
+          - text: Don't have an account?
+          - link "Sign up" [ref=e21] [cursor=pointer]:
+            - /url: /sign-up
+  - alert [ref=e22]

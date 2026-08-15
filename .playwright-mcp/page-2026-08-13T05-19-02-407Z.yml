@@ -1,0 +1,127 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - link "Skip to content" [ref=e3] [cursor=pointer]:
+      - /url: "#main"
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]: NEXIS
+        - button "Collapse sidebar" [ref=e9]
+      - 'button "Workspace: Production" [ref=e13]':
+        - generic [ref=e15]:
+          - generic [ref=e16]: Production
+          - generic [ref=e17]: us-east-1
+      - navigation "Console navigation" [ref=e21]:
+        - generic [ref=e22]:
+          - paragraph [ref=e23]: Workspace
+          - list [ref=e24]:
+            - listitem [ref=e25]:
+              - link "Dashboard" [ref=e26] [cursor=pointer]:
+                - /url: /console
+            - listitem [ref=e35]:
+              - link "Projects" [ref=e36] [cursor=pointer]:
+                - /url: /console/projects
+            - listitem [ref=e49]:
+              - link "Incidents" [ref=e50] [cursor=pointer]:
+                - /url: /console/incidents
+            - listitem [ref=e55]:
+              - link "Approvals" [ref=e56] [cursor=pointer]:
+                - /url: /console/approvals
+            - listitem [ref=e62]:
+              - link "Audit Log" [ref=e63] [cursor=pointer]:
+                - /url: /console/audit
+        - generic [ref=e69]:
+          - paragraph [ref=e70]: Fleet
+          - list [ref=e71]:
+            - listitem [ref=e72]:
+              - link "Agents 9 items" [ref=e73] [cursor=pointer]:
+                - /url: /console/agents
+                - generic [ref=e79]: Agents
+                - generic "9 items" [ref=e81]: "9"
+            - listitem [ref=e82]:
+              - link "Workflows" [ref=e83] [cursor=pointer]:
+                - /url: /console/workflows
+            - listitem [ref=e90]:
+              - link "Activity Stream" [ref=e91] [cursor=pointer]:
+                - /url: /console/activity
+            - listitem [ref=e96]:
+              - link "Validator Sandbox" [ref=e97] [cursor=pointer]:
+                - /url: /console/validator
+        - generic [ref=e104]:
+          - paragraph [ref=e105]: Observability
+          - list [ref=e106]:
+            - listitem [ref=e107]:
+              - link "Performance" [ref=e108] [cursor=pointer]:
+                - /url: /console/performance
+            - listitem [ref=e114]:
+              - link "Cost Tracker" [ref=e115] [cursor=pointer]:
+                - /url: /console/cost
+            - listitem [ref=e120]:
+              - link "System Health" [ref=e121] [cursor=pointer]:
+                - /url: /console/health
+        - generic [ref=e127]:
+          - paragraph [ref=e128]: Integrations
+          - list [ref=e129]:
+            - listitem [ref=e130]:
+              - link "All Integrations 0/6 connected" [ref=e131] [cursor=pointer]:
+                - /url: /console/integrations
+                - generic [ref=e134]: All Integrations
+                - generic "0/6 connected" [ref=e136]: 0/6
+            - listitem [ref=e137]:
+              - link "Webhook Activity" [ref=e138] [cursor=pointer]:
+                - /url: /console/webhooks
+            - listitem [ref=e145]:
+              - link "Connection Health" [ref=e146] [cursor=pointer]:
+                - /url: /console/connections
+        - generic [ref=e154]:
+          - paragraph [ref=e155]: Operations
+          - list [ref=e156]:
+            - listitem [ref=e157]:
+              - link "Recovery Pipeline" [ref=e158] [cursor=pointer]:
+                - /url: /console/recovery
+            - listitem [ref=e163]:
+              - link "Eval Harness" [ref=e164] [cursor=pointer]:
+                - /url: /console/eval
+            - listitem [ref=e169]:
+              - link "Live Demo 1 items" [ref=e170] [cursor=pointer]:
+                - /url: /console/live-demo
+                - generic [ref=e174]: Live Demo
+                - generic "1 items" [ref=e176]: "1"
+            - listitem [ref=e177]:
+              - link "Knowledge Base" [ref=e178] [cursor=pointer]:
+                - /url: /console/knowledge
+      - link "Settings" [ref=e184] [cursor=pointer]:
+        - /url: /console/settings/profile
+      - generic [ref=e190]:
+        - paragraph [ref=e191]: Live
+        - link "View activity stream" [ref=e198] [cursor=pointer]:
+          - /url: /console/activity
+          - generic [ref=e199]:
+            - generic [ref=e200]: Approval Decided
+            - generic [ref=e201]: 1d ago
+          - paragraph [ref=e202]: b140ee98-9e6b-421e-a52e-0d057c407230
+        - 'link "System status: Status unknown" [ref=e203] [cursor=pointer]':
+          - /url: /console/health
+          - generic [ref=e205]: Status unknown
+    - generic [ref=e206]:
+      - banner [ref=e207]:
+        - generic [ref=e208]:
+          - generic "Workspace Production in us-east-1" [ref=e209]:
+            - generic [ref=e210]: 🇺🇸
+            - generic [ref=e211]: Production
+            - generic [ref=e212]: us-east-1
+          - navigation "Breadcrumb" [ref=e215]:
+            - generic [ref=e216]: Home
+        - generic [ref=e217]:
+          - button "Open command palette" [ref=e218]:
+            - generic [ref=e219]: Jump to…
+            - generic [ref=e220]: ⌘K
+          - button "5 unread notifications" [ref=e222]:
+            - generic [ref=e226]: "5"
+          - button "Switch to dark mode" [ref=e227]
+          - button "Account menu" [ref=e230]:
+            - generic [ref=e231]: D
+            - generic [ref=e232]: demo
+      - main [ref=e235]:
+        - status [ref=e236]:
+          - generic [ref=e256]: Loading…
+  - alert [ref=e257]

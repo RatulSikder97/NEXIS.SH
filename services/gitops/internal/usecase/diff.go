@@ -12,6 +12,119 @@ import (
 // caller maps this to a 400 response.
 var errBadDiff = errors.New("gitops: unsupported diff shape")
 
+// diffOp is one line of a parsed hunk body.
+type diffOp struct {
+	kind  opKind
+	text  string
+	loose bool // unrecognised line: bind to the baseline, never compare
+}
+
+type opKind int
+
+const (
+	opCtx opKind = iota
+	opDel
+	opAdd
+)
+
+// locateHunk finds where a hunk actually applies in baseLines.
+//
+// Unified diffs produced by an LLM regularly carry the right edit with the
+// wrong coordinates: off-by-a-few line numbers, or context lines that were
+// paraphrased from a neighbouring file. Refusing those wastes a correct
+// patch, so this mirrors what patch(1) does — search outward from the
+// declared position for somewhere the hunk fits.
+//
+// The safety rule is asymmetric, and deliberately so:
+//
+//   - every "-" line must match the baseline EXACTLY. Those lines get
+//     deleted, so a fuzzy match there would silently destroy code the patch
+//     never meant to touch.
+//   - " " context lines may drift. They are only positional hints, and the
+//     applier re-emits the baseline's own text for them.
+//
+// A hunk of pure additions (no deletions, no context) has no anchor to
+// search on, so it applies at its declared offset. Returns the 0-based index
+// where the hunk starts, or an error when no position satisfies the rule.
+func locateHunk(baseLines []string, ops []diffOp, declared, minPos int) (int, error) {
+	var anchors []diffOp // the "-" and " " lines, in order
+	dels := 0
+	for _, op := range ops {
+		if op.kind == opAdd {
+			continue
+		}
+		anchors = append(anchors, op)
+		if op.kind == opDel {
+			dels++
+		}
+	}
+	if len(anchors) == 0 {
+		if declared < minPos {
+			return minPos, nil
+		}
+		return declared, nil
+	}
+
+	fits := func(at int) (int, bool) {
+		if at < minPos || at+len(anchors) > len(baseLines) {
+			return 0, false
+		}
+		drift, agree := 0, 0
+		for k, op := range anchors {
+			have := baseLines[at+k]
+			switch {
+			case op.kind == opDel:
+				if have != op.text {
+					return 0, false // never delete a line we can't see
+				}
+				agree++
+			case op.loose:
+				// unknown marker — accept whatever is there
+			case have == op.text, strings.TrimSpace(have) == strings.TrimSpace(op.text):
+				agree++
+			default:
+				drift++
+			}
+		}
+		// A hunk with no deletions has no exact anchor, so it needs at least
+		// one context line that genuinely matches. Without that the hunk is
+		// describing some other file and "relocating" it would mean splicing
+		// additions into an arbitrary spot.
+		if agree == 0 {
+			return 0, false
+		}
+		return drift, true
+	}
+
+	// Prefer the declared position, then the nearest position that fits with
+	// the least context drift. Scanning by increasing distance keeps the
+	// choice stable and close to the model's intent.
+	if drift, ok := fits(declared); ok && drift == 0 {
+		return declared, nil
+	}
+	best, bestDrift := -1, 1<<30
+	for radius := 0; radius <= len(baseLines); radius++ {
+		for _, at := range [2]int{declared - radius, declared + radius} {
+			drift, ok := fits(at)
+			if !ok || drift >= bestDrift {
+				continue
+			}
+			best, bestDrift = at, drift
+			if drift == 0 {
+				return best, nil
+			}
+		}
+	}
+	if best >= 0 {
+		return best, nil
+	}
+	if dels > 0 {
+		return 0, fmt.Errorf("no position matches the hunk's %d deleted line(s); "+
+			"the patch targets code that is not in the file", dels)
+	}
+	return 0, fmt.Errorf("hunk context does not fit the file")
+}
+
 // fileChange captures the post-state of one file in the diff. NewBody is
 // the full file content after applying every hunk in the diff to the
 // pre-existing baseline. IsNew is true when the original side of the diff
@@ -117,23 +230,29 @@ func parseUnifiedDiff(diff string, fetchBaseline func(path string) (string, erro
 			if err != nil {
 				return nil, fmt.Errorf("%w: %s", errBadDiff, hdr)
 			}
-			// Append any unchanged lines between the previous hunk's
-			// cursor and this hunk's old-start. Hunks against /dev/null
-			// (new files) declare "-0,0" — we clamp to the current cursor
-			// so the empty baseline path still walks through cleanly.
+			// The declared old-start is only a hint — locateHunk decides the
+			// real position and the unchanged lines in between are emitted
+			// afterwards. Walking the cursor forward here instead would pin
+			// it past the true location and make relocation impossible.
+			// Hunks against /dev/null declare "-0,0" (oldIdx -1) — clamp
+			// those to the current cursor so the empty-baseline path walks
+			// through cleanly.
 			oldIdx := oldStart - 1 // 0-based; "-0,0" produces -1 here
-			if oldIdx < 0 {
+			if oldIdx < 0 || oldIdx > len(baseLines) {
 				oldIdx = cursor
 			}
 			if oldIdx < cursor {
-				return nil, fmt.Errorf("%w: hunk overlap at %s", errBadDiff, hdr)
-			}
-			for cursor < oldIdx && cursor < len(baseLines) {
-				built = append(built, baseLines[cursor])
-				cursor++
+				oldIdx = cursor
 			}
 
 			i++ // consume hunk header
+
+			// Collect the hunk body before touching the baseline. Applying in
+			// two passes lets us relocate the hunk when the model's line
+			// numbers or context lines drift, which LLM-authored diffs do
+			// routinely — the edit is right but the surrounding lines are
+			// half-remembered.
+			var ops []diffOp
 			for i < len(lines) {
 				cur := lines[i]
 				if strings.HasPrefix(cur, "@@") || strings.HasPrefix(cur, "diff --git ") {
@@ -150,40 +269,47 @@ func parseUnifiedDiff(diff string, fetchBaseline func(path string) (string, erro
 				switch {
 				case strings.HasPrefix(cur, "+++"), strings.HasPrefix(cur, "---"):
 					// Header inside a hunk — defensive; treat as opaque.
-					i++
 				case strings.HasPrefix(cur, "+"):
-					built = append(built, cur[1:])
-					i++
+					ops = append(ops, diffOp{kind: opAdd, text: cur[1:]})
 				case strings.HasPrefix(cur, "-"):
+					ops = append(ops, diffOp{kind: opDel, text: cur[1:]})
+				case strings.HasPrefix(cur, " "):
+					ops = append(ops, diffOp{kind: opCtx, text: cur[1:]})
+				default:
+					// Unknown line inside hunk — a stray blank or malformed
+					// header. Treat as context with unknown text so it binds
+					// to whatever the baseline holds.
+					ops = append(ops, diffOp{kind: opCtx, text: cur, loose: true})
+				}
+				i++
+			}
+
+			at, err := locateHunk(baseLines, ops, oldIdx, cursor)
+			if err != nil {
+				return nil, fmt.Errorf("%w on %s: %v", errBadDiff, newPath, err)
+			}
+			// Emit untouched lines skipped by relocation.
+			for cursor < at && cursor < len(baseLines) {
+				built = append(built, baseLines[cursor])
+				cursor++
+			}
+			for _, op := range ops {
+				switch op.kind {
+				case opAdd:
+					built = append(built, op.text)
+				case opDel:
 					if cursor >= len(baseLines) {
 						return nil, fmt.Errorf("%w: deletion past EOF on %s", errBadDiff, newPath)
 					}
-					if baseLines[cursor] != cur[1:] {
-						return nil, fmt.Errorf("%w: context mismatch on %s line %d (have %q, diff %q)",
-							errBadDiff, newPath, cursor+1, baseLines[cursor], cur[1:])
-					}
 					cursor++
-					i++
-				case strings.HasPrefix(cur, " "):
+				case opCtx:
 					if cursor >= len(baseLines) {
 						return nil, fmt.Errorf("%w: context past EOF on %s", errBadDiff, newPath)
 					}
-					if baseLines[cursor] != cur[1:] {
-						return nil, fmt.Errorf("%w: context mismatch on %s line %d (have %q, diff %q)",
-							errBadDiff, newPath, cursor+1, baseLines[cursor], cur[1:])
-					}
-					built = append(built, cur[1:])
-					cursor++
-					i++
-				default:
-					// Unknown line inside hunk — could be a stray blank
-					// or a malformed header. Treat as context.
-					if cursor >= len(baseLines) {
-						return nil, fmt.Errorf("%w: hunk extends past EOF on %s", errBadDiff, newPath)
-					}
+					// Take the baseline's text, not the diff's: context drift
+					// must not rewrite lines the patch never intended to touch.
 					built = append(built, baseLines[cursor])
 					cursor++
-					i++
 				}
 			}
 		}

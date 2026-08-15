@@ -1,13 +1,16 @@
 ```{=openxml}
-<w:p><w:pPr><w:spacing w:after="600"/></w:pPr></w:p>
-<w:p><w:pPr><w:spacing w:after="500"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>Nexis: A Multi-Agent Autonomous Engineering Platform with Closed-Loop Fault Recovery</w:t></w:r></w:p>
+<w:p><w:pPr><w:spacing w:after="300"/></w:pPr></w:p>
+<w:p><w:pPr><w:spacing w:after="100"/></w:pPr><w:r><w:rPr><w:sz w:val="18"/><w:spacing w:val="26"/><w:color w:val="595959"/></w:rPr><w:t>UNIVERSITY OF DHAKA &#183; INSTITUTE OF INFORMATION TECHNOLOGY (IIT)</w:t></w:r></w:p>
+<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:color="1A1A1A" w:space="6"/></w:pBdr><w:spacing w:after="750"/></w:pPr></w:p>
+<w:p><w:pPr><w:spacing w:after="500"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="34"/></w:rPr><w:t>Nexis: A Multi-Agent Autonomous Engineering Platform with Closed-Loop Fault Recovery</w:t></w:r></w:p>
 <w:p><w:pPr><w:spacing w:after="260"/></w:pPr><w:r><w:t>by</w:t></w:r></w:p>
-<w:p><w:pPr><w:spacing w:after="500"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t>Ratul Sikder</w:t></w:r></w:p>
+<w:p><w:pPr><w:spacing w:after="750"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t>Ratul Sikder</w:t></w:r></w:p>
 <w:p><w:pPr><w:spacing w:after="60"/></w:pPr><w:r><w:t>Submitted to the Institute of Information Technology (IIT)</w:t></w:r></w:p>
-<w:p><w:pPr><w:spacing w:after="500"/></w:pPr><w:r><w:t>in partial fulfillment of the degree requirements</w:t></w:r></w:p>
+<w:p><w:pPr><w:spacing w:after="900"/></w:pPr><w:r><w:t>in partial fulfillment of the degree requirements</w:t></w:r></w:p>
 <w:p><w:pPr><w:spacing w:after="60"/></w:pPr><w:r><w:t>at the</w:t></w:r></w:p>
 <w:p><w:pPr><w:spacing w:after="260"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t>UNIVERSITY OF DHAKA</w:t></w:r></w:p>
-<w:p><w:pPr><w:spacing w:after="600"/></w:pPr><w:r><w:t>August 2026</w:t></w:r></w:p>
+<w:p><w:pPr><w:spacing w:after="900"/></w:pPr><w:r><w:t>August 2026</w:t></w:r></w:p>
+<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:color="1A1A1A" w:space="8"/></w:pBdr><w:spacing w:after="220"/></w:pPr></w:p>
 <w:p><w:pPr><w:spacing w:after="200"/></w:pPr><w:r><w:t>&#169; University of Dhaka 2026. All rights reserved.</w:t></w:r></w:p>
 <w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="20"/></w:rPr><w:t>The author hereby grants the Institute of Information Technology (IIT), University of Dhaka, permission to reproduce and distribute copies of this project report, in whole or in part, for academic purposes.</w:t></w:r></w:p>
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -17,15 +20,16 @@
 <w:p><w:pPr><w:spacing w:after="60"/></w:pPr><w:r><w:t>Submitted to the Institute of Information Technology (IIT) on 11 August 2026,</w:t></w:r></w:p>
 <w:p><w:pPr><w:spacing w:after="500"/></w:pPr><w:r><w:t>in partial fulfillment of the degree requirements</w:t></w:r></w:p>
 <w:p><w:pPr><w:spacing w:after="600"/></w:pPr><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:t>This is to declare that this project is the author's original work. No part of it has been submitted elsewhere, in whole or in part, for the award of any other degree or diploma, and the plagiarism policy stated by the supervisor has been maintained.</w:t></w:r></w:p>
-<w:p><w:pPr><w:spacing w:after="20"/></w:pPr><w:r><w:t>Author</w:t></w:r><w:r><w:t xml:space="preserve"> ....................................................................................</w:t></w:r></w:p>
-<w:p><w:pPr><w:ind w:left="600"/><w:spacing w:after="20"/></w:pPr><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>Institute of Information Technology (IIT), University of Dhaka</w:t></w:r></w:p>
-<w:p><w:pPr><w:ind w:left="600"/><w:spacing w:after="600"/></w:pPr><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>11 August 2026</w:t></w:r></w:p>
-<w:p><w:pPr><w:spacing w:after="20"/></w:pPr><w:r><w:t>Certified by</w:t></w:r><w:r><w:t xml:space="preserve"> ...........................................................................</w:t></w:r></w:p>
-<w:p><w:pPr><w:ind w:left="600"/><w:spacing w:after="20"/></w:pPr><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>_______________________________</w:t></w:r></w:p>
-<w:p><w:pPr><w:ind w:left="600"/><w:spacing w:after="600"/></w:pPr><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>Project Supervisor</w:t></w:r></w:p>
-<w:p><w:pPr><w:spacing w:after="20"/></w:pPr><w:r><w:t>Accepted by</w:t></w:r><w:r><w:t xml:space="preserve"> ..........................................................................</w:t></w:r></w:p>
-<w:p><w:pPr><w:ind w:left="600"/><w:spacing w:after="20"/></w:pPr><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>_______________________________</w:t></w:r></w:p>
-<w:p><w:pPr><w:ind w:left="600"/></w:pPr><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>Director, Institute of Information Technology (IIT)</w:t></w:r></w:p>
+<w:tbl>
+<w:tblPr><w:tblStyle w:val="Table"/><w:tblW w:w="9350" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="8" w:color="000000"/><w:left w:val="single" w:sz="8" w:color="000000"/><w:bottom w:val="single" w:sz="8" w:color="000000"/><w:right w:val="single" w:sz="8" w:color="000000"/><w:insideH w:val="none"/><w:insideV w:val="none"/></w:tblBorders><w:tblCellMar><w:top w:w="260" w:type="dxa"/><w:bottom w:w="260" w:type="dxa"/><w:left w:w="220" w:type="dxa"/><w:right w:w="220" w:type="dxa"/></w:tblCellMar></w:tblPr>
+<w:tblGrid><w:gridCol w:w="9350"/></w:tblGrid>
+<w:tr><w:tc>
+<w:tcPr><w:tcW w:w="9350" w:type="dxa"/></w:tcPr>
+<w:p><w:pPr><w:spacing w:after="280"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Supervisor's Name:  </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>_______________________________</w:t></w:r></w:p>
+<w:p><w:pPr><w:spacing w:after="280"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Signature of the Supervisor:  </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>_______________________________</w:t></w:r></w:p>
+<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Date:  </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>____________</w:t></w:r></w:p>
+</w:tc></w:tr>
+</w:tbl>
 ```
 
 # Acknowledgement

@@ -5,12 +5,12 @@
 //
 // The package owns two concerns:
 //
-//   1. ClientBuilder — given an org id, return a *gh.Client signed with the
-//      org's GitHub App installation. Uses ghinstallation/v2 for the JWT
-//      handshake.
-//   2. Client interface — the narrow set of GitHub operations OpenPR needs
-//      (read ref, create commit, create branch, open PR). Tests inject a
-//      fake implementation; production wires NewClient.
+//  1. ClientBuilder — given an org id, return a *gh.Client signed with the
+//     org's GitHub App installation. Uses ghinstallation/v2 for the JWT
+//     handshake.
+//  2. Client interface — the narrow set of GitHub operations OpenPR needs
+//     (read ref, create commit, create branch, open PR). Tests inject a
+//     fake implementation; production wires NewClient.
 package github
 
 import (
@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	gh "github.com/google/go-github/v60/github"
@@ -213,6 +214,13 @@ func (g *ghClient) CreateCommit(ctx context.Context, owner, repo, message, treeS
 	return Commit{SHA: commit.GetSHA(), Message: commit.GetMessage()}, nil
 }
 
+// CreateRef creates the branch, and is idempotent: GitHub answers a repeat
+// call with 422 "Reference already exists". That happens routinely because
+// the caller is a Temporal activity — any failure after this step (a flaky
+// OpenPR, a rejected audit row) replays the whole activity, and a hard error
+// here would strand a run whose branch was already pushed. On conflict we
+// force the existing ref onto the new commit so the branch always reflects
+// the latest attempt.
 func (g *ghClient) CreateRef(ctx context.Context, owner, repo, ref, sha string) (Reference, error) {
 	refName := ref
 	objSHA := sha
@@ -221,9 +229,30 @@ func (g *ghClient) CreateRef(ctx context.Context, owner, repo, ref, sha string) 
 		Object: &gh.GitObject{SHA: &objSHA},
 	})
 	if err != nil {
-		return Reference{}, err
+		if !isRefExistsErr(err) {
+			return Reference{}, err
+		}
+		updated, _, uerr := g.c.Git.UpdateRef(ctx, owner, repo, &gh.Reference{
+			Ref:    &refName,
+			Object: &gh.GitObject{SHA: &objSHA},
+		}, true)
+		if uerr != nil {
+			return Reference{}, fmt.Errorf("ref %s exists and could not be updated: %w", ref, uerr)
+		}
+		return Reference{Name: updated.GetRef(), SHA: updated.GetObject().GetSHA()}, nil
 	}
 	return Reference{Name: r.GetRef(), SHA: r.GetObject().GetSHA()}, nil
+}
+
+// isRefExistsErr reports whether err is GitHub's 422 for an already-present
+// ref. The API returns it as a validation error rather than a 409.
+func isRefExistsErr(err error) bool {
+	var gerr *gh.ErrorResponse
+	if errors.As(err, &gerr) && gerr.Response != nil &&
+		gerr.Response.StatusCode == http.StatusUnprocessableEntity {
+		return strings.Contains(strings.ToLower(gerr.Message), "reference already exists")
+	}
+	return false
 }
 
 func (g *ghClient) OpenPR(ctx context.Context, owner, repo, title, body, head, base string) (PR, error) {
@@ -238,7 +267,28 @@ func (g *ghClient) OpenPR(ctx context.Context, owner, repo, title, body, head, b
 		Base:  &ba,
 	})
 	if err != nil {
+		// Same replay concern as CreateRef: if the activity is retried after
+		// the PR was already opened, GitHub rejects the duplicate with 422
+		// "A pull request already exists". Return the existing one so the
+		// run reports the PR it actually produced instead of failing.
+		if existing, ok := g.findOpenPR(ctx, owner, repo, head); ok {
+			return existing, nil
+		}
 		return PR{}, err
 	}
 	return PR{Number: pr.GetNumber(), HTMLURL: pr.GetHTMLURL()}, nil
+}
+
+// findOpenPR looks up the open PR whose head branch is `head`. Best-effort:
+// a lookup failure just means the caller surfaces the original error.
+func (g *ghClient) findOpenPR(ctx context.Context, owner, repo, head string) (PR, bool) {
+	// GitHub wants head qualified as "owner:branch" when filtering.
+	list, _, lerr := g.c.PullRequests.List(ctx, owner, repo, &gh.PullRequestListOptions{
+		State: "open",
+		Head:  owner + ":" + head,
+	})
+	if lerr != nil || len(list) == 0 {
+		return PR{}, false
+	}
+	return PR{Number: list[0].GetNumber(), HTMLURL: list[0].GetHTMLURL()}, true
 }

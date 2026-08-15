@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nexis-eco/nexis/services/control-plane/internal/domain"
@@ -30,11 +31,18 @@ type OpenAIProvider struct {
 	http *http.Client
 }
 
+// NewOpenAIProvider builds the client. BaseURL must include the API version
+// segment (".../v1", ".../v3/openai", …) because OpenAI-compatible gateways
+// disagree on where the version sits: OpenAI serves /v1/chat/completions
+// while Novita serves /v3/openai/chat/completions. Keeping the version in
+// the configured base — rather than hardcoding "/v1" into every request
+// path — is what lets one client talk to both.
 func NewOpenAIProvider(cfg OpenAIConfig) *OpenAIProvider {
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.openai.com"
+		cfg.BaseURL = "https://api.openai.com/v1"
 	}
-	return &OpenAIProvider{cfg: cfg, http: &http.Client{Timeout: 60 * time.Second}}
+	cfg.BaseURL = strings.TrimSuffix(cfg.BaseURL, "/")
+	return &OpenAIProvider{cfg: cfg, http: &http.Client{Timeout: 180 * time.Second}}
 }
 
 func (p *OpenAIProvider) Name() string { return "openai" }
@@ -105,7 +113,7 @@ func (p *OpenAIProvider) Complete(ctx context.Context, req CompletionRequest) (C
 	}
 	buf, _ := json.Marshal(body)
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.cfg.BaseURL+"/v1/chat/completions", bytes.NewReader(buf))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.cfg.BaseURL+"/chat/completions", bytes.NewReader(buf))
 	if err != nil {
 		return CompletionResponse{}, fmt.Errorf("openai: build request: %w", err)
 	}
@@ -195,7 +203,7 @@ func (p *OpenAIProvider) Embed(ctx context.Context, model string, texts []string
 		return [][]float32{}, nil
 	}
 	body, _ := json.Marshal(openaiEmbedReq{Model: model, Input: texts})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.cfg.BaseURL+"/v1/embeddings", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.cfg.BaseURL+"/embeddings", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("openai embed build: %w", err)
 	}

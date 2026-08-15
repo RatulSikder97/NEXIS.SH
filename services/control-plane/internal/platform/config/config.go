@@ -16,13 +16,21 @@ type Config struct {
 	AppEnv string
 
 	// LLM (Phase 1)
-	LLMProvider      string
-	OpenAIAPIKey     string
-	OpenAIModelSyn   string
-	OpenAIModelCheap string
-	OllamaBaseURL    string
-	OllamaModelGen   string
-	OllamaModelCode  string
+	LLMProvider  string
+	OpenAIAPIKey string
+	// OpenAIBaseURL points the OpenAI-compatible client at an alternate
+	// gateway (Novita, Together, vLLM, …). Must include the version path
+	// segment, e.g. https://api.novita.ai/v3/openai.
+	OpenAIBaseURL string
+	// EmbeddingProvider pins embeddings to a provider independent of
+	// LLMProvider, so chat can run on a hosted gateway while embeddings
+	// stay local. "" follows LLMProvider.
+	EmbeddingProvider string
+	OpenAIModelSyn    string
+	OpenAIModelCheap  string
+	OllamaBaseURL     string
+	OllamaModelGen    string
+	OllamaModelCode   string
 
 	// Database — Phase 1 used DATABASE_URL (superuser/owner) for migrations
 	// and dev-time admin queries. Phase 2 introduces DATABASE_URL_APP, used
@@ -207,6 +215,17 @@ type Config struct {
 	TemporalCloud   bool   // when true, dial Temporal Cloud over mTLS
 	OTLPTarget      string // "local" | "grafana_cloud"
 
+	// AllowSelfHosted opts a single-VM deployment out of the Phase 7 managed-
+	// provider contract enforced by FatalIfLocalInCloud. A self-hosted install
+	// runs Postgres/MinIO/Temporal/SMTP on the box itself and legitimately has
+	// every selector at its "local" value, but still needs AppEnv != "dev" so
+	// that session cookies carry the Secure flag. Without this escape hatch the
+	// only way to get Secure cookies without a boot abort is to spell APP_ENV
+	// "production" — which works purely because FatalIfLocalInCloud matches the
+	// exact strings "staging"/"prod" while the cookie check tests != "dev".
+	// That is an accident, not a contract; this flag makes the intent explicit.
+	AllowSelfHosted bool
+
 	// AWS adapter config. Resolved at runtime from Secrets Manager in
 	// staging/prod; populated from env in dev.
 	KMSKeyARN           string
@@ -313,13 +332,15 @@ func Load() Config {
 		Port:   env("PORT", "8080"),
 		AppEnv: env("APP_ENV", "dev"),
 
-		LLMProvider:      env("LLM_PROVIDER", "openai"),
-		OpenAIAPIKey:     env("OPENAI_API_KEY", ""),
-		OpenAIModelSyn:   env("OPENAI_MODEL_SYNTHESIS", "gpt-4o"),
-		OpenAIModelCheap: env("OPENAI_MODEL_CHEAP", "gpt-4o-mini"),
-		OllamaBaseURL:    env("OLLAMA_BASE_URL", "http://host.docker.internal:11434"),
-		OllamaModelGen:   env("OLLAMA_MODEL_GENERAL", "llama3.1:8b"),
-		OllamaModelCode:  env("OLLAMA_MODEL_CODE", "qwen2.5-coder:14b"),
+		LLMProvider:       env("LLM_PROVIDER", "openai"),
+		OpenAIAPIKey:      env("OPENAI_API_KEY", ""),
+		OpenAIBaseURL:     env("OPENAI_BASE_URL", ""),
+		EmbeddingProvider: env("EMBEDDING_PROVIDER", ""),
+		OpenAIModelSyn:    env("OPENAI_MODEL_SYNTHESIS", "gpt-4o"),
+		OpenAIModelCheap:  env("OPENAI_MODEL_CHEAP", "gpt-4o-mini"),
+		OllamaBaseURL:     env("OLLAMA_BASE_URL", "http://host.docker.internal:11434"),
+		OllamaModelGen:    env("OLLAMA_MODEL_GENERAL", "llama3.1:8b"),
+		OllamaModelCode:   env("OLLAMA_MODEL_CODE", "qwen2.5-coder:14b"),
 
 		DatabaseURL:    env("DATABASE_URL", ""),
 		DatabaseURLApp: env("DATABASE_URL_APP", ""),
@@ -416,6 +437,7 @@ func Load() Config {
 		ValidatorRunner: env("VALIDATOR_RUNNER", "docker"),
 		TemporalCloud:   parseBool(env("TEMPORAL_CLOUD", "0")),
 		OTLPTarget:      env("OTLP_TARGET", "local"),
+		AllowSelfHosted: env("ALLOW_SELF_HOSTED", "0") == "1",
 
 		KMSKeyARN:           env("KMS_KEY_ARN", ""),
 		S3PatchBucket:       env("S3_PATCH_BUCKET", ""),
@@ -500,6 +522,12 @@ func Load() Config {
 // Callers should treat the returned error as fatal (os.Exit(2)).
 func (c *Config) FatalIfLocalInCloud() error {
 	if c.AppEnv != "staging" && c.AppEnv != "prod" {
+		return nil
+	}
+	// Self-hosted single-VM installs run every dependency locally by design.
+	// The operator has asserted that explicitly, so the managed-provider
+	// contract does not apply. See Config.AllowSelfHosted.
+	if c.AllowSelfHosted {
 		return nil
 	}
 	var bad []string

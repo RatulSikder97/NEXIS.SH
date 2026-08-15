@@ -25,11 +25,13 @@
 #   - All sensitive env vars use ${VAR:?...} so missing values fail fast at
 #     `docker compose up`, instead of silently booting with a known-weak
 #     default. Operators must supply real values via `.env`.
-#   - Internal-only services (postgres, redis, minio, temporal, neo4j) are
-#     bound to 127.0.0.1 — they are reachable from sibling containers via
-#     the bridge network but not from the host LAN. Dev UIs the operator
-#     actually opens in a browser (web 3000, control-plane 8080, mailhog
-#     8025, grafana 3030, temporal-ui 8233) stay publicly bound.
+#   - EVERY published port is bound to 127.0.0.1. Containers still reach each
+#     other over the bridge network by service name; nothing is exposed to the
+#     host LAN or, on a cloud VM, to the internet. Reach the dev UIs (web 3000,
+#     control-plane 8080, mailhog 8025, grafana 3030, temporal-ui 8233) on
+#     localhost as usual, or over an SSH tunnel on a remote box. In production
+#     the Caddy reverse proxy in docker-compose.prod.yml is the only process
+#     holding a public listener.
 #   - Distroless Go services expose a built-in `--healthcheck` flag so the
 #     same image can satisfy in-container HEALTHCHECKs without shipping
 #     curl/wget. See services/control-plane/cmd/server/main.go.
@@ -137,7 +139,7 @@ services:
     <<: *default-logging
     ports:
       - "127.0.0.1:1025:1025"   # SMTP — internal only
-      - "8025:8025"             # web UI — dev convenience
+      - "127.0.0.1:8025:8025"   # web UI — reach via localhost / SSH tunnel
     deploy:
       resources:
         limits:
@@ -181,7 +183,7 @@ services:
       temporal:
         condition: service_healthy
     ports:
-      - "8233:8080"
+      - "127.0.0.1:8233:8080"
     networks: [nexis]
 
   neo4j:
@@ -316,7 +318,7 @@ services:
       - ./infra/observability/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - "3030:3000"
+      - "127.0.0.1:3030:3000"
     depends_on:
       - prometheus
       - loki
@@ -347,7 +349,7 @@ services:
       OTEL_SERVICE_NAME: nexis-web
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -443,7 +445,7 @@ services:
       OTEL_SERVICE_NAME: nexis-control-plane
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     # Liveness check uses the binary's built-in `--healthcheck` subcommand,
     # which dials http://127.0.0.1:$PORT/healthz and exits 0/1. This is the
     # distroless-friendly alternative to curl/wget: same binary, no extra

@@ -62,14 +62,13 @@ h1.paragraph_format.page_break_before = True
 h1.paragraph_format.keep_with_next = True
 style_bottom_border(h1, sz=14, color=INK_HEX, space=8)
 
-# Heading 2 = Section — 16pt bold, ink left bar
+# Heading 2 = Section — 16pt bold
 h2 = doc.styles['Heading2']
 set_font(h2, size=16, bold=True, color=INK)
 h2.paragraph_format.space_before = Pt(20)
 h2.paragraph_format.space_after = Pt(10)
 h2.paragraph_format.page_break_before = False
 h2.paragraph_format.keep_with_next = True
-style_left_accent_bar(h2, sz=20, color=INK_HEX, space=8, indent_twips=170)
 
 # Heading 3 = Subsection — 13pt bold
 h3 = doc.styles['Heading3']

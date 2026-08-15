@@ -157,3 +157,63 @@ func TestParseHunkHeader(t *testing.T) {
 		require.Equal(t, tc.neW, n, tc.in)
 	}
 }
+
+// TestParseUnifiedDiff_RelocatesOnContextDrift covers the LLM-authored diff
+// shape: the deleted line is quoted exactly, but the surrounding context was
+// half-remembered (req.args.get vs req.get) and the line numbers are off.
+// The edit is correct, so it must apply — and the drifted context lines must
+// come back as the baseline had them, not as the diff imagined them.
+func TestParseUnifiedDiff_RelocatesOnContextDrift(t *testing.T) {
+	baseline := strings.Join([]string{
+		"def handler(req):",
+		`    hits = int(req.get("hits", 0))`,
+		`    total = int(req.get("total", 0))`,
+		"",
+		`    return safe_div(hits, total).quantize(Decimal("0.01"))`,
+		"",
+	}, "\n")
+	diff := strings.Join([]string{
+		"diff --git a/api.py b/api.py",
+		"--- a/api.py",
+		"+++ b/api.py",
+		"@@ -21,7 +21,9 @@ def handler(req):",
+		`     hits = int(req.args.get("hits", 0))`,
+		`     total = int(req.args.get("total", 0))`,
+		`-    return safe_div(hits, total).quantize(Decimal("0.01"))`,
+		"+    result = safe_div(hits, total)",
+		"+    if result is None:",
+		`+        raise ValueError("total must not be zero")`,
+		`+    return result.quantize(Decimal("0.01"))`,
+	}, "\n")
+
+	out, err := parseUnifiedDiff(diff, func(string) (string, error) { return baseline, nil })
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	body := out[0].NewBody
+	require.Contains(t, body, "if result is None:")
+	// The buggy line is gone...
+	require.NotContains(t, body, `return safe_div(hits, total).quantize`)
+	// ...and the drifted context kept the file's real text, not the diff's.
+	require.Contains(t, body, `hits = int(req.get("hits", 0))`)
+	require.NotContains(t, body, "req.args.get")
+}
+
+// TestParseUnifiedDiff_RefusesUnseenDeletion guards the asymmetry: a "-" line
+// that does not exist in the baseline must never be relocated onto some other
+// line, because applying it would delete code the patch never described.
+func TestParseUnifiedDiff_RefusesUnseenDeletion(t *testing.T) {
+	diff := strings.Join([]string{
+		"diff --git a/foo.txt b/foo.txt",
+		"--- a/foo.txt",
+		"+++ b/foo.txt",
+		"@@ -1,2 +1,2 @@",
+		" keep_me",
+		"-line_that_does_not_exist",
+		"+replacement",
+	}, "\n")
+	_, err := parseUnifiedDiff(diff, func(string) (string, error) {
+		return "keep_me\nsomething_real\n", nil
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, errBadDiff)
+}

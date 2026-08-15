@@ -146,7 +146,12 @@ func (p *OllamaProvider) Embed(ctx context.Context, model string, texts []string
 	out := make([][]float32, len(texts))
 	for i, t := range texts {
 		body, _ := json.Marshal(ollamaEmbedReq{Model: model, Input: t})
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.cfg.BaseURL+"/api/embeddings", bytes.NewReader(body))
+		// /api/embed, not the legacy /api/embeddings: the old endpoint keys
+		// off "prompt" and answers an {"input":...} body with HTTP 200 and an
+		// empty embedding, so every seed silently produced zero-length
+		// vectors. /api/embed takes "input" and returns {"embeddings":[[...]]},
+		// which the Embeddings fallback below already handles.
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.cfg.BaseURL+"/api/embed", bytes.NewReader(body))
 		if err != nil {
 			return nil, fmt.Errorf("ollama embed build: %w", err)
 		}

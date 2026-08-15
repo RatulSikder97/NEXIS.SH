@@ -11,6 +11,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -133,6 +135,20 @@ func IntegrationsDisconnect(reg *integration.Registry, aud domain.AuditWriter, a
 	}
 }
 
+// mockInstallationID derives a deterministic, numeric installation id from an
+// org uuid. Hex-decoding the first 8 characters yields a value well inside
+// int64 and stable across repeated installs for the same org. Falls back to a
+// fixed id when the org id isn't uuid-shaped (tests, stub principals).
+func mockInstallationID(orgID string) string {
+	hexPart := strings.ReplaceAll(orgID, "-", "")
+	if len(hexPart) >= 8 {
+		if n, err := strconv.ParseUint(hexPart[:8], 16, 64); err == nil && n > 0 {
+			return strconv.FormatUint(n, 10)
+		}
+	}
+	return "98765"
+}
+
 // GitHubMockInstall wires GET /v1/integrations/github/mock_install. In dev only
 // (cfg.AppEnv == "dev"), it Connects a synthetic installation derived from the
 // caller's org_id and 302s back to the console so the operator can verify the
@@ -150,13 +166,12 @@ func GitHubMockInstall(reg *integration.Registry, aud domain.AuditWriter, appBas
 			httpJSON(w, http.StatusNotFound, map[string]string{"error": "github provider not configured"})
 			return
 		}
-		// princ.OrgID is a uuid string; first 8 chars give a stable id without
-		// leaking the full org id in the installation field.
-		idSuffix := princ.OrgID
-		if len(idSuffix) > 8 {
-			idSuffix = idSuffix[:8]
-		}
-		installID := "mock-" + idSuffix
+		// GitHub App mode parses installation_id with strconv.ParseInt, so the
+		// mock id has to be numeric — a "mock-<org8>" string made Connect fail
+		// with "installation_id not numeric" and the dev path never worked.
+		// Derive a stable positive int64 from the org uuid's first 8 hex chars
+		// so each org keeps a distinct, repeatable installation id.
+		installID := mockInstallationID(princ.OrgID)
 		c, err := p.Connect(r.Context(), princ, map[string]any{"installation_id": installID})
 		if err != nil {
 			httpJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

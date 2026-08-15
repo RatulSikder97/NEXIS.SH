@@ -33,9 +33,28 @@ func NewProviders(cfg config.Config, logger *slog.Logger) (Providers, error) {
 	switch cfg.LLMProvider {
 	case "openai":
 		op := NewOpenAIProvider(OpenAIConfig{
+			BaseURL: cfg.OpenAIBaseURL,
 			APIKey:  cfg.OpenAIAPIKey,
 			Default: cfg.OpenAIModelCheap,
 		})
+		// EMBEDDING_PROVIDER=ollama keeps vectors local while chat runs on a
+		// hosted gateway. That combination matters because code_embeddings
+		// has a fixed column width: re-pointing embeddings at a different
+		// model silently invalidates every stored vector, and retrieval
+		// starts returning nonsense rather than failing loudly.
+		if cfg.EmbeddingProvider == "ollama" {
+			ol := NewOllamaProvider(OllamaConfig{
+				BaseURL: cfg.OllamaBaseURL,
+				Default: cfg.OllamaModelGen,
+			})
+			if ol.ProbeModel(context.Background(), cfg.OllamaEmbedModel) {
+				return Providers{LLM: op, Embedding: ol}, nil
+			}
+			if logger != nil {
+				logger.Warn("EMBEDDING_PROVIDER=ollama but embed model missing — using gateway embeddings",
+					"missing_model", cfg.OllamaEmbedModel)
+			}
+		}
 		return Providers{LLM: op, Embedding: op}, nil
 	case "ollama":
 		ol := NewOllamaProvider(OllamaConfig{

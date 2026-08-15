@@ -66,7 +66,6 @@ h2.paragraph_format.space_before = Pt(10)
 h2.paragraph_format.space_after = Pt(4)
 h2.paragraph_format.page_break_before = False
 h2.paragraph_format.keep_with_next = True
-style_left_accent_bar(h2, sz=18, color=INK_HEX, space=6, indent_twips=150)
 
 h3 = doc.styles['Heading3']
 set_font(h3, size=11, bold=True, color=INK)

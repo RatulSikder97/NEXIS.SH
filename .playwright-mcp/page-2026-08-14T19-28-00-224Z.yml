@@ -1,0 +1,589 @@
+- generic [ref=e1]:
+  - alert [ref=e22]
+  - generic [ref=e23]:
+    - link "Skip to content" [ref=e24] [cursor=pointer]:
+      - /url: "#main"
+    - complementary [ref=e25]:
+      - generic [ref=e26]:
+        - generic [ref=e27]: NEXIS
+        - button "Collapse sidebar" [ref=e30]
+      - 'button "Workspace: Verify WS" [ref=e34]':
+        - generic [ref=e36]:
+          - generic [ref=e37]: Verify WS
+          - generic [ref=e38]: ap-south-1
+      - navigation "Console navigation" [ref=e42]:
+        - generic [ref=e43]:
+          - paragraph [ref=e44]: Workspace
+          - list [ref=e45]:
+            - listitem [ref=e46]:
+              - link "Dashboard" [ref=e47] [cursor=pointer]:
+                - /url: /console
+            - listitem [ref=e56]:
+              - link "Projects" [ref=e57] [cursor=pointer]:
+                - /url: /console/projects
+            - listitem [ref=e70]:
+              - link "Incidents" [ref=e71] [cursor=pointer]:
+                - /url: /console/incidents
+            - listitem [ref=e76]:
+              - link "Approvals" [ref=e77] [cursor=pointer]:
+                - /url: /console/approvals
+            - listitem [ref=e83]:
+              - link "Audit Log" [ref=e84] [cursor=pointer]:
+                - /url: /console/audit
+        - generic [ref=e90]:
+          - paragraph [ref=e91]: Fleet
+          - list [ref=e92]:
+            - listitem [ref=e93]:
+              - link "Agents 9 items" [ref=e94] [cursor=pointer]:
+                - /url: /console/agents
+                - generic [ref=e100]: Agents
+                - generic "9 items" [ref=e102]: "9"
+            - listitem [ref=e103]:
+              - link "Workflows" [ref=e104] [cursor=pointer]:
+                - /url: /console/workflows
+            - listitem [ref=e111]:
+              - link "Activity Stream" [ref=e112] [cursor=pointer]:
+                - /url: /console/activity
+            - listitem [ref=e117]:
+              - link "Validator Sandbox" [ref=e118] [cursor=pointer]:
+                - /url: /console/validator
+        - generic [ref=e125]:
+          - paragraph [ref=e126]: Observability
+          - list [ref=e127]:
+            - listitem [ref=e128]:
+              - link "Performance" [ref=e129] [cursor=pointer]:
+                - /url: /console/performance
+            - listitem [ref=e135]:
+              - link "Cost Tracker" [ref=e136] [cursor=pointer]:
+                - /url: /console/cost
+            - listitem [ref=e141]:
+              - link "System Health" [ref=e142] [cursor=pointer]:
+                - /url: /console/health
+        - generic [ref=e148]:
+          - paragraph [ref=e149]: Integrations
+          - list [ref=e150]:
+            - listitem [ref=e151]:
+              - link "All Integrations 0/6 connected" [ref=e152] [cursor=pointer]:
+                - /url: /console/integrations
+                - generic [ref=e155]: All Integrations
+                - generic "0/6 connected" [ref=e157]: 0/6
+            - listitem [ref=e158]:
+              - link "Webhook Activity" [ref=e159] [cursor=pointer]:
+                - /url: /console/webhooks
+            - listitem [ref=e166]:
+              - link "Connection Health" [ref=e167] [cursor=pointer]:
+                - /url: /console/connections
+        - generic [ref=e175]:
+          - paragraph [ref=e176]: Operations
+          - list [ref=e177]:
+            - listitem [ref=e178]:
+              - link "Recovery Pipeline" [ref=e179] [cursor=pointer]:
+                - /url: /console/recovery
+            - listitem [ref=e184]:
+              - link "Eval Harness" [ref=e185] [cursor=pointer]:
+                - /url: /console/eval
+            - listitem [ref=e190]:
+              - link "Live Demo 27 items" [ref=e191] [cursor=pointer]:
+                - /url: /console/live-demo
+                - generic [ref=e195]: Live Demo
+                - generic "27 items" [ref=e197]: "27"
+            - listitem [ref=e198]:
+              - link "Knowledge Base" [ref=e199] [cursor=pointer]:
+                - /url: /console/knowledge
+      - link "Settings" [ref=e205] [cursor=pointer]:
+        - /url: /console/settings/profile
+      - generic [ref=e211]:
+        - paragraph [ref=e212]: Live
+        - link "View activity stream" [ref=e219] [cursor=pointer]:
+          - /url: /console/activity
+          - generic [ref=e220]:
+            - generic [ref=e221]: Approval Decided
+            - generic [ref=e222]: 2m ago
+          - paragraph [ref=e223]: bf04ee32-3db3-4220-a084-c82622ace336
+        - 'link "System status: Status unknown" [ref=e224] [cursor=pointer]':
+          - /url: /console/health
+          - generic [ref=e226]: Status unknown
+    - generic [ref=e227]:
+      - banner [ref=e228]:
+        - generic [ref=e229]:
+          - generic "Workspace Verify WS in ap-south-1" [ref=e230]:
+            - generic [ref=e231]: 🇮🇳
+            - generic [ref=e232]: Verify WS
+            - generic [ref=e233]: ap-south-1
+          - navigation "Breadcrumb" [ref=e236]:
+            - generic [ref=e237]: Home
+        - generic [ref=e238]:
+          - button "Open command palette" [ref=e239]:
+            - generic [ref=e240]: Jump to…
+            - generic [ref=e241]: ⌘K
+          - button "5 unread notifications" [ref=e243]:
+            - generic [ref=e247]: "5"
+          - button "Switch to dark mode" [ref=e248]
+          - button "Account menu" [ref=e251]:
+            - generic [ref=e252]: V
+            - generic [ref=e253]: verify+1786735214
+      - main [ref=e256]:
+        - generic [ref=e257]:
+          - generic [ref=e258]:
+            - paragraph [ref=e259]: Operations
+            - heading "Good evening, verify+1786735214" [level=1] [ref=e260]
+            - paragraph [ref=e261]: E2E Verify · e2e-verify · owner
+          - region [ref=e262]:
+            - heading "Operational metrics" [level=2] [ref=e263]
+            - generic [ref=e264]:
+              - link "Open incidents · 0" [ref=e265] [cursor=pointer]:
+                - /url: /console/incidents
+                - generic [ref=e266]:
+                  - paragraph [ref=e267]: Open incidents
+                  - generic [ref=e268]: +100.0%
+                - paragraph [ref=e273]: "0"
+                - generic [ref=e274]:
+                  - paragraph [ref=e275]: 1 total last 14d
+                  - img "Open incidents trend sparkline" [ref=e276]
+              - link "MTTR · 7 day mean 4.3m" [ref=e279] [cursor=pointer]:
+                - /url: /console/incidents
+                - generic [ref=e280]:
+                  - paragraph [ref=e281]: MTTR · 7d
+                  - generic [ref=e282]: 0.0%
+                - paragraph [ref=e286]: 4.3m
+                - generic [ref=e287]:
+                  - paragraph [ref=e288]: Mean time to recover
+                  - img "MTTR · 7d trend sparkline" [ref=e289]
+              - link "Active workflows · 0" [ref=e292] [cursor=pointer]:
+                - /url: /console/workflows
+                - generic [ref=e293]:
+                  - paragraph [ref=e294]: Active workflows
+                  - generic [ref=e295]: 0.0%
+                - paragraph [ref=e299]: "0"
+                - generic [ref=e300]:
+                  - paragraph [ref=e301]: Idle
+                  - img "Active workflows trend sparkline" [ref=e302]
+              - link "Month-to-date spend" [ref=e304] [cursor=pointer]:
+                - /url: /console/cost
+                - paragraph [ref=e306]: MTD spend
+                - paragraph [ref=e308]: —
+                - generic [ref=e309]:
+                  - paragraph [ref=e310]: No cost data yet
+                  - img "MTD spend trend sparkline" [ref=e311]
+            - generic [ref=e313]:
+              - region "Hourly incident count over the last 7 days" [ref=e315]:
+                - generic [ref=e316]:
+                  - generic [ref=e317]:
+                    - paragraph [ref=e318]: Trend
+                    - heading "Incidents over time" [level=3] [ref=e319]
+                    - paragraph [ref=e320]: Hourly buckets across the last 7 days.
+                  - generic [ref=e321]: Last 7d
+                - generic "Incidents over time chart" [ref=e324]:
+                  - application [ref=e327]:
+                    - generic [ref=e336]:
+                      - generic [ref=e337]:
+                        - generic [ref=e338]: 8 Sat
+                        - generic [ref=e340]: 10 Mon
+                        - generic [ref=e342]: 12 Wed
+                        - generic [ref=e344]: 15 Sat
+                      - generic [ref=e346]:
+                        - generic [ref=e347]: "0"
+                        - generic [ref=e349]: "0.25"
+                        - generic [ref=e351]: "0.5"
+                        - generic [ref=e353]: "0.75"
+                        - generic [ref=e355]: "1"
+              - region "Severity breakdown of open incidents" [ref=e357]:
+                - generic [ref=e358]:
+                  - generic [ref=e359]:
+                    - paragraph [ref=e360]: Distribution
+                    - heading "Severity breakdown" [level=3] [ref=e361]
+                    - paragraph [ref=e362]: Open incidents grouped by severity.
+                  - generic [ref=e363]: Open
+                - paragraph [ref=e368]: No open incidents.
+            - generic [ref=e369]:
+              - region "Daily recovery outcomes" [ref=e370]:
+                - generic [ref=e371]:
+                  - generic [ref=e372]:
+                    - paragraph [ref=e373]: Outcomes
+                    - heading "Recovery success rate" [level=3] [ref=e374]
+                    - paragraph [ref=e375]: Daily breakdown of recovery pipeline outcomes.
+                  - generic [ref=e376]: Last 14d
+                - generic "Stacked bar chart" [ref=e379]:
+                  - generic [ref=e381]:
+                    - list [ref=e383]:
+                      - listitem [ref=e384]:
+                        - img "degraded legend icon" [ref=e385]
+                        - text: degraded
+                      - listitem [ref=e387]:
+                        - img "failed legend icon" [ref=e388]
+                        - text: failed
+                      - listitem [ref=e390]:
+                        - img "succeeded legend icon" [ref=e391]
+                        - text: succeeded
+                    - application [ref=e393]:
+                      - generic [ref=e404]:
+                        - generic [ref=e405]:
+                          - generic [ref=e406]: Aug 3
+                          - generic [ref=e408]: Aug 5
+                          - generic [ref=e410]: Aug 7
+                          - generic [ref=e412]: Aug 9
+                          - generic [ref=e414]: Aug 12
+                          - generic [ref=e416]: Aug 15
+                        - generic [ref=e418]:
+                          - generic [ref=e419]: "0"
+                          - generic [ref=e421]: "0.25"
+                          - generic [ref=e423]: "0.5"
+                          - generic [ref=e425]: "0.75"
+                          - generic [ref=e427]: "1"
+              - region "Daily token usage stacked by agent role" [ref=e429]:
+                - generic [ref=e430]:
+                  - generic [ref=e431]:
+                    - paragraph [ref=e432]: Cost telemetry
+                    - heading "Token usage by agent" [level=3] [ref=e433]
+                    - paragraph [ref=e434]: Synthesised daily distribution from the 14d rollup.
+                  - generic [ref=e435]: Last 14d
+                - paragraph [ref=e440]: No agent telemetry yet.
+                - generic [ref=e441]: Per-day shape is interpolated from the 14d total — exact daily series ships with the cost endpoint.
+            - region "Activity heatmap over the last 30 days" [ref=e442]:
+              - generic [ref=e443]:
+                - generic [ref=e444]:
+                  - paragraph [ref=e445]: Patterns
+                  - heading "Activity heatmap" [level=3] [ref=e446]
+                  - paragraph [ref=e447]: Incident volume by hour-of-day and day-of-week, last 30 days.
+                - generic [ref=e448]: Last 30d
+              - generic "Activity heatmap by hour-of-day and day-of-week" [ref=e451]:
+                - generic [ref=e452]:
+                  - generic [ref=e454]:
+                    - generic [ref=e455]: "00"
+                    - generic [ref=e458]: "03"
+                    - generic [ref=e461]: "06"
+                    - generic [ref=e464]: "09"
+                    - generic [ref=e467]: "12"
+                    - generic [ref=e470]: "15"
+                    - generic [ref=e473]: "18"
+                    - generic [ref=e476]: "21"
+                  - generic [ref=e479]:
+                    - generic [ref=e480]: Sun
+                    - generic [ref=e481]: Mon
+                    - generic [ref=e482]: Tue
+                    - generic [ref=e483]: Wed
+                    - generic [ref=e484]: Thu
+                    - generic [ref=e485]: Fri
+                    - generic [ref=e486]: Sat
+                  - generic [ref=e487]:
+                    - img "Sun 00 — 0 incidents" [ref=e488]
+                    - img "Sun 01 — 0 incidents" [ref=e489]
+                    - img "Sun 02 — 0 incidents" [ref=e490]
+                    - img "Sun 03 — 0 incidents" [ref=e491]
+                    - img "Sun 04 — 0 incidents" [ref=e492]
+                    - img "Sun 05 — 0 incidents" [ref=e493]
+                    - img "Sun 06 — 0 incidents" [ref=e494]
+                    - img "Sun 07 — 0 incidents" [ref=e495]
+                    - img "Sun 08 — 0 incidents" [ref=e496]
+                    - img "Sun 09 — 0 incidents" [ref=e497]
+                    - img "Sun 10 — 0 incidents" [ref=e498]
+                    - img "Sun 11 — 0 incidents" [ref=e499]
+                    - img "Sun 12 — 0 incidents" [ref=e500]
+                    - img "Sun 13 — 0 incidents" [ref=e501]
+                    - img "Sun 14 — 0 incidents" [ref=e502]
+                    - img "Sun 15 — 0 incidents" [ref=e503]
+                    - img "Sun 16 — 0 incidents" [ref=e504]
+                    - img "Sun 17 — 0 incidents" [ref=e505]
+                    - img "Sun 18 — 0 incidents" [ref=e506]
+                    - img "Sun 19 — 0 incidents" [ref=e507]
+                    - img "Sun 20 — 0 incidents" [ref=e508]
+                    - img "Sun 21 — 0 incidents" [ref=e509]
+                    - img "Sun 22 — 0 incidents" [ref=e510]
+                    - img "Sun 23 — 0 incidents" [ref=e511]
+                    - img "Mon 00 — 0 incidents" [ref=e512]
+                    - img "Mon 01 — 0 incidents" [ref=e513]
+                    - img "Mon 02 — 0 incidents" [ref=e514]
+                    - img "Mon 03 — 0 incidents" [ref=e515]
+                    - img "Mon 04 — 0 incidents" [ref=e516]
+                    - img "Mon 05 — 0 incidents" [ref=e517]
+                    - img "Mon 06 — 0 incidents" [ref=e518]
+                    - img "Mon 07 — 0 incidents" [ref=e519]
+                    - img "Mon 08 — 0 incidents" [ref=e520]
+                    - img "Mon 09 — 0 incidents" [ref=e521]
+                    - img "Mon 10 — 0 incidents" [ref=e522]
+                    - img "Mon 11 — 0 incidents" [ref=e523]
+                    - img "Mon 12 — 0 incidents" [ref=e524]
+                    - img "Mon 13 — 0 incidents" [ref=e525]
+                    - img "Mon 14 — 0 incidents" [ref=e526]
+                    - img "Mon 15 — 0 incidents" [ref=e527]
+                    - img "Mon 16 — 0 incidents" [ref=e528]
+                    - img "Mon 17 — 0 incidents" [ref=e529]
+                    - img "Mon 18 — 0 incidents" [ref=e530]
+                    - img "Mon 19 — 0 incidents" [ref=e531]
+                    - img "Mon 20 — 0 incidents" [ref=e532]
+                    - img "Mon 21 — 0 incidents" [ref=e533]
+                    - img "Mon 22 — 0 incidents" [ref=e534]
+                    - img "Mon 23 — 0 incidents" [ref=e535]
+                    - img "Tue 00 — 0 incidents" [ref=e536]
+                    - img "Tue 01 — 0 incidents" [ref=e537]
+                    - img "Tue 02 — 0 incidents" [ref=e538]
+                    - img "Tue 03 — 0 incidents" [ref=e539]
+                    - img "Tue 04 — 0 incidents" [ref=e540]
+                    - img "Tue 05 — 0 incidents" [ref=e541]
+                    - img "Tue 06 — 0 incidents" [ref=e542]
+                    - img "Tue 07 — 0 incidents" [ref=e543]
+                    - img "Tue 08 — 0 incidents" [ref=e544]
+                    - img "Tue 09 — 0 incidents" [ref=e545]
+                    - img "Tue 10 — 0 incidents" [ref=e546]
+                    - img "Tue 11 — 0 incidents" [ref=e547]
+                    - img "Tue 12 — 0 incidents" [ref=e548]
+                    - img "Tue 13 — 0 incidents" [ref=e549]
+                    - img "Tue 14 — 0 incidents" [ref=e550]
+                    - img "Tue 15 — 0 incidents" [ref=e551]
+                    - img "Tue 16 — 0 incidents" [ref=e552]
+                    - img "Tue 17 — 0 incidents" [ref=e553]
+                    - img "Tue 18 — 0 incidents" [ref=e554]
+                    - img "Tue 19 — 0 incidents" [ref=e555]
+                    - img "Tue 20 — 0 incidents" [ref=e556]
+                    - img "Tue 21 — 0 incidents" [ref=e557]
+                    - img "Tue 22 — 0 incidents" [ref=e558]
+                    - img "Tue 23 — 0 incidents" [ref=e559]
+                    - img "Wed 00 — 0 incidents" [ref=e560]
+                    - img "Wed 01 — 0 incidents" [ref=e561]
+                    - img "Wed 02 — 0 incidents" [ref=e562]
+                    - img "Wed 03 — 0 incidents" [ref=e563]
+                    - img "Wed 04 — 0 incidents" [ref=e564]
+                    - img "Wed 05 — 0 incidents" [ref=e565]
+                    - img "Wed 06 — 0 incidents" [ref=e566]
+                    - img "Wed 07 — 0 incidents" [ref=e567]
+                    - img "Wed 08 — 0 incidents" [ref=e568]
+                    - img "Wed 09 — 0 incidents" [ref=e569]
+                    - img "Wed 10 — 0 incidents" [ref=e570]
+                    - img "Wed 11 — 0 incidents" [ref=e571]
+                    - img "Wed 12 — 0 incidents" [ref=e572]
+                    - img "Wed 13 — 0 incidents" [ref=e573]
+                    - img "Wed 14 — 0 incidents" [ref=e574]
+                    - img "Wed 15 — 0 incidents" [ref=e575]
+                    - img "Wed 16 — 0 incidents" [ref=e576]
+                    - img "Wed 17 — 0 incidents" [ref=e577]
+                    - img "Wed 18 — 0 incidents" [ref=e578]
+                    - img "Wed 19 — 0 incidents" [ref=e579]
+                    - img "Wed 20 — 0 incidents" [ref=e580]
+                    - img "Wed 21 — 0 incidents" [ref=e581]
+                    - img "Wed 22 — 0 incidents" [ref=e582]
+                    - img "Wed 23 — 0 incidents" [ref=e583]
+                    - img "Thu 00 — 0 incidents" [ref=e584]
+                    - img "Thu 01 — 0 incidents" [ref=e585]
+                    - img "Thu 02 — 0 incidents" [ref=e586]
+                    - img "Thu 03 — 0 incidents" [ref=e587]
+                    - img "Thu 04 — 0 incidents" [ref=e588]
+                    - img "Thu 05 — 0 incidents" [ref=e589]
+                    - img "Thu 06 — 0 incidents" [ref=e590]
+                    - img "Thu 07 — 0 incidents" [ref=e591]
+                    - img "Thu 08 — 0 incidents" [ref=e592]
+                    - img "Thu 09 — 0 incidents" [ref=e593]
+                    - img "Thu 10 — 0 incidents" [ref=e594]
+                    - img "Thu 11 — 0 incidents" [ref=e595]
+                    - img "Thu 12 — 0 incidents" [ref=e596]
+                    - img "Thu 13 — 0 incidents" [ref=e597]
+                    - img "Thu 14 — 0 incidents" [ref=e598]
+                    - img "Thu 15 — 0 incidents" [ref=e599]
+                    - img "Thu 16 — 0 incidents" [ref=e600]
+                    - img "Thu 17 — 0 incidents" [ref=e601]
+                    - img "Thu 18 — 0 incidents" [ref=e602]
+                    - img "Thu 19 — 0 incidents" [ref=e603]
+                    - img "Thu 20 — 0 incidents" [ref=e604]
+                    - img "Thu 21 — 0 incidents" [ref=e605]
+                    - img "Thu 22 — 0 incidents" [ref=e606]
+                    - img "Thu 23 — 0 incidents" [ref=e607]
+                    - img "Fri 00 — 0 incidents" [ref=e608]
+                    - img "Fri 01 — 0 incidents" [ref=e609]
+                    - img "Fri 02 — 0 incidents" [ref=e610]
+                    - img "Fri 03 — 0 incidents" [ref=e611]
+                    - img "Fri 04 — 0 incidents" [ref=e612]
+                    - img "Fri 05 — 0 incidents" [ref=e613]
+                    - img "Fri 06 — 0 incidents" [ref=e614]
+                    - img "Fri 07 — 0 incidents" [ref=e615]
+                    - img "Fri 08 — 0 incidents" [ref=e616]
+                    - img "Fri 09 — 0 incidents" [ref=e617]
+                    - img "Fri 10 — 0 incidents" [ref=e618]
+                    - img "Fri 11 — 0 incidents" [ref=e619]
+                    - img "Fri 12 — 0 incidents" [ref=e620]
+                    - img "Fri 13 — 0 incidents" [ref=e621]
+                    - img "Fri 14 — 0 incidents" [ref=e622]
+                    - img "Fri 15 — 0 incidents" [ref=e623]
+                    - img "Fri 16 — 0 incidents" [ref=e624]
+                    - img "Fri 17 — 0 incidents" [ref=e625]
+                    - img "Fri 18 — 0 incidents" [ref=e626]
+                    - img "Fri 19 — 0 incidents" [ref=e627]
+                    - img "Fri 20 — 0 incidents" [ref=e628]
+                    - img "Fri 21 — 0 incidents" [ref=e629]
+                    - img "Fri 22 — 0 incidents" [ref=e630]
+                    - img "Fri 23 — 0 incidents" [ref=e631]
+                    - img "Sat 00 — 0 incidents" [ref=e632]
+                    - img "Sat 01 — 1 incident" [ref=e633]
+                    - img "Sat 02 — 0 incidents" [ref=e634]
+                    - img "Sat 03 — 0 incidents" [ref=e635]
+                    - img "Sat 04 — 0 incidents" [ref=e636]
+                    - img "Sat 05 — 0 incidents" [ref=e637]
+                    - img "Sat 06 — 0 incidents" [ref=e638]
+                    - img "Sat 07 — 0 incidents" [ref=e639]
+                    - img "Sat 08 — 0 incidents" [ref=e640]
+                    - img "Sat 09 — 0 incidents" [ref=e641]
+                    - img "Sat 10 — 0 incidents" [ref=e642]
+                    - img "Sat 11 — 0 incidents" [ref=e643]
+                    - img "Sat 12 — 0 incidents" [ref=e644]
+                    - img "Sat 13 — 0 incidents" [ref=e645]
+                    - img "Sat 14 — 0 incidents" [ref=e646]
+                    - img "Sat 15 — 0 incidents" [ref=e647]
+                    - img "Sat 16 — 0 incidents" [ref=e648]
+                    - img "Sat 17 — 0 incidents" [ref=e649]
+                    - img "Sat 18 — 0 incidents" [ref=e650]
+                    - img "Sat 19 — 0 incidents" [ref=e651]
+                    - img "Sat 20 — 0 incidents" [ref=e652]
+                    - img "Sat 21 — 0 incidents" [ref=e653]
+                    - img "Sat 22 — 0 incidents" [ref=e654]
+                    - img "Sat 23 — 0 incidents" [ref=e655]
+                - generic [ref=e656]:
+                  - generic [ref=e657]: Low
+                  - generic [ref=e664]: High
+          - region [ref=e665]:
+            - generic [ref=e666]:
+              - generic [ref=e667]:
+                - heading "System status" [level=2] [ref=e668]
+                - paragraph [ref=e672]: Sub-systems + integration health, polled every 30s.
+              - link "Full health board →" [ref=e673] [cursor=pointer]:
+                - /url: /console/health
+            - generic [ref=e674]:
+              - generic [ref=e675]:
+                - paragraph [ref=e676]: Core sub-systems
+                - generic [ref=e677]:
+                  - generic [ref=e692]:
+                    - paragraph [ref=e693]: Control plane
+                    - paragraph [ref=e694]: API + auth + RLS
+                  - generic [ref=e702]:
+                    - paragraph [ref=e703]: Temporal
+                    - paragraph [ref=e704]: Workflow engine
+                  - generic [ref=e712]:
+                    - paragraph [ref=e713]: Postgres
+                    - paragraph [ref=e714]: OLTP + pgvector
+                  - generic [ref=e720]:
+                    - paragraph [ref=e721]: Redis
+                    - paragraph [ref=e722]: Cache + pubsub
+                  - generic [ref=e731]:
+                    - paragraph [ref=e732]: Edge / Proxy
+                    - paragraph [ref=e733]: No integrations
+              - generic [ref=e735]:
+                - paragraph [ref=e736]: Integrations
+                - paragraph [ref=e737]:
+                  - text: No integration connections yet. Connect one from
+                  - link "Integrations" [ref=e738] [cursor=pointer]:
+                    - /url: /console/integrations
+                  - text: to see live probe health.
+          - region [ref=e739]:
+            - generic [ref=e740]:
+              - generic [ref=e741]:
+                - heading "Projects health" [level=2] [ref=e742]
+                - paragraph [ref=e743]: Auto-healing targets in this workspace.
+              - link "View all" [ref=e744] [cursor=pointer]:
+                - /url: /console/projects
+            - generic [ref=e747]:
+              - paragraph [ref=e759]: No projects yet
+              - paragraph [ref=e760]: Connect a service to start routing incidents.
+              - link "Connect first project" [ref=e761] [cursor=pointer]:
+                - /url: /console/projects/new
+          - generic [ref=e763]:
+            - region [ref=e765]:
+              - generic [ref=e766]:
+                - generic [ref=e767]:
+                  - heading "Recent activity" [level=2] [ref=e768]
+                  - paragraph [ref=e769]: Latest 10 audit events across the org.
+                - link "View all →" [ref=e770] [cursor=pointer]:
+                  - /url: /console/activity
+              - list [ref=e771]:
+                - listitem [ref=e772]:
+                  - generic [ref=e774]:
+                    - paragraph [ref=e775]: User Login
+                    - paragraph [ref=e776]: bd6f5d10-8934-409c-93d9-91404f6cc02e
+                  - generic [ref=e777]: just now
+                - listitem [ref=e780]:
+                  - generic [ref=e782]:
+                    - paragraph [ref=e783]: Approval Decided
+                    - paragraph [ref=e784]: bf04ee32-3db3-4220-a084-c82622ace336
+                  - generic [ref=e785]: 2m ago
+                - listitem [ref=e788]:
+                  - generic [ref=e790]:
+                    - paragraph [ref=e791]: Approval Decided
+                    - paragraph [ref=e792]: bf04ee32-3db3-4220-a084-c82622ace336
+                  - generic [ref=e793]: 2m ago
+                - listitem [ref=e796]:
+                  - generic [ref=e798]:
+                    - paragraph [ref=e799]: Approval Requested
+                    - paragraph [ref=e800]: bf04ee32-3db3-4220-a084-c82622ace336
+                  - generic [ref=e801]: 4m ago
+                - listitem [ref=e804]:
+                  - generic [ref=e806]:
+                    - paragraph [ref=e807]: Agent Invoked
+                    - paragraph [ref=e808]: bf04ee32-3db3-4220-a084-c82622ace336
+                  - generic [ref=e809]: 4m ago
+                - listitem [ref=e812]:
+                  - generic [ref=e814]:
+                    - paragraph [ref=e815]: Agent Invoked
+                    - paragraph [ref=e816]: bf04ee32-3db3-4220-a084-c82622ace336
+                  - generic [ref=e817]: 4m ago
+                - listitem [ref=e820]:
+                  - generic [ref=e822]:
+                    - paragraph [ref=e823]: Agent Invoked
+                    - paragraph [ref=e824]: bf04ee32-3db3-4220-a084-c82622ace336
+                  - generic [ref=e825]: 5m ago
+                - listitem [ref=e828]:
+                  - generic [ref=e830]:
+                    - paragraph [ref=e831]: Agent Invoked
+                    - paragraph [ref=e832]: bf04ee32-3db3-4220-a084-c82622ace336
+                  - generic [ref=e833]: 6m ago
+                - listitem [ref=e836]:
+                  - generic [ref=e838]:
+                    - paragraph [ref=e839]: Agent Invoked
+                    - paragraph [ref=e840]: bf04ee32-3db3-4220-a084-c82622ace336
+                  - generic [ref=e841]: 6m ago
+                - listitem [ref=e844]:
+                  - generic [ref=e846]:
+                    - paragraph [ref=e847]: Pipelines Demo
+                    - paragraph [ref=e848]: bf04ee32-3db3-4220-a084-c82622ace336
+                  - generic [ref=e849]: 6m ago
+            - generic [ref=e852]:
+              - region [ref=e853]:
+                - heading "Organisation" [level=2] [ref=e854]
+                - paragraph [ref=e855]: E2E Verify
+                - paragraph [ref=e856]: e2e-verify · owner
+                - paragraph [ref=e857]: verify+1786735214@nexis.local
+              - generic [ref=e859]:
+                - generic [ref=e860]:
+                  - paragraph [ref=e861]: Workspace
+                  - heading "Verify WS" [level=2] [ref=e862]
+                  - paragraph [ref=e863]:
+                    - generic [ref=e865]: Ready
+                    - generic [ref=e866]: ·
+                    - generic [ref=e867]: ap-south-1
+                  - paragraph [ref=e868]: Created 7 minutes ago
+                - button "Suspend" [ref=e869]
+          - region [ref=e870]:
+            - heading "Quick actions" [level=2] [ref=e871]
+            - generic [ref=e872]:
+              - button [ref=e873]:
+                - generic [ref=e879]:
+                  - paragraph [ref=e880]: Trigger sample incident
+                  - paragraph [ref=e881]: Run a synthetic recovery flow end-to-end
+              - link [ref=e882] [cursor=pointer]:
+                - /url: /console/settings/members
+                - generic [ref=e888]:
+                  - paragraph [ref=e889]: Invite member
+                  - paragraph [ref=e890]: Add a teammate to this organisation
+              - button [ref=e891]:
+                - generic [ref=e897]:
+                  - paragraph [ref=e898]: Connect GitHub
+                  - paragraph [ref=e899]: Wire PR creation + repo metadata
+              - link [ref=e900] [cursor=pointer]:
+                - /url: https://github.com/nexis-eco
+                - generic [ref=e905]:
+                  - paragraph [ref=e906]: View docs
+                  - paragraph [ref=e907]: Operator guide + API reference
+  - generic [ref=e908]: Aug 3
+  - dialog [active] [ref=e910]:
+    - generic [ref=e911]:
+      - banner [ref=e912]:
+        - heading "Welcome to NEXIS" [level=3] [ref=e913]
+        - button "Close Tour" [ref=e914] [cursor=pointer]: ×
+      - generic [ref=e915]: Quick six-step tour of the console. Use the buttons below to step through, or hit Esc to dismiss.
+      - contentinfo [ref=e916]:
+        - button "Next" [ref=e917] [cursor=pointer]

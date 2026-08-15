@@ -45,6 +45,14 @@ var stdActivityOpts = workflow.ActivityOptions{
 var llmActivityOpts = func() workflow.ActivityOptions {
 	o := stdActivityOpts
 	o.StartToCloseTimeout = 5 * time.Minute
+	// ScheduleToClose is the whole-activity budget — queue time plus every
+	// attempt — so inheriting the 2-minute default from stdActivityOpts
+	// capped these activities below their own 5-minute StartToClose, and the
+	// extra window could never actually be used. Any model slower than ~2
+	// minutes died with "Not enough time to schedule next retry", which is
+	// easy to misread as a bad response rather than a timeout. Budget two
+	// full attempts plus scheduling slack.
+	o.ScheduleToCloseTimeout = 12 * time.Minute
 	if o.RetryPolicy != nil {
 		rp := *o.RetryPolicy
 		rp.MaximumAttempts = 2

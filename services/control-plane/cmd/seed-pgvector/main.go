@@ -24,11 +24,17 @@ import (
 const defaultFixtureRoot = "services/validator/fixtures"
 
 func main() {
-	var orgID, fixtureOverride string
+	var orgID, fixtureOverride, repoSHAOverride string
 	flag.StringVar(&orgID, "org-id", os.Getenv("SEED_ORG_ID"), "organization id to seed under")
 	flag.StringVar(&orgID, "org", orgID, "alias for --org-id")
 	flag.StringVar(&fixtureOverride, "fixture-dir", "", "directory to walk (defaults to services/validator/fixtures)")
 	flag.StringVar(&fixtureOverride, "repo", fixtureOverride, "alias for --fixture-dir")
+	// Retrieval reads WHERE org_id=$2 AND repo_sha=$3, so the seeded tag has
+	// to equal the repo_sha the pipeline runs under. The git-HEAD default
+	// changes on every commit and never matches the demo path's stable
+	// "fixture-seed-001", which left agents with zero code context.
+	flag.StringVar(&repoSHAOverride, "repo-sha", os.Getenv("SEED_REPO_SHA"),
+		"repo_sha tag to seed under (defaults to fixture-<git HEAD>)")
 	flag.Parse()
 	if orgID == "" {
 		fmt.Fprintln(os.Stderr, "--org-id required (or SEED_ORG_ID env)")
@@ -61,8 +67,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	sha := repoSHA()
-	repoSHA := "fixture-" + sha
+	repoSHA := repoSHAOverride
+	if repoSHA == "" {
+		repoSHA = "fixture-" + repoSHA_()
+	}
 	chunks, err := retrieval.Walk(fixtureOverride, orgID, repoSHA)
 	if err != nil {
 		logger.Error("walk", "err", err)
@@ -122,7 +130,7 @@ func main() {
 	fmt.Printf("seeded %d chunks for org=%s repo_sha=%s\n", len(chunks), orgID, repoSHA)
 }
 
-func repoSHA() string {
+func repoSHA_() string {
 	out, err := exec.Command("git", "rev-parse", "HEAD").Output()
 	if err != nil {
 		return "unknown"

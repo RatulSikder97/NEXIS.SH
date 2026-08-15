@@ -240,4 +240,31 @@ func TestFatalIfLocalInCloud(t *testing.T) {
 			t.Fatalf("non-cloud env should pass: %v", err)
 		}
 	})
+
+	// A single-VM self-hosted install runs every dependency locally on purpose
+	// but still needs AppEnv != "dev" so session cookies get the Secure flag.
+	t.Run("prod_with_local_ok_when_self_hosted", func(t *testing.T) {
+		c := &Config{
+			AppEnv:          "prod",
+			AuthProvider:    "local",
+			BillingProvider: "local",
+			PatchStore:      "minio",
+			KeyVault:        "local",
+			SecretsBackend:  "env",
+			Mailer:          "smtp",
+			ValidatorRunner: "docker",
+			AllowSelfHosted: true,
+		}
+		if err := c.FatalIfLocalInCloud(); err != nil {
+			t.Fatalf("self-hosted prod should accept local providers: %v", err)
+		}
+	})
+
+	// The opt-out must be explicit — absent the flag, prod still refuses.
+	t.Run("self_hosted_off_still_fails", func(t *testing.T) {
+		c := &Config{AppEnv: "prod", AuthProvider: "local", AllowSelfHosted: false}
+		if err := c.FatalIfLocalInCloud(); err == nil {
+			t.Fatalf("prod without ALLOW_SELF_HOSTED must still error")
+		}
+	})
 }

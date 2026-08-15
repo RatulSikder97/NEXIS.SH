@@ -1,0 +1,484 @@
+- generic [active] [ref=f1e1]:
+  - link "Skip to content" [ref=f1e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - link "NEXIS home" [ref=f1e5] [cursor=pointer]:
+        - /url: /
+        - img "NEXIS" [ref=f1e6]
+      - navigation "Primary" [ref=f1e7]:
+        - link "Product" [ref=f1e8] [cursor=pointer]:
+          - /url: /product
+        - link "Agents" [ref=f1e9] [cursor=pointer]:
+          - /url: /agents
+        - link "Integrations" [ref=f1e10] [cursor=pointer]:
+          - /url: /integrations
+        - link "Pricing" [ref=f1e11] [cursor=pointer]:
+          - /url: /pricing
+        - link "Docs" [ref=f1e12] [cursor=pointer]:
+          - /url: /docs
+      - generic [ref=f1e13]:
+        - button "Switch to dark mode" [ref=f1e14]
+        - link "Sign in" [ref=f1e17] [cursor=pointer]:
+          - /url: /sign-in
+        - link "Get started" [ref=f1e18] [cursor=pointer]:
+          - /url: /sign-up
+  - main [ref=f1e19]:
+    - generic [ref=f1e20]:
+      - generic [ref=f1e21]:
+        - generic [ref=f1e24]:
+          - link [ref=f1e26] [cursor=pointer]:
+            - /url: /status
+          - generic [ref=f1e32]: AUTONOMOUS ENGINEERING, SUPERVISED BY YOU.
+          - heading "Nine AI agents. One engineering team that ships fixes while you sleep." [level=1] [ref=f1e35]
+          - paragraph [ref=f1e37]: Detect → diagnose → patch → validate → approve → deploy. Closed-loop fault recovery for CI/CD and production pipelines, with the engineer always in the loop on what matters.
+          - generic [ref=f1e39]:
+            - link "Get started" [ref=f1e40] [cursor=pointer]:
+              - /url: /sign-up
+            - link "See how it works →" [ref=f1e41] [cursor=pointer]:
+              - /url: "#how-it-works"
+          - generic [ref=f1e42]: For SRE and platform teams who are done with 3am pages.
+        - generic [ref=f1e44]:
+          - generic [ref=f1e45]:
+            - generic [ref=f1e46]: nexis.sh
+            - generic [ref=f1e52]:
+              - generic [ref=f1e53]:
+                - text: "[00:02:14]"
+                - generic [ref=f1e54]: sentinel
+                - text: "› anomaly detected — pipeline: etl_orders"
+              - generic [ref=f1e55]: ▍
+          - img "Nexis system flow diagram" [ref=f1e57]:
+            - generic [ref=f1e63]: DETECT
+            - generic [ref=f1e64]: DIAGNOSE
+            - generic [ref=f1e65]: SYNTHESISE
+            - generic [ref=f1e66]: VALIDATE
+            - generic [ref=f1e67]: EXECUTE
+            - generic [ref=f1e70]: "Layer 1: Execution"
+            - generic [ref=f1e71]: "Layer 2: Self-Healing"
+            - generic [ref=f1e72]: detect · diagnose · patch
+            - generic [ref=f1e73]: guardrails · rollback · audit
+      - link "Skip to dashboard" [ref=f1e76] [cursor=pointer]:
+        - /url: /console
+    - region "Trusted by teams" [ref=f1e79]:
+      - generic [ref=f1e80]:
+        - paragraph [ref=f1e81]: Trusted by engineering teams that hate alert fatigue
+        - list [ref=f1e82]:
+          - listitem [ref=f1e83]: Acme Co.
+          - listitem [ref=f1e84]: Sandwell
+          - listitem [ref=f1e85]: Northpoint
+          - listitem [ref=f1e86]: Veritas
+          - listitem [ref=f1e87]: Halcyon
+          - listitem [ref=f1e88]: Brightline
+    - region "Problem" [ref=f1e89]:
+      - generic [ref=f1e90]:
+        - generic [ref=f1e91]:
+          - generic [ref=f1e92]: THE PROBLEM
+          - heading "Engineers spend 40–60% of their time fighting fires, not building." [level=2] [ref=f1e93]
+          - paragraph [ref=f1e94]: "Incident response is still fragmented: detection, root-cause analysis, and remediation live in different tools, so engineers manually stitch the story while outages burn minutes on the clock."
+        - generic [ref=f1e95]:
+          - generic [ref=f1e98]:
+            - generic [ref=f1e100]: "01"
+            - generic [ref=f1e105]:
+              - heading "Silent failures" [level=3] [ref=f1e106]
+              - paragraph [ref=f1e107]: Pipelines break hours before anyone notices. Damage is already done.
+          - generic [ref=f1e110]:
+            - generic [ref=f1e112]: "02"
+            - generic [ref=f1e116]:
+              - heading "Manual root cause" [level=3] [ref=f1e117]
+              - paragraph [ref=f1e118]: Every incident means digging through logs, graphs, and schemas by hand.
+          - generic [ref=f1e121]:
+            - generic [ref=f1e123]: "03"
+            - generic [ref=f1e129]:
+              - heading "No closed loop" [level=3] [ref=f1e130]
+              - paragraph [ref=f1e131]: Existing tools detect or suggest. None go from failure to a deployed, validated fix.
+    - region "With NEXIS vs without NEXIS" [ref=f1e132]:
+      - generic [ref=f1e133]:
+        - generic [ref=f1e134]: BEFORE / AFTER
+        - heading "What changes when an autonomous fleet handles the unhappy path." [level=2] [ref=f1e137]
+        - generic [ref=f1e138]:
+          - generic [ref=f1e139]:
+            - generic [ref=f1e140]: Dimension
+            - generic [ref=f1e141]: Without NEXIS
+            - generic [ref=f1e142]: With NEXIS
+          - generic [ref=f1e144]:
+            - generic [ref=f1e145]: MTTR for pipeline incidents
+            - generic [ref=f1e146]: 47 minutes — engineer pages, opens dashboards, hunts the bug.
+            - generic [ref=f1e151]: Under 5 minutes — Sentinel flags, Pathfinder roots, Synthesiser patches.
+          - generic [ref=f1e156]:
+            - generic [ref=f1e157]: Root-cause analysis
+            - generic [ref=f1e158]: Manual triage across Sentry, Datadog, GitHub, Slack.
+            - generic [ref=f1e163]: "Single causal graph: services × deploys × schemas × tests."
+          - generic [ref=f1e168]:
+            - generic [ref=f1e169]: Fix correctness
+            - generic [ref=f1e170]: Best-guess patch. Hope your tests cover the edge case.
+            - generic [ref=f1e175]: 2,000+ property tests in a shadow pipeline before the diff lands.
+          - generic [ref=f1e180]:
+            - generic [ref=f1e181]: Approval latency
+            - generic [ref=f1e182]: Async review in a stale Slack thread.
+            - generic [ref=f1e187]: One-click approval with a plain-English summary of the diff.
+          - generic [ref=f1e192]:
+            - generic [ref=f1e193]: Audit trail
+            - generic [ref=f1e194]: Whoever was on-call wrote a Notion post-mortem two weeks late.
+            - generic [ref=f1e199]: Typed agent hand-offs persisted to the audit log automatically.
+          - generic [ref=f1e204]:
+            - generic [ref=f1e205]: On-call quality of life
+            - generic [ref=f1e206]: 3am pages. Burnout. Engineers leaving.
+            - generic [ref=f1e211]: Approve from your phone in 60 seconds, back to sleep.
+    - region "How Nexis Works" [ref=f1e215]:
+      - generic [ref=f1e216]:
+        - generic [ref=f1e217]: HOW NEXIS WORKS
+        - generic [ref=f1e220]:
+          - heading "Incidents in. Verified patches out." [level=2] [ref=f1e221]
+          - paragraph [ref=f1e222]: A six-step autonomous remediation flow—from first anomaly signal to an engineer-approved rollout—with auditability at every hop.
+        - generic [ref=f1e224]:
+          - generic [ref=f1e233]:
+            - generic [ref=f1e234]: "01"
+            - generic [ref=f1e235]:
+              - heading "Detect" [level=3] [ref=f1e236]
+              - paragraph [ref=f1e237]: Monitor logs, traces, and metrics. Flag anomalies fast—before impact spreads.
+          - generic [ref=f1e246]:
+            - generic [ref=f1e247]: "02"
+            - generic [ref=f1e248]:
+              - heading "Diagnose" [level=3] [ref=f1e249]
+              - paragraph [ref=f1e250]: Correlate signals across services and dependencies to isolate the root cause.
+          - generic [ref=f1e259]:
+            - generic [ref=f1e260]: "03"
+            - generic [ref=f1e261]:
+              - heading "Synthesise" [level=3] [ref=f1e262]
+              - paragraph [ref=f1e263]: Generate candidate patches constrained by your contracts, schemas, and API expectations.
+          - generic [ref=f1e272]:
+            - generic [ref=f1e273]: "04"
+            - generic [ref=f1e274]:
+              - heading "Validate" [level=3] [ref=f1e275]
+              - paragraph [ref=f1e276]: Run each patch in a Docker-isolated shadow pipeline with targeted tests and checks.
+          - generic [ref=f1e285]:
+            - generic [ref=f1e286]: "05"
+            - generic [ref=f1e287]:
+              - heading "Execute" [level=3] [ref=f1e288]
+              - paragraph [ref=f1e289]: Apply the chosen fix through your deployment workflow (staged rollout with safety checks).
+          - generic [ref=f1e298]:
+            - generic [ref=f1e299]: "06"
+            - generic [ref=f1e300]:
+              - heading "Approve" [level=3] [ref=f1e301]
+              - paragraph [ref=f1e302]: Review the diff, results, and a plain-English summary. Approve with one click when ready.
+    - region "Nexis agent fleet" [ref=f1e304]:
+      - generic [ref=f1e305]:
+        - generic [ref=f1e306]: THE FLEET
+        - heading "Nine specialised agents. One closed loop." [level=2] [ref=f1e307]
+        - paragraph [ref=f1e308]: Each agent owns one job in the pipeline. Hand-offs are typed, retried, and audit-logged.
+        - generic [ref=f1e309]:
+          - generic [ref=f1e311]:
+            - generic [ref=f1e312]:
+              - generic [ref=f1e313]: Detection
+              - generic [ref=f1e314]: "01"
+            - heading "sentinel" [level=3] [ref=f1e315]
+            - generic [ref=f1e316]:
+              - generic [ref=f1e317]:
+                - text: Owns
+                - paragraph [ref=f1e318]: Anomaly detection from Sentry/OTel
+              - generic [ref=f1e319]:
+                - text: Doesn't own
+                - paragraph [ref=f1e320]: Graph traversal
+          - generic [ref=f1e322]:
+            - generic [ref=f1e323]:
+              - generic [ref=f1e324]: Diagnosis
+              - generic [ref=f1e325]: "02"
+            - heading "pathfinder" [level=3] [ref=f1e326]
+            - generic [ref=f1e327]:
+              - generic [ref=f1e328]:
+                - text: Owns
+                - paragraph [ref=f1e329]: Causal RCA via Neo4j + DoWhy
+              - generic [ref=f1e330]:
+                - text: Doesn't own
+                - paragraph [ref=f1e331]: Patch synthesis
+          - generic [ref=f1e333]:
+            - generic [ref=f1e334]:
+              - generic [ref=f1e335]: Patch generation
+              - generic [ref=f1e336]: "03"
+            - heading "synthesiser" [level=3] [ref=f1e337]
+            - generic [ref=f1e338]:
+              - generic [ref=f1e339]:
+                - text: Owns
+                - paragraph [ref=f1e340]: LLM patch synthesis + retrieval
+              - generic [ref=f1e341]:
+                - text: Doesn't own
+                - paragraph [ref=f1e342]: Validation
+          - generic [ref=f1e344]:
+            - generic [ref=f1e345]:
+              - generic [ref=f1e346]: Plan
+              - generic [ref=f1e347]: "04"
+            - heading "architect" [level=3] [ref=f1e348]
+            - generic [ref=f1e349]:
+              - generic [ref=f1e350]:
+                - text: Owns
+                - paragraph [ref=f1e351]: Solution plan against contracts
+              - generic [ref=f1e352]:
+                - text: Doesn't own
+                - paragraph [ref=f1e353]: Code emission
+          - generic [ref=f1e355]:
+            - generic [ref=f1e356]:
+              - generic [ref=f1e357]: Codegen
+              - generic [ref=f1e358]: "05"
+            - heading "backend" [level=3] [ref=f1e359]
+            - generic [ref=f1e360]:
+              - generic [ref=f1e361]:
+                - text: Owns
+                - paragraph [ref=f1e362]: Backend patch synthesis
+              - generic [ref=f1e363]:
+                - text: Doesn't own
+                - paragraph [ref=f1e364]: DB migrations
+          - generic [ref=f1e366]:
+            - generic [ref=f1e367]:
+              - generic [ref=f1e368]: Test gen
+              - generic [ref=f1e369]: "06"
+            - heading "qa" [level=3] [ref=f1e370]
+            - generic [ref=f1e371]:
+              - generic [ref=f1e372]:
+                - text: Owns
+                - paragraph [ref=f1e373]: Unit + property test generation
+              - generic [ref=f1e374]:
+                - text: Doesn't own
+                - paragraph [ref=f1e375]: Sandbox execution
+          - generic [ref=f1e377]:
+            - generic [ref=f1e378]:
+              - generic [ref=f1e379]: Pipeline
+              - generic [ref=f1e380]: "07"
+            - heading "devops" [level=3] [ref=f1e381]
+            - generic [ref=f1e382]:
+              - generic [ref=f1e383]:
+                - text: Owns
+                - paragraph [ref=f1e384]: ArgoCD / GH Actions YAML changes
+              - generic [ref=f1e385]:
+                - text: Doesn't own
+                - paragraph [ref=f1e386]: App code
+          - generic [ref=f1e388]:
+            - generic [ref=f1e389]:
+              - generic [ref=f1e390]: Migrations
+              - generic [ref=f1e391]: "08"
+            - heading "data engineer" [level=3] [ref=f1e392]
+            - generic [ref=f1e393]:
+              - generic [ref=f1e394]:
+                - text: Owns
+                - paragraph [ref=f1e395]: Schema migrations + data backfill
+              - generic [ref=f1e396]:
+                - text: Doesn't own
+                - paragraph [ref=f1e397]: API layer
+          - generic [ref=f1e399]:
+            - generic [ref=f1e400]:
+              - generic [ref=f1e401]: Routing
+              - generic [ref=f1e402]: "09"
+            - heading "approval gate" [level=3] [ref=f1e403]
+            - generic [ref=f1e404]:
+              - generic [ref=f1e405]:
+                - text: Owns
+                - paragraph [ref=f1e406]: Severity routing + audit log
+              - generic [ref=f1e407]:
+                - text: Doesn't own
+                - paragraph [ref=f1e408]: Patch decisions
+    - region "Customer voices" [ref=f1e409]:
+      - generic [ref=f1e410]:
+        - generic [ref=f1e411]: WHAT TEAMS SAY
+        - heading "On-call rotations, but quiet." [level=2] [ref=f1e414]
+        - generic [ref=f1e415]:
+          - figure "PK Priya Khanna Staff SRE · Northpoint" [ref=f1e417]:
+            - blockquote [ref=f1e421]: “We saw our 3am pages drop 70% in the first month. The team is finally shipping again instead of triaging.”
+            - generic [ref=f1e422]:
+              - generic [ref=f1e423]: PK
+              - generic [ref=f1e424]:
+                - generic [ref=f1e425]: Priya Khanna
+                - generic [ref=f1e426]: Staff SRE · Northpoint
+          - figure "MR Marcus Rivera Platform Engineer · Veritas" [ref=f1e428]:
+            - blockquote [ref=f1e432]: “NEXIS is the first incident tool we trust to actually propose the fix. The shadow-pipeline validation is the unlock.”
+            - generic [ref=f1e433]:
+              - generic [ref=f1e434]: MR
+              - generic [ref=f1e435]:
+                - generic [ref=f1e436]: Marcus Rivera
+                - generic [ref=f1e437]: Platform Engineer · Veritas
+          - figure "ST Sara Tanaka VP Engineering · Halcyon" [ref=f1e439]:
+            - blockquote [ref=f1e443]: “I get a Slack approval with a plain-English diff. I tap a button. The fix ships. That's it. It feels like magic.”
+            - generic [ref=f1e444]:
+              - generic [ref=f1e445]: ST
+              - generic [ref=f1e446]:
+                - generic [ref=f1e447]: Sara Tanaka
+                - generic [ref=f1e448]: VP Engineering · Halcyon
+    - generic [ref=f1e450]:
+      - paragraph [ref=f1e451]: LIVE PIPELINE
+      - heading "Run a synthetic incident." [level=2] [ref=f1e452]
+      - generic [ref=f1e453]:
+        - complementary [ref=f1e454]:
+          - heading "Scenarios" [level=3] [ref=f1e455]
+          - list [ref=f1e456]:
+            - listitem [ref=f1e457] [cursor=pointer]: Schema drift
+            - listitem [ref=f1e458] [cursor=pointer]: Null deref
+            - listitem [ref=f1e459] [cursor=pointer]: OOM
+            - listitem [ref=f1e460] [cursor=pointer]: Migration failure
+        - generic [ref=f1e462]:
+          - paragraph [ref=f1e463]: Pipeline canvas
+          - paragraph [ref=f1e464]: Sign in to fire a synthetic fault and watch the recovery pipeline render every detect → diagnose → patch step in real time.
+        - complementary [ref=f1e465]:
+          - generic [ref=f1e466]: $ nexis demo --scenario=schema-drift
+          - generic [ref=f1e467]: "[idle — open the console to run]"
+      - link "Open the live demo" [ref=f1e469] [cursor=pointer]:
+        - /url: /console/live-demo
+    - region "Integrations preview" [ref=f1e472]:
+      - generic [ref=f1e473]:
+        - generic [ref=f1e474]:
+          - generic [ref=f1e475]:
+            - generic [ref=f1e476]: WORKS WITH YOUR STACK
+            - heading "Plug into every tool your team already uses." [level=2] [ref=f1e477]
+          - link "Browse all integrations →" [ref=f1e479] [cursor=pointer]:
+            - /url: /integrations
+        - generic [ref=f1e481]:
+          - generic "github" [ref=f1e482]
+          - generic "gitlab" [ref=f1e487]
+          - generic "bitbucket" [ref=f1e493]
+          - generic "argocd" [ref=f1e499]
+          - generic "sentry" [ref=f1e505]
+          - generic "datadog" [ref=f1e510]
+          - generic "newrelic" [ref=f1e515]
+          - generic "grafana cloud" [ref=f1e520]
+          - generic "prometheus" [ref=f1e525]
+          - generic "honeycomb" [ref=f1e529]
+          - generic "splunk" [ref=f1e533]
+          - generic "pagerduty" [ref=f1e538]
+          - generic "opsgenie" [ref=f1e543]
+          - generic "incident io" [ref=f1e550]
+          - generic "slack" [ref=f1e554]
+          - generic "ms teams" [ref=f1e562]
+          - generic "discord" [ref=f1e566]
+          - generic "kubernetes" [ref=f1e570]
+          - generic "flux cd" [ref=f1e582]
+          - generic "aws cloudwatch" [ref=f1e589]
+          - generic "gcp monitoring" [ref=f1e593]
+          - generic "azure monitor" [ref=f1e597]
+          - generic "kafka" [ref=f1e601]
+          - generic "airflow" [ref=f1e606]
+          - generic "spark" [ref=f1e611]
+          - generic "databricks" [ref=f1e615]
+          - generic "snowflake" [ref=f1e621]
+          - generic "dbt" [ref=f1e627]
+        - paragraph [ref=f1e633]: 28 integrations across source control, observability, incident management, deploy & infra, chat, data, and security.
+    - region "Metrics" [ref=f1e634]:
+      - generic [ref=f1e635]:
+        - generic [ref=f1e636]: OUTCOMES
+        - heading "Pipeline recovery you can measure." [level=2] [ref=f1e637]
+      - generic [ref=f1e638]:
+        - generic [ref=f1e643]:
+          - generic [ref=f1e644]: MTTR ↓ 0%
+          - paragraph [ref=f1e645]: vs. manual response baseline
+        - generic [ref=f1e650]:
+          - generic [ref=f1e651]: ≥ 0%
+          - paragraph [ref=f1e652]: patch correctness rate
+        - generic [ref=f1e657]:
+          - generic [ref=f1e658]: < 0s
+          - paragraph [ref=f1e659]: to fault detection
+    - region "FAQ" [ref=f1e660]:
+      - generic [ref=f1e661]:
+        - generic [ref=f1e662]: FREQUENTLY ASKED
+        - heading "The first questions every engineering team asks." [level=2] [ref=f1e665]
+        - list [ref=f1e666]:
+          - listitem [ref=f1e667]:
+            - button "How does NEXIS know which patches are safe to apply?" [expanded] [ref=f1e668]
+            - paragraph [ref=f1e674]: Every patch is validated in a Docker-isolated shadow pipeline. Synthesiser generates candidates, QA agents author unit + property tests against your contracts, and the patch only surfaces for approval after the test suite passes with zero regressions.
+          - listitem [ref=f1e675]:
+            - button "What happens if the patch is wrong?" [ref=f1e676]
+            - paragraph [ref=f1e680]: Approval Gate routes every diff to a human owner. You see the patch, the failing test it now passes, and a plain-English summary before clicking approve. Nothing ships without you. If something does break post-deploy, NEXIS auto-rolls back via the same deployment surface (ArgoCD / GitHub Actions).
+          - listitem [ref=f1e681]:
+            - button "How do you keep our secrets safe?" [ref=f1e682]
+            - paragraph [ref=f1e686]: Every integration credential is encrypted at rest with KeyVault and never logged. Agents run inside ephemeral containers with no network egress except to whitelisted provider APIs. We are SOC 2 Type I in progress and will publish a public security page when audit completes.
+          - listitem [ref=f1e687]:
+            - button "Which models does NEXIS use?" [ref=f1e688]
+            - paragraph [ref=f1e692]: We default to a tuned mix of Claude Sonnet 4.5 for codegen and a smaller routing model for classification, with optional self-host adapters. Token usage is metered and exposed on /console/ai-energy so you can see exactly what each fix costs.
+          - listitem [ref=f1e693]:
+            - button "Can we run NEXIS on-prem?" [ref=f1e694]
+            - paragraph [ref=f1e698]: Enterprise tier supports a self-hosted control plane behind your VPC, with all agent inference proxied through your existing model gateway. Talk to sales for deployment patterns.
+          - listitem [ref=f1e699]:
+            - button "What does an approval look like in practice?" [ref=f1e700]
+            - paragraph [ref=f1e704]: "You receive a Slack DM (or PagerDuty page if it's high severity). One link opens a diff view with the failing test → passing test transition, the data lineage Pathfinder traced, and an Approve / Reject button. Median engineer time: 60 seconds."
+        - paragraph [ref=f1e705]:
+          - text: More questions?
+          - link "Read the docs →" [ref=f1e706] [cursor=pointer]:
+            - /url: /docs
+    - region "Request access" [ref=f1e707]:
+      - generic [ref=f1e713]:
+        - heading "Give your team back its weekends." [level=2] [ref=f1e715]
+        - paragraph [ref=f1e717]: NEXIS runs an autonomous incident-response loop with the engineer in the loop on what matters. Approve once. Sleep through the rest.
+        - link "Request access" [ref=f1e719] [cursor=pointer]:
+          - /url: /sign-up
+  - contentinfo [ref=f1e720]:
+    - generic [ref=f1e721]:
+      - generic [ref=f1e722]:
+        - generic [ref=f1e723]:
+          - link "NEXIS home" [ref=f1e724] [cursor=pointer]:
+            - /url: /
+            - img "NEXIS" [ref=f1e725]
+          - paragraph [ref=f1e726]: Closed-loop fault recovery for CI/CD and production pipelines.
+          - generic [ref=f1e727]:
+            - link "All systems operational" [ref=f1e728] [cursor=pointer]:
+              - /url: /status
+            - generic [ref=f1e730]: SOC 2 in progress
+        - generic [ref=f1e731]:
+          - generic [ref=f1e732]: Product
+          - list [ref=f1e733]:
+            - listitem [ref=f1e734]:
+              - link "Overview" [ref=f1e735] [cursor=pointer]:
+                - /url: /product
+            - listitem [ref=f1e736]:
+              - link "Agents" [ref=f1e737] [cursor=pointer]:
+                - /url: /agents
+            - listitem [ref=f1e738]:
+              - link "Integrations" [ref=f1e739] [cursor=pointer]:
+                - /url: /integrations
+            - listitem [ref=f1e740]:
+              - link "Pricing" [ref=f1e741] [cursor=pointer]:
+                - /url: /pricing
+        - generic [ref=f1e742]:
+          - generic [ref=f1e743]: Resources
+          - list [ref=f1e744]:
+            - listitem [ref=f1e745]:
+              - link "Docs" [ref=f1e746] [cursor=pointer]:
+                - /url: /docs
+            - listitem [ref=f1e747]:
+              - link "Changelog" [ref=f1e748] [cursor=pointer]:
+                - /url: /changelog
+            - listitem [ref=f1e749]:
+              - link "Status" [ref=f1e750] [cursor=pointer]:
+                - /url: /status
+        - generic [ref=f1e751]:
+          - generic [ref=f1e752]: Company
+          - list [ref=f1e753]:
+            - listitem [ref=f1e754]:
+              - link "About" [ref=f1e755] [cursor=pointer]:
+                - /url: /about
+            - listitem [ref=f1e756]:
+              - link "Careers" [ref=f1e757] [cursor=pointer]:
+                - /url: /careers
+            - listitem [ref=f1e758]:
+              - link "Contact" [ref=f1e759] [cursor=pointer]:
+                - /url: /contact
+        - generic [ref=f1e760]:
+          - generic [ref=f1e761]: Legal
+          - list [ref=f1e762]:
+            - listitem [ref=f1e763]:
+              - link "Privacy" [ref=f1e764] [cursor=pointer]:
+                - /url: /privacy
+            - listitem [ref=f1e765]:
+              - link "Terms" [ref=f1e766] [cursor=pointer]:
+                - /url: /terms
+            - listitem [ref=f1e767]:
+              - link "Security" [ref=f1e768] [cursor=pointer]:
+                - /url: /security
+        - generic [ref=f1e769]:
+          - generic [ref=f1e770]: Connect
+          - list [ref=f1e771]:
+            - listitem [ref=f1e772]:
+              - link "GitHub" [ref=f1e773] [cursor=pointer]:
+                - /url: https://github.com/nexis-eco
+            - listitem [ref=f1e774]:
+              - link "X" [ref=f1e775] [cursor=pointer]:
+                - /url: https://x.com/nexis_eco
+            - listitem [ref=f1e776]:
+              - link "LinkedIn" [ref=f1e777] [cursor=pointer]:
+                - /url: https://www.linkedin.com/company/nexis-eco
+      - generic [ref=f1e778]: © 2026 NEXIS. All rights reserved.
+  - alert [ref=f1e780]
